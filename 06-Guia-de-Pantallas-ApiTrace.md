@@ -1,6 +1,6 @@
-# 06 — Guía de Pantallas y Funcionalidades — ApiGestion
+# 06 — Guía de Pantallas y Funcionalidades — ApiTrace
 
-> Catálogo visual y funcional de la aplicación web instalable (PWA) de ApiGestion.
+> Catálogo visual y funcional de la aplicación web instalable (PWA) de ApiTrace.
 > Documenta **cada pantalla, cada acción y cada estado** de la interfaz, con capturas
 > reales tomadas sobre la aplicación en ejecución con la base de datos de demostración.
 
@@ -9,9 +9,9 @@
 | Documento | 06 — Guía de Pantallas y Funcionalidades |
 | Versión | 1.0 |
 | Fecha | 30 de agosto de 2026 |
-| Estado | Vigente para el MVP descrito en `04-MVP-ApiGestion.md` |
-| Alcance | Frontend `apigestion-web` (React 19 + Vite 6, PWA) sobre `apigestion-backend` (NestJS 11) |
-| Documentos relacionados | `00-Documento_de_Vision`, `01-Mapa_del_Dominio`, `02-Casos_de_Uso`, `03-ArquitecturaTecnica`, `04-MVP-ApiGestion`, `05-ADR-Decisiones-Tecnicas` |
+| Estado | Vigente para el MVP descrito en `04-MVP-ApiTrace.md` |
+| Alcance | Frontend `apitrace-web` (React 19 + Vite 6, PWA) sobre `apitrace-backend` (NestJS 11) |
+| Documentos relacionados | `00-Documento_de_Vision`, `01-Mapa_del_Dominio`, `02-Casos_de_Uso`, `03-ArquitecturaTecnica`, `04-MVP-ApiTrace`, `05-ADR-Decisiones-Tecnicas` |
 
 ---
 
@@ -49,7 +49,7 @@
 
 ## 1. Propósito del documento
 
-Los documentos 00 a 05 definen **qué** hace ApiGestion y **cómo está construido**. Este documento
+Los documentos 00 a 05 definen **qué** hace ApiTrace y **cómo está construido**. Este documento
 cierra el circuito documental mostrando **cómo se ve y cómo se usa**: sirve como
 
 - **manual de referencia** para quien opera el sistema (productor, sala, acopio, auditor);
@@ -82,16 +82,16 @@ permiten mostrar todos los estados del circuito.
 
 ### Usuarios de demostración
 
-Todos comparten la contraseña definida en `SEED_PASSWORD` (`ApiGestion2026!` por defecto).
+Todos comparten la contraseña definida en `SEED_PASSWORD` (`ApiTrace2026!` por defecto).
 
 | Correo | Rol | Organización | Puede escribir |
 |---|---|---|---|
-| `admin@apigestion.test` | ADMIN | — (sin organización) | Sí (ver hallazgo H-01) |
-| `productor@apigestion.test` | PRODUCTOR | Apiarios del Sur | Sí |
-| `sala@apigestion.test` | SALA | Sala San Andrés | Sí |
-| `acopio@apigestion.test` | ACOPIADOR | Acopio Pampa | Sí |
-| `auditor@apigestion.test` | AUDITOR | — | **No** (solo lectura) |
-| `laboratorio@apigestion.test` | LABORATORIO | Laboratorio Mielab | Sí |
+| `admin@apitrace.test` | ADMIN | — (sin organización) | Sí (ver hallazgo H-01) |
+| `productor@apitrace.test` | PRODUCTOR | Apiarios del Sur | Sí |
+| `sala@apitrace.test` | SALA | Sala San Andrés | Sí |
+| `acopio@apitrace.test` | ACOPIADOR | Acopio Pampa | Sí |
+| `auditor@apitrace.test` | AUDITOR | — | **No** (solo lectura) |
+| `laboratorio@apitrace.test` | LABORATORIO | Laboratorio Mielab | Sí |
 
 ### Cadena de demostración
 
@@ -704,7 +704,7 @@ lectura sea estable sin importar por dónde haya empezado la consulta. Incluye c
 | Código | Severidad | Significado |
 |---|---|---|
 | `LOT_WITHOUT_INPUTS` | WARNING | El lote no declara entradas: su origen no puede reconstruirse |
-| `DTE_PENDING_SYNC` | WARNING | El DT-e existe en ApiGestion pero no está sincronizado con SIGSA |
+| `DTE_PENDING_SYNC` | WARNING | El DT-e existe en ApiTrace pero no está sincronizado con SIGSA |
 | `MISSING_REQUIRED_DOCUMENT` | **ERROR** | El movimiento requiere un documento y no lo tiene registrado |
 | `RECEPTION_DISCREPANCY` | WARNING | La recepción registró una diferencia de cantidad |
 | `ESTABLISHMENT_WITHOUT_RENSPA` | WARNING | El establecimiento no tiene RENSPA asociado |
@@ -924,7 +924,7 @@ sequenceDiagram
     actor P as Productor
     actor S as Sala de extracción
     actor A as Acopiador
-    participant BT as ApiGestion
+    participant BT as ApiTrace
 
     P->>BT: Alta de productor, establecimiento y apiario
     Note over BT: Reglas: RENAPA y RENSPA se asocian aparte
@@ -969,7 +969,7 @@ La severidad se estima respecto del objetivo del MVP: registrar y consultar la c
 
 | ID | Severidad | Hallazgo | Evidencia | Propuesta |
 |---|---|---|---|---|
-| **H-01** | 🔴 Alta | El usuario `ADMIN` **no tiene organización asignada**, y el backend responde `403 · El usuario no tiene una organizacion asignada; no puede operar sobre el dominio` al crear productores o establecimientos. El rol de mayor privilegio no puede dar de alta los registros base. | Alta de productor/establecimiento con `admin@apigestion.test` | Permitir a `ADMIN` operar sin organización (o exigir que elija una explícitamente en el alta), y cubrirlo con un test de integración |
+| **H-01** | 🔴 Alta | El usuario `ADMIN` **no tiene organización asignada**, y el backend responde `403 · El usuario no tiene una organizacion asignada; no puede operar sobre el dominio` al crear productores o establecimientos. El rol de mayor privilegio no puede dar de alta los registros base. | Alta de productor/establecimiento con `admin@apitrace.test` | Permitir a `ADMIN` operar sin organización (o exigir que elija una explícitamente en el alta), y cubrirlo con un test de integración |
 | **H-02** | 🔴 Alta | El alta de movimiento sólo ofrece **los establecimientos de la organización del usuario**. Un productor ve únicamente su predio, por lo que **no puede seleccionar la sala como destino**: el circuito inter-organización no se puede registrar desde la interfaz. | `51-movimientos-alta-formulario` con rol PRODUCTOR (ambos selectores vacíos) | Exponer un endpoint de establecimientos "visibles como contraparte" (destinos válidos) o permitir búsqueda por RENSPA/RNE al elegir destino |
 | **H-03** | 🟡 Media | El mensaje de error del servidor **filtra el nombre del campo de la API**: *"Indique `discrepancyNotes` para dejar constancia"*, cuando en pantalla el campo se llama *Motivo de la diferencia*. | `52-movimientos-error-de-validacion` | Mapear los nombres de campo del backend a las etiquetas de la interfaz, o redactar los mensajes en términos de negocio |
 | **H-04** | 🟡 Media | El panel de detalle de nodo del grafo muestra **las claves de atributo en inglés** (*Status, Movement type, Quantity, Scheduled at*), a diferencia del resto de la aplicación. | `96-trazabilidad-detalle-de-nodo` | Diccionario de etiquetas por tipo de nodo en `TraceGraph`, reutilizando `humanize` |
@@ -1029,7 +1029,7 @@ La severidad se estima respecto del objetivo del MVP: registrar y consultar la c
 |---|---|---|
 | **SENASA / RENAPA** | No integrado | El RENAPA se carga a mano y queda *Pendiente de verificación*; el motor lo reporta como hueco |
 | **RENSPA** | No integrado | Ídem, con el titular declarado en el formulario |
-| **SIGSA / DT-e** | No integrado | El DT-e se registra en ApiGestion con `syncStatus = PENDING_SYNC`; aparece un aviso azul en el detalle y un hueco `DTE_PENDING_SYNC` en la trazabilidad |
+| **SIGSA / DT-e** | No integrado | El DT-e se registra en ApiTrace con `syncStatus = PENDING_SYNC`; aparece un aviso azul en el detalle y un hueco `DTE_PENDING_SYNC` en la trazabilidad |
 | **SIFeGA / RNE** | No integrado | El RNE es un campo de texto del establecimiento |
 | **Laboratorios** | No integrado | Las muestras se registran, pero no hay carga de resultados (H-08) |
 

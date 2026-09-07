@@ -1,4 +1,4 @@
-# Decisiones técnicas (ADR) — ApiGestion
+# Decisiones técnicas (ADR) — ApiTrace
 
 **Versión:** 1.0
 **Fecha:** 2026-08-25

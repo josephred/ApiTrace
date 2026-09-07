@@ -8,12 +8,12 @@ Esta carpeta contiene la landing page promocional estática de **ApiTrace**, opt
 
 1. Ingresa a [vercel.com](https://vercel.com) e inicia sesión con tu cuenta de **GitHub**.
 2. Haz clic en el botón **"Add New..."** > **"Project"**.
-3. Selecciona el repositorio **`BeeTrace`** y haz clic en **Import**.
+3. Selecciona el repositorio **`ApiTrace`** y haz clic en **Import**.
 4. En la configuración del proyecto:
    - **Root Directory:** Haz clic en *Edit* y selecciona la carpeta **`landing`**.
    - **Framework Preset:** Déjalo en *Other* (o *Static*).
 5. Haz clic en **Deploy**.
-6. ¡Listo! En unos 15 segundos tendrás tu URL pública gratuita (ej. `apigestion.vercel.app`).
+6. ¡Listo! En unos 15 segundos tendrás tu URL pública gratuita (ej. `apitrace.vercel.app`).
 
 ---
 

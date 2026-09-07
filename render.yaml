@@ -1,9 +1,9 @@
 # ---------------------------------------------------------------------------
-# ApiGestion - Blueprint de Render
+# ApiTrace - Blueprint de Render
 #
 # Dos servicios:
-#   apigestion-api  Web service Node con la API REST.
-#   apigestion-web  Static site con la aplicacion web instalable (PWA).
+#   apitrace-api  Web service Node con la API REST.
+#   apitrace-web  Static site con la aplicacion web instalable (PWA).
 #
 # La base de datos NO se declara aca: se usa Neon (PostgreSQL gestionado). Su
 # cadena de conexion contiene credenciales, asi que se carga a mano en el panel
@@ -11,7 +11,7 @@
 #
 # Para desplegar:
 #   1. Render: New > Blueprint, apuntando a este repositorio.
-#   2. Al crear apigestion-api, Render pide DATABASE_URL: pegar ahi la cadena de
+#   2. Al crear apitrace-api, Render pide DATABASE_URL: pegar ahi la cadena de
 #      Neon (preferentemente la del endpoint agrupado, con sufijo -pooler).
 #   3. El resto de los secretos se generan solos.
 # ---------------------------------------------------------------------------
@@ -19,7 +19,7 @@
 services:
   # -------------------------------------------------------------------- API
   - type: web
-    name: apigestion-api
+    name: apitrace-api
     runtime: node
     plan: free
     region: oregon
@@ -72,7 +72,7 @@ services:
 
   # ------------------------------------------------- Aplicacion web (PWA)
   - type: web
-    name: apigestion-web
+    name: apitrace-web
     runtime: static
     rootDir: frontend
     buildCommand: npm ci --include=dev && npm run build
@@ -80,7 +80,7 @@ services:
     autoDeploy: true
     envVars:
       - key: VITE_API_URL
-        value: https://apigestion-api.onrender.com
+        value: https://apitrace-api.onrender.com
     routes:
       # La aplicacion es una SPA: cualquier ruta desconocida devuelve el shell y
       # el enrutador del cliente resuelve. Sin esto, recargar en /movements da 404.

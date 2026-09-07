@@ -2,9 +2,9 @@ import { createParamDecorator, ExecutionContext, SetMetadata } from '@nestjs/com
 import type { Request } from 'express';
 import type { AuthenticatedUser, UserRoleName } from '../types';
 
-export const IS_PUBLIC_KEY = 'apigestion:isPublic';
-export const ROLES_KEY = 'apigestion:roles';
-export const AUDIT_KEY = 'apigestion:audit';
+export const IS_PUBLIC_KEY = 'apitrace:isPublic';
+export const ROLES_KEY = 'apitrace:roles';
+export const AUDIT_KEY = 'apitrace:audit';
 
 /** Marca un endpoint como accesible sin token. */
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);

@@ -1,4 +1,4 @@
-# ApiGestion API
+# ApiTrace API
 
 Backend de la plataforma de trazabilidad apícola argentina. Monolito modular en
 NestJS + TypeScript sobre PostgreSQL, preparado para extraer servicios cuando un
@@ -40,16 +40,16 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
 ### Usuarios del seed
 
-Contraseña: `ApiGestion2026!` (configurable con `SEED_PASSWORD`).
+Contraseña: `ApiTrace2026!` (configurable con `SEED_PASSWORD`).
 
 | Correo | Rol | Alcance |
 |---|---|---|
-| `admin@apigestion.test` | ADMIN | todas las organizaciones |
-| `productor@apigestion.test` | PRODUCTOR | Apiarios del Sur |
-| `sala@apigestion.test` | SALA | Sala San Andrés |
-| `acopio@apigestion.test` | ACOPIADOR | Acopio Pampa |
-| `auditor@apigestion.test` | AUDITOR | lectura global |
-| `laboratorio@apigestion.test` | LABORATORIO | Laboratorio Mielab |
+| `admin@apitrace.test` | ADMIN | todas las organizaciones |
+| `productor@apitrace.test` | PRODUCTOR | Apiarios del Sur |
+| `sala@apitrace.test` | SALA | Sala San Andrés |
+| `acopio@apitrace.test` | ACOPIADOR | Acopio Pampa |
+| `auditor@apitrace.test` | AUDITOR | lectura global |
+| `laboratorio@apitrace.test` | LABORATORIO | Laboratorio Mielab |
 
 ---
 
@@ -167,7 +167,7 @@ crear un duplicado.
 ```bash
 BASE=http://localhost:3000/api/v1
 TOKEN=$(curl -s -X POST $BASE/auth/login -H 'Content-Type: application/json' \
-  -d '{"email":"acopio@apigestion.test","password":"ApiGestion2026!"}' | jq -r .accessToken)
+  -d '{"email":"acopio@apitrace.test","password":"ApiTrace2026!"}' | jq -r .accessToken)
 
 # Lote de acopio del seed
 LOT=$(curl -s -H "Authorization: Bearer $TOKEN" $BASE/lots/by-code/LOTE-2026-000002 | jq -r .id)
@@ -247,7 +247,7 @@ existen y quedan en `PENDING_SYNC`); object storage para los binarios de los
 documentos (se guardan los metadatos); resultados de laboratorio; facturación
 electrónica; fraccionamiento y producto final; QR público; PostGIS.
 
-El detalle y el orden de incorporación están en `04-MVP-ApiGestion.md` y
+El detalle y el orden de incorporación están en `04-MVP-ApiTrace.md` y
 `05-ADR-Decisiones-Tecnicas.md`, en la raíz del repositorio.
 
 La aplicación web instalable que consume esta API está en `frontend/`.

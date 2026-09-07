@@ -41,7 +41,7 @@ export default async function globalSetup(): Promise<void> {
   const url =
     process.env.DATABASE_URL_TEST ??
     process.env.DATABASE_URL ??
-    'postgresql://postgres:postgres@localhost:5432/apigestion_test';
+    'postgresql://postgres:postgres@localhost:5432/apitrace_test';
 
   const pool = new Pool({ connectionString: url, max: 1 });
   try {

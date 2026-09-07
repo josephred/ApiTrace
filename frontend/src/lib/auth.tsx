@@ -11,7 +11,7 @@ import { apiLogin, apiLogout, configureAuthHooks, setTokens } from './api';
 import { wipeLocalData } from './db';
 import type { AuthTokens, AuthUser, UserRole } from './types';
 
-const STORAGE_KEY = 'apigestion.session';
+const STORAGE_KEY = 'apitrace.session';
 
 interface StoredSession {
   accessToken: string;

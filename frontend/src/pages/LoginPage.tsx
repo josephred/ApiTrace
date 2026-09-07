@@ -36,7 +36,7 @@ export const LoginPage = () => {
     }
   };
 
-  const quickLogin = async (targetEmail: string, targetPass = 'ApiGestion2026!') => {
+  const quickLogin = async (targetEmail: string, targetPass = 'ApiTrace2026!') => {
     setEmail(targetEmail);
     setPassword(targetPass);
     setBusy(true);
@@ -60,12 +60,12 @@ export const LoginPage = () => {
   };
 
   const demoUsers = [
-    { label: 'Admin', email: 'admin@apigestion.test', role: 'ADMIN', color: '#8b5cf6' },
-    { label: 'Productor', email: 'productor@apigestion.test', role: 'PRODUCTOR', color: '#10b981' },
-    { label: 'Sala Extracción', email: 'sala@apigestion.test', role: 'SALA', color: '#f59e0b' },
-    { label: 'Acopiador', email: 'acopio@apigestion.test', role: 'ACOPIADOR', color: '#3b82f6' },
-    { label: 'Auditor', email: 'auditor@apigestion.test', role: 'AUDITOR', color: '#6b7280' },
-    { label: 'Laboratorio', email: 'laboratorio@apigestion.test', role: 'LAB', color: '#ec4899' },
+    { label: 'Admin', email: 'admin@apitrace.test', role: 'ADMIN', color: '#8b5cf6' },
+    { label: 'Productor', email: 'productor@apitrace.test', role: 'PRODUCTOR', color: '#10b981' },
+    { label: 'Sala Extracción', email: 'sala@apitrace.test', role: 'SALA', color: '#f59e0b' },
+    { label: 'Acopiador', email: 'acopio@apitrace.test', role: 'ACOPIADOR', color: '#3b82f6' },
+    { label: 'Auditor', email: 'auditor@apitrace.test', role: 'AUDITOR', color: '#6b7280' },
+    { label: 'Laboratorio', email: 'laboratorio@apitrace.test', role: 'LAB', color: '#ec4899' },
   ];
 
   return (

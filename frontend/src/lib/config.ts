@@ -1,7 +1,7 @@
 /**
  * Resolucion de la URL base de la API.
  *
- * Render inyecta el host pelado (`apigestion-api.onrender.com`) cuando se usa
+ * Render inyecta el host pelado (`apitrace-api.onrender.com`) cuando se usa
  * `fromService`, mientras que en desarrollo se prefiere la ruta relativa `/api`
  * para aprovechar el proxy de Vite y evitar CORS. Esta funcion normaliza ambos
  * casos para que el resto del codigo no tenga que pensarlo.

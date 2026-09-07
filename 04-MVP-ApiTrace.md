@@ -1,4 +1,4 @@
-# Definición del MVP — ApiGestion
+# Definición del MVP — ApiTrace
 
 **Versión:** 1.0
 **Fecha:** 2026-08-25
@@ -256,7 +256,7 @@ lotes que sumen más de lo que existió.
 sequenceDiagram
     autonumber
     participant P as Productor
-    participant API as ApiGestion
+    participant API as ApiTrace
     participant S as Sala de extracción
     participant A as Acopio
 
@@ -495,7 +495,7 @@ rechazó.
 | `01-Mapa_del_Dominio...md` | Modelo conceptual y reglas de modelado |
 | `02-Casos_de_Uso...md` | Análisis funcional por caso de uso |
 | `03-ArquitecturaTecnica...md` | Arquitectura de referencia |
-| **`04-MVP-ApiGestion.md`** | Este documento: alcance, modelo, contrato y riesgos |
+| **`04-MVP-ApiTrace.md`** | Este documento: alcance, modelo, contrato y riesgos |
 | `05-ADR-Decisiones-Tecnicas.md` | Decisiones que se apartan de la arquitectura de referencia, con su justificación |
 | `backend/README.md` | Guía operativa de la API: instalación, comandos, despliegue |
 | `frontend/README.md` | Cómo funciona el modo offline y la instalación en el dispositivo |

@@ -19,7 +19,7 @@ async function bootstrap(): Promise<void> {
   app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
   app.use(compression());
   // Los origenes se aceptan con o sin esquema: Render inyecta el host pelado
-  // (`apigestion-web.onrender.com`) y el navegador envia el origen completo.
+  // (`apitrace-web.onrender.com`) y el navegador envia el origen completo.
   const allowedOrigins = corsOrigins.map((origin) =>
     origin.includes('://') ? origin : `https://${origin}`,
   );
@@ -47,7 +47,7 @@ async function bootstrap(): Promise<void> {
     const document = SwaggerModule.createDocument(
       app,
       new DocumentBuilder()
-        .setTitle('ApiGestion API')
+        .setTitle('ApiTrace API')
         .setDescription(
           'Plataforma de trazabilidad apicola argentina. ' +
             'Modelo canonico propio; SENASA/SIGSA, ARCA y SIFeGA se integran mediante adaptadores.',
@@ -71,7 +71,7 @@ async function bootstrap(): Promise<void> {
   }
 
   await app.listen(port, '0.0.0.0');
-  logger.log(`ApiGestion API escuchando en el puerto ${port} (prefijo /${apiPrefix})`);
+  logger.log(`ApiTrace API escuchando en el puerto ${port} (prefijo /${apiPrefix})`);
 }
 
 void bootstrap();

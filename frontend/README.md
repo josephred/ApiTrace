@@ -1,6 +1,6 @@
-# ApiGestion Web
+# ApiTrace Web
 
-Aplicación web instalable (PWA) de ApiGestion. React + TypeScript sobre Vite,
+Aplicación web instalable (PWA) de ApiTrace. React + TypeScript sobre Vite,
 pensada para funcionar **sin conexión** en el campo y sincronizar sola al
 recuperar señal.
 

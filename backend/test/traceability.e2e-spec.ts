@@ -21,7 +21,7 @@ interface Session {
  * casos de uso (CU-04 a CU-18) contra HTTP real y PostgreSQL real.
  * Si esta prueba pasa, el modelo puede representar la trazabilidad en ambos sentidos.
  */
-describe('ApiGestion - columna vertebral CU-04 a CU-18 (e2e)', () => {
+describe('ApiTrace - columna vertebral CU-04 a CU-18 (e2e)', () => {
   let app: INestApplication;
   let http: App;
   let db: Database;

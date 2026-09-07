@@ -1,7 +1,7 @@
 {
-  "name": "apigestion-backend",
+  "name": "apitrace-backend",
   "version": "0.1.0",
-  "description": "ApiGestion - Plataforma de trazabilidad apicola argentina. Backend API (monolito modular).",
+  "description": "ApiTrace - Plataforma de trazabilidad apicola argentina. Backend API (monolito modular).",
   "license": "UNLICENSED",
   "private": true,
   "engines": {

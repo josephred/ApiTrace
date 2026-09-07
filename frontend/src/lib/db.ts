@@ -35,7 +35,7 @@ export interface OutboxItem {
   lastAttemptAt?: number;
 }
 
-interface ApiGestionDB extends DBSchema {
+interface ApiTraceDB extends DBSchema {
   cache: {
     key: string;
     value: CachedResponse;
@@ -51,14 +51,14 @@ interface ApiGestionDB extends DBSchema {
   };
 }
 
-const DB_NAME = 'apigestion';
+const DB_NAME = 'apitrace';
 const DB_VERSION = 1;
 
-let dbPromise: Promise<IDBPDatabase<ApiGestionDB>> | null = null;
+let dbPromise: Promise<IDBPDatabase<ApiTraceDB>> | null = null;
 
-export const getDb = (): Promise<IDBPDatabase<ApiGestionDB>> => {
+export const getDb = (): Promise<IDBPDatabase<ApiTraceDB>> => {
   if (!dbPromise) {
-    dbPromise = openDB<ApiGestionDB>(DB_NAME, DB_VERSION, {
+    dbPromise = openDB<ApiTraceDB>(DB_NAME, DB_VERSION, {
       upgrade(db) {
         if (!db.objectStoreNames.contains('cache')) {
           db.createObjectStore('cache', { keyPath: 'key' });

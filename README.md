@@ -1,4 +1,4 @@
-# ApiGestion
+# ApiTrace
 
 Plataforma de trazabilidad apícola argentina. Permite reconstruir la historia de
 un producto apícola desde su origen productivo hasta sus etapas posteriores, y
@@ -7,6 +7,13 @@ responder dos preguntas sobre datos reales:
 > ¿De qué apiario, de qué RENSPA y de qué productor vino la miel de este tambor?
 
 > ¿Dónde terminó la producción de este apiario?
+
+El proyecto se llama **ApiTrace**. Algunos identificadores todavía llevan el
+nombre anterior, `ApiTrace`, porque cambiarlos tiene consecuencias fuera de la
+documentación: los usuarios y la contraseña del seed, el dominio de los correos
+de prueba, los nombres de dos documentos, y los servicios de Render
+(`apitrace-api`, `apitrace-web`), cuyo renombrado cambiaría sus URL. Están
+citados tal como son para que lo que dice este README siga siendo cierto.
 
 ---
 
@@ -25,12 +32,12 @@ responder dos preguntas sobre datos reales:
 ## Estructura del repositorio
 
 ```
-ApiGestion/
+ApiTrace/
 ├── 00-Documento_de_Vision...md          Problema, usuarios y objetivos
 ├── 01-Mapa_del_Dominio...md             Modelo conceptual y reglas de modelado
 ├── 02-Casos_de_Uso...md                 Análisis funcional por caso de uso
 ├── 03-ArquitecturaTecnica...md          Arquitectura de referencia
-├── 04-MVP-ApiGestion.md                   Alcance, modelo de datos, contrato, riesgos
+├── 04-MVP-ApiTrace.md                   Alcance, modelo de datos, contrato, riesgos
 ├── 05-ADR-Decisiones-Tecnicas.md        Decisiones que se apartan del doc 03
 ├── backend/                             API REST · NestJS + Drizzle + PostgreSQL
 ├── frontend/                            Web instalable (PWA) · React + Vite
@@ -57,15 +64,15 @@ npm install
 npm run dev                # aplicación en :5173
 ```
 
-Usuarios del seed — contraseña `ApiGestion2026!`:
+Usuarios del seed — contraseña `ApiTrace2026!`:
 
 | Correo | Rol |
 |---|---|
-| `admin@apigestion.test` | ADMIN — ve todas las organizaciones |
-| `productor@apigestion.test` | PRODUCTOR |
-| `sala@apigestion.test` | SALA |
-| `acopio@apigestion.test` | ACOPIADOR |
-| `auditor@apigestion.test` | AUDITOR — solo lectura, alcance global |
+| `admin@apitrace.test` | ADMIN — ve todas las organizaciones |
+| `productor@apitrace.test` | PRODUCTOR |
+| `sala@apitrace.test` | SALA |
+| `acopio@apitrace.test` | ACOPIADOR |
+| `auditor@apitrace.test` | AUDITOR — solo lectura, alcance global |
 
 ---
 
@@ -109,7 +116,7 @@ dispositivo, de modo que reenviarlas nunca duplica un movimiento.
 
 | Documento | Para qué |
 |---|---|
-| `04-MVP-ApiGestion.md` | Alcance cerrado, modelo de datos, máquinas de estado, contrato y riesgos |
+| `04-MVP-ApiTrace.md` | Alcance cerrado, modelo de datos, máquinas de estado, contrato y riesgos |
 | `05-ADR-Decisiones-Tecnicas.md` | Por qué la implementación se aparta del documento 03 donde lo hace |
 | `backend/README.md` | Operación de la API: comandos, arquitectura interna, despliegue |
 | `frontend/README.md` | Cómo funciona el modo offline y la instalación en dispositivo |
