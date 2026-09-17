@@ -160,7 +160,7 @@ async function main(): Promise<void> {
       auth,
       identity,
       platformAdmin,
-      'productor@apitrace.test',
+      'productor@apitrace',
       'Maria Gonzalez',
       'PRODUCTOR',
       orgProductor.id,
@@ -169,7 +169,7 @@ async function main(): Promise<void> {
       auth,
       identity,
       platformAdmin,
-      'sala@apitrace.test',
+      'sala@apitrace',
       'Jorge Diaz',
       'SALA',
       orgSala.id,
@@ -178,7 +178,7 @@ async function main(): Promise<void> {
       auth,
       identity,
       platformAdmin,
-      'acopio@apitrace.test',
+      'acopio@apitrace',
       'Lucia Ferrari',
       'ACOPIADOR',
       orgAcopio.id,
@@ -187,7 +187,7 @@ async function main(): Promise<void> {
       auth,
       identity,
       platformAdmin,
-      'auditor@apitrace.test',
+      'auditor@apitrace',
       'Auditor Externo',
       'AUDITOR',
       null,
@@ -196,7 +196,7 @@ async function main(): Promise<void> {
       auth,
       identity,
       platformAdmin,
-      'laboratorio@apitrace.test',
+      'laboratorio@apitrace',
       'Lab Mielab',
       'LABORATORIO',
       orgLab.id,
@@ -536,12 +536,12 @@ async function main(): Promise<void> {
     logger.log(`  Lote de acopio   ${loteAcopio.code}  -> ${loteAcopio.id}`);
     logger.log('');
     logger.log(`  Usuarios de prueba (password: ${DEMO_PASSWORD}):`);
-    logger.log('    admin@apitrace.test        ADMIN');
-    logger.log('    productor@apitrace.test    PRODUCTOR');
-    logger.log('    sala@apitrace.test         SALA');
-    logger.log('    acopio@apitrace.test       ACOPIADOR');
-    logger.log('    auditor@apitrace.test      AUDITOR');
-    logger.log('    laboratorio@apitrace.test  LABORATORIO');
+    logger.log('    admin@apitrace        ADMIN');
+    logger.log('    productor@apitrace    PRODUCTOR');
+    logger.log('    sala@apitrace         SALA');
+    logger.log('    acopio@apitrace       ACOPIADOR');
+    logger.log('    auditor@apitrace      AUDITOR');
+    logger.log('    laboratorio@apitrace  LABORATORIO');
     logger.log('----------------------------------------------------------------');
   } finally {
     await app.close();
@@ -549,7 +549,7 @@ async function main(): Promise<void> {
 }
 
 async function ensureAdmin(auth: AuthService, db: Database): Promise<AuthenticatedUser> {
-  const email = 'admin@apitrace.test';
+  const email = 'admin@apitrace';
   const existing = await db.select().from(user).where(eq(user.email, email)).limit(1);
   if (existing.length > 0) {
     const record = existing[0];

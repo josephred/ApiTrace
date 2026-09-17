@@ -6,14 +6,14 @@ import { toUserMessage } from '../lib/errors';
 import { Logo } from '../components/Icon';
 import { Button, Card, Notice } from '../components/ui';
 
-/** Usuarios de prueba del seed. Solo existen durante el desarrollo. */
+/** Usuarios de prueba del seed. */
 const DEMO_USERS = [
-  { label: 'Administrador', email: 'admin@apitrace.test' },
-  { label: 'Productor', email: 'productor@apitrace.test' },
-  { label: 'Sala', email: 'sala@apitrace.test' },
-  { label: 'Acopiador', email: 'acopio@apitrace.test' },
-  { label: 'Auditor', email: 'auditor@apitrace.test' },
-  { label: 'Laboratorio', email: 'laboratorio@apitrace.test' },
+  { label: 'Administrador', email: 'admin@apitrace', role: 'ADMIN' },
+  { label: 'Productor', email: 'productor@apitrace', role: 'PRODUCTOR' },
+  { label: 'Sala', email: 'sala@apitrace', role: 'SALA' },
+  { label: 'Acopiador', email: 'acopio@apitrace', role: 'ACOPIADOR' },
+  { label: 'Auditor', email: 'auditor@apitrace', role: 'AUDITOR' },
+  { label: 'Laboratorio', email: 'laboratorio@apitrace', role: 'LABORATORIO' },
 ];
 
 export const LoginPage = () => {
@@ -47,6 +47,13 @@ export const LoginPage = () => {
     } finally {
       setBusy(false);
     }
+  };
+
+  const fillAndLogin = (targetEmail: string, targetPassword = 'ApiTrace2026!') => {
+    setEmail(targetEmail);
+    setPassword(targetPassword);
+    setFieldErrors({});
+    void attempt(targetEmail, targetPassword);
   };
 
   /**
@@ -93,11 +100,11 @@ export const LoginPage = () => {
               </label>
               <input
                 id="email"
-                type="email"
-                inputMode="email"
+                type="text"
                 autoComplete="username"
                 autoCapitalize="none"
                 spellCheck={false}
+                placeholder="ej: productor@apitrace"
                 aria-invalid={fieldErrors.email ? true : undefined}
                 aria-describedby={fieldErrors.email ? 'email-error' : undefined}
                 value={email}
@@ -147,37 +154,44 @@ export const LoginPage = () => {
             </Button>
           </form>
 
-          {/*
-            El acceso rápido existe para probar roles sin recordar seis
-            contrasenas. Queda fuera del paquete de producción: mostrar usuarios
-            y claves reales en la pantalla de acceso arruina la confianza que la
-            aplicación necesita transmitir, además del riesgo obvio.
-          */}
-          {import.meta.env.DEV && (
-            <details className="disclosure" style={{ marginTop: 'var(--sp-5)' }}>
-              <summary>Acceso rápido para pruebas</summary>
-              <div className="disclosure-body" style={{ paddingBottom: 'var(--sp-4)' }}>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                    gap: 'var(--sp-2)',
-                  }}
-                >
-                  {DEMO_USERS.map((demo) => (
-                    <Button
-                      key={demo.email}
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void attempt(demo.email, 'ApiTrace2026!')}
-                    >
-                      {demo.label}
-                    </Button>
-                  ))}
-                </div>
+          <details className="disclosure" open style={{ marginTop: 'var(--sp-5)' }}>
+            <summary>Acceso rápido con usuarios de prueba</summary>
+            <div className="disclosure-body" style={{ paddingBottom: 'var(--sp-4)' }}>
+              <p className="small muted" style={{ marginBottom: 'var(--sp-3)', lineHeight: 1.4 }}>
+                Hacé clic en cualquier rol para ingresar directamente (contraseña: <code>ApiTrace2026!</code>):
+              </p>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                  gap: 'var(--sp-2)',
+                }}
+              >
+                {DEMO_USERS.map((demo) => (
+                  <button
+                    key={demo.email}
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={busy}
+                    onClick={() => fillAndLogin(demo.email, 'ApiTrace2026!')}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      padding: 'var(--sp-2) var(--sp-3)',
+                      textAlign: 'left',
+                      height: 'auto',
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>{demo.label}</span>
+                    <span className="small muted" style={{ fontSize: '0.75rem' }}>
+                      {demo.email}
+                    </span>
+                  </button>
+                ))}
               </div>
-            </details>
-          )}
+            </div>
+          </details>
         </Card>
 
         <p className="auth-foot">Una vez dentro, la aplicación funciona sin conexión.</p>

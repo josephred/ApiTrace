@@ -65,8 +65,8 @@ export class RegisterDto {
 }
 
 export class LoginDto {
-  @ApiProperty({ example: 'productor@example.com' })
-  @IsEmail()
+  @ApiProperty({ example: 'productor@apitrace' })
+  @IsString()
   email!: string;
 
   @ApiProperty({ example: 'ClaveSegura2026' })
