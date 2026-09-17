@@ -1,144 +1,200 @@
+import { useState } from 'react';
 import { useSync } from '../lib/sync';
 import { formatDateTime, formatRelative } from '../lib/format';
-import { Badge, Card, Empty, Notice } from '../components/ui';
+import type { OutboxItem } from '../lib/db';
+import {
+  Button,
+  Card,
+  ConfirmDialog,
+  EmptyState,
+  Notice,
+  PageHeader,
+  Pill,
+  Stat,
+} from '../components/ui';
+import { DataList, type Column } from '../components/DataList';
 
-const METHOD_TONE = { POST: 'accent', PATCH: 'info', PUT: 'info', DELETE: 'danger' } as const;
+const METHOD_LABEL: Record<string, string> = {
+  POST: 'Alta',
+  PATCH: 'Cambio',
+  PUT: 'Cambio',
+  DELETE: 'Baja',
+};
+
+const statePill = (item: OutboxItem) => {
+  if (item.status === 'FAILED')
+    return (
+      <Pill tone="danger" icon="danger">
+        Rechazada
+      </Pill>
+    );
+  if (item.status === 'SENDING')
+    return (
+      <Pill tone="info" icon="sync">
+        Enviando
+      </Pill>
+    );
+  return (
+    <Pill tone="warning" icon="warning">
+      En espera
+    </Pill>
+  );
+};
 
 export const PendingPage = () => {
-  const { online, syncing, pending, lastSyncAt, flush, discard, retry } = useSync();
+  const { online, syncing, pending, pendingCount, failedCount, lastSyncAt, flush, discard, retry } =
+    useSync();
+  const [discarding, setDiscarding] = useState<OutboxItem | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const columns: Column<OutboxItem>[] = [
+    {
+      key: 'label',
+      header: 'Operación',
+      role: 'title',
+      cell: (item) => (
+        <>
+          <span className="row row-tight">
+            <Pill>{METHOD_LABEL[item.method] ?? item.method}</Pill>
+            <strong>{item.label}</strong>
+          </span>
+          {item.lastError && (
+            <div className="small" style={{ color: 'var(--danger-fg)', marginTop: 4 }}>
+              {item.lastError}
+            </div>
+          )}
+        </>
+      ),
+    },
+    {
+      key: 'state',
+      header: 'Estado',
+      role: 'status',
+      cell: statePill,
+    },
+    {
+      key: 'created',
+      header: 'Registrada',
+      cell: (item) => <span className="nowrap">{formatDateTime(item.createdAt)}</span>,
+    },
+    {
+      key: 'attempts',
+      header: 'Intentos',
+      align: 'right',
+      cell: (item) => item.attempts,
+    },
+  ];
 
   return (
     <div className="stack">
-      <div className="page-header">
-        <div>
-          <h1>Pendientes de sincronizar</h1>
-          <p className="lead">
-            Operaciones registradas sin conexión. Cada una lleva su clave de idempotencia generada
-            en el dispositivo, así que reenviarlas nunca duplica un movimiento ni un DT-e.
-          </p>
-        </div>
-        <button
-          type="button"
-          className="primary"
-          onClick={() => void flush()}
-          disabled={!online || syncing || pending.length === 0}
-        >
-          {syncing && <span className="spinner" aria-hidden="true" />}
-          Sincronizar ahora
-        </button>
-      </div>
+      <PageHeader
+        title="Pendientes de enviar"
+        help="pending"
+        actions={
+          // Sin nada en cola, un boton apagado solo ocupa lugar: se oculta.
+          pending.length > 0 && (
+            <Button
+              variant="primary"
+              icon="send"
+              onClick={() => void flush()}
+              busy={syncing}
+              busyLabel="Enviando…"
+              disabled={!online}
+            >
+              Enviar ahora
+            </Button>
+          )
+        }
+      />
 
       {!online && (
-        <Notice tone="warn">
-          Sin conexión. La cola se enviará sola en cuanto vuelva la señal.
+        <Notice tone="warning" title="Sin conexión">
+          La cola se envía sola en cuanto vuelva la señal. No hace falta que hagas nada.
         </Notice>
       )}
 
-      <Card
-        title={`${pending.length} operación(es) en cola`}
-        actions={<span className="small muted">Última sincronización {formatRelative(lastSyncAt)}</span>}
-        tight
-      >
-        {pending.length === 0 ? (
-          <Empty
-            title="No hay nada pendiente"
-            description="Todo lo registrado en este dispositivo ya llegó al servidor."
-          />
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Operación</th>
-                  <th>Destino</th>
-                  <th>Registrada</th>
-                  <th>Estado</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {pending.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <div className="row">
-                        <Badge tone={METHOD_TONE[item.method]}>{item.method}</Badge>
-                        <strong>{item.label}</strong>
-                      </div>
-                      {item.lastError && (
-                        <div className="small" style={{ color: 'var(--danger)' }}>
-                          {item.lastError}
-                        </div>
-                      )}
-                    </td>
-                    <td className="mono small">{item.path}</td>
-                    <td className="small nowrap">{formatDateTime(item.createdAt)}</td>
-                    <td>
-                      {item.status === 'FAILED' ? (
-                        <Badge tone="danger">Rechazada</Badge>
-                      ) : item.status === 'SENDING' ? (
-                        <Badge tone="info">Enviando</Badge>
-                      ) : (
-                        <Badge tone="warn">En espera</Badge>
-                      )}
-                      {item.attempts > 0 && (
-                        <span className="small faint"> · {item.attempts} intento(s)</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="row">
-                        {item.status === 'FAILED' && (
-                          <button
-                            type="button"
-                            className="small"
-                            onClick={() => void retry(item.id)}
-                            disabled={!online}
-                          >
-                            Reintentar
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="small danger"
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `¿Descartar «${item.label}»? La operación no se enviará y se perderá.`,
-                              )
-                            ) {
-                              void discard(item.id);
-                            }
-                          }}
-                        >
-                          Descartar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {failedCount > 0 && (
+        <Notice tone="danger" title="Hay operaciones que el servidor rechazó">
+          Reintentarlas sin corregir el dato daría el mismo resultado. Revisá el motivo de cada una
+          y, si ya no corresponde, descartala.
+        </Notice>
+      )}
+
+      <div className="grid c3">
+        <Stat label="En espera" value={pendingCount} hint={online ? 'se envían solas' : 'esperando señal'} />
+        <Stat label="Rechazadas" value={failedCount} hint="necesitan tu revisión" />
+        <Stat label="Último envío" value={formatRelative(lastSyncAt)} />
+      </div>
+
+      <Card flush>
+        <DataList
+          items={pending}
+          columns={columns}
+          rowKey={(item) => item.id}
+          rowActions={(item) => (
+            <>
+              {item.status === 'FAILED' && (
+                <Button size="sm" icon="sync" onClick={() => void retry(item.id)} disabled={!online}>
+                  Reintentar
+                </Button>
+              )}
+              <Button size="sm" variant="danger" icon="trash" onClick={() => setDiscarding(item)}>
+                Descartar
+              </Button>
+            </>
+          )}
+          empty={
+            <EmptyState
+              icon="checkCircle"
+              title="No hay nada pendiente"
+              description="Todo lo que registraste en este dispositivo ya llegó al servidor."
+            />
+          }
+        />
       </Card>
 
-      <Card title="Cómo funciona la cola">
-        <div className="stack small">
+      <Card title="Cómo funciona la cola" help="idempotency">
+        <div className="small stack">
           <p>
-            Las operaciones se envían <strong>en el orden en que se registraron</strong>, porque un
+            Las operaciones se envían <strong>en el orden en que las registraste</strong>, porque un
             lote puede depender de un movimiento cargado antes.
           </p>
           <p>
-            Si se corta la conexión a mitad de la sincronización, el envío se detiene ahí y retoma
-            desde el mismo punto: no se queman los intentos del resto de la cola por un problema de
-            señal.
+            Si se corta la señal a mitad del envío, se detiene ahí y retoma desde el mismo punto: no
+            se gastan los intentos del resto de la cola por un problema de conexión.
           </p>
           <p>
-            Una operación rechazada por el servidor con un error de validación (4xx) deja de
-            reintentarse sola y queda acá para revisión: reintentarla sin corregirla daría el mismo
-            resultado.
+            Una operación que el servidor rechaza por un dato inválido deja de reintentarse sola y
+            queda acá para que la revises.
           </p>
         </div>
       </Card>
+
+      {/*
+        Descartar es la única acción irreversible de la aplicación: la operación
+        no se envía y se pierde. Antes usaba el diálogo del navegador, que no se
+        puede redactar ni traducir.
+      */}
+      {discarding && (
+        <ConfirmDialog
+          title="Descartar esta operación"
+          description={
+            <>
+              <strong>{discarding.label}</strong> no se va a enviar y se pierde. Esta acción no se
+              puede deshacer.
+            </>
+          }
+          confirmLabel="Sí, descartar"
+          busy={busy}
+          onCancel={() => setDiscarding(null)}
+          onConfirm={async () => {
+            setBusy(true);
+            await discard(discarding.id);
+            setBusy(false);
+            setDiscarding(null);
+          }}
+        />
+      )}
     </div>
   );
 };

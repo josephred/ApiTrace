@@ -1,233 +1,472 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ApiError, apiSend } from '../lib/api';
+import { useParams } from 'react-router-dom';
+import { apiSend } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
-import { formatDateTime, formatQuantity, humanize, toLocalInput } from '../lib/format';
+import { fieldErrors, toUserMessage } from '../lib/errors';
+import { formatDateTime, formatQuantity, toLocalInput } from '../lib/format';
+import { MATERIAL_TYPES, MOVEMENT_TYPES, eventLabel } from '../lib/vocabulary';
+import type { IconName } from '../components/Icon';
 import {
-  Badge,
+  Button,
+  ButtonLink,
   Card,
-  FormFields,
-  Modal,
+  ConfirmDialog,
+  EmptyState,
+  ErrorNotice,
   Notice,
-  Spinner,
-  StatusBadge,
-  useForm,
-  type FieldSpec,
+  PageHeader,
+  Pill,
+  Sheet,
+  SkeletonList,
+  StatusPill,
+  SummaryList,
+  useWriteFeedback,
 } from '../components/ui';
+import { ResourceNotices } from '../components/ResourceNotices';
+import { Fields, Form, FormError, buildBody, useForm, type FieldSpec } from '../components/Form';
 import type { Movement, TimelineEvent } from '../lib/types';
 
-type Action = 'dte' | 'dispatch' | 'receive' | 'close' | 'cancel' | null;
+type ActionKey = 'dte' | 'dispatch' | 'receive' | 'close' | 'cancel';
+
+interface ActionSpec {
+  key: ActionKey;
+  label: string;
+  icon: IconName;
+  title: string;
+  path: string;
+  submit: string;
+  busyLabel: string;
+  notice?: string;
+  fields: FieldSpec[];
+}
+
+/* =========================================================================
+   Que se puede hacer, y que conviene hacer
+   ========================================================================= */
+
+/**
+ * La maquina de estados del backend define, en cada momento, una sola
+ * continuacion natural. La pantalla anterior mostraba hasta cinco botones, casi
+ * todos con el mismo peso visual, y dejaba al usuario decidir cual era «el
+ * siguiente». Aca esa decision la toma el sistema: una acción principal y el
+ * resto, disponibles pero secundarias.
+ */
+const buildActions = (movement: Movement): ActionSpec[] => {
+  const dte = movement.dte;
+  const specs: Record<ActionKey, ActionSpec> = {
+    dte: {
+      key: 'dte',
+      label: 'Registrar DT-e',
+      icon: 'document',
+      title: 'Registrar DT-e',
+      path: `/movements/${movement.id}/dte`,
+      submit: 'Registrar DT-e',
+      busyLabel: 'Registrando…',
+      notice:
+        'Todavía no hay integración con SIGSA: el documento queda registrado acá y marcado como pendiente de envío.',
+      fields: [
+        {
+          name: 'number',
+          label: 'Número de DT-e',
+          full: true,
+          hint: 'Si todavía no lo tenés, dejalo vacío: queda en borrador hasta que SIGSA asigne número.',
+        },
+        {
+          name: 'issuedAt',
+          label: 'Fecha de emision',
+          type: 'datetime-local',
+          full: true,
+          defaultValue: toLocalInput(),
+        },
+      ],
+    },
+    dispatch: {
+      key: 'dispatch',
+      label: 'Despachar',
+      icon: 'send',
+      title: 'Despachar movimiento',
+      path: `/movements/${movement.id}/dispatch`,
+      submit: 'Confirmar salida',
+      busyLabel: 'Despachando…',
+      fields: [
+        {
+          name: 'dispatchedAt',
+          label: 'Fecha y hora de salida',
+          type: 'datetime-local',
+          required: true,
+          full: true,
+          defaultValue: toLocalInput(),
+        },
+      ],
+    },
+    receive: {
+      key: 'receive',
+      label: 'Registrar recepción',
+      icon: 'inbox',
+      title: 'Registrar recepción',
+      path: `/movements/${movement.id}/receive`,
+      submit: 'Confirmar recepción',
+      busyLabel: 'Registrando…',
+      notice: `En origen se declararon ${formatQuantity(movement.quantity, movement.unit)}. Si llegó otra cantidad, hay que explicar por qué.`,
+      fields: [
+        {
+          name: 'receivedQuantity',
+          label: 'Cantidad recibida',
+          type: 'number',
+          step: '0.001',
+          min: '0',
+          required: true,
+          inputMode: 'decimal',
+          defaultValue: movement.quantity,
+        },
+        {
+          name: 'receivedAt',
+          label: 'Fecha y hora',
+          type: 'datetime-local',
+          required: true,
+          defaultValue: toLocalInput(),
+        },
+        {
+          name: 'discrepancyNotes',
+          label: 'Motivo de la diferencia',
+          type: 'textarea',
+          full: true,
+          hint: 'Solo si la cantidad recibida no coincide con la declarada.',
+          validate: (value, all) =>
+            !value && all.receivedQuantity && Number(all.receivedQuantity) !== Number(movement.quantity)
+              ? 'La cantidad no coincide con la declarada: explica brevemente por qué.'
+              : null,
+        },
+      ],
+    },
+    close: {
+      key: 'close',
+      label: 'Cerrar DT-e',
+      icon: 'check',
+      title: 'Cerrar DT-e',
+      path: `/movements/${movement.id}/dte/close`,
+      submit: 'Cerrar documento',
+      busyLabel: 'Cerrando…',
+      notice: 'Lo cierra el establecimiento que recibió, una vez registrada la recepción.',
+      fields: [
+        {
+          name: 'closedAt',
+          label: 'Fecha y hora de cierre',
+          type: 'datetime-local',
+          required: true,
+          full: true,
+          defaultValue: toLocalInput(),
+        },
+      ],
+    },
+    cancel: {
+      key: 'cancel',
+      label: 'Cancelar movimiento',
+      icon: 'close',
+      title: 'Cancelar movimiento',
+      path: `/movements/${movement.id}/cancel`,
+      submit: 'Cancelar movimiento',
+      busyLabel: 'Cancelando…',
+      fields: [
+        {
+          name: 'reason',
+          label: 'Motivo',
+          type: 'textarea',
+          required: true,
+          full: true,
+          hint: 'Queda registrado en el historial.',
+        },
+      ],
+    },
+  };
+
+  const available: ActionKey[] = [];
+
+  if (movement.status === 'DRAFT') {
+    // Sin el documento que la norma exige no se puede despachar: ofrecerlo
+    // primero evita que alguien intente el paso siguiente y choque con un error.
+    if (movement.requiresDocument && !dte) available.push('dte');
+    else {
+      available.push('dispatch');
+      if (!dte) available.push('dte');
+    }
+    available.push('cancel');
+  } else if (movement.status === 'DISPATCHED' || movement.status === 'IN_TRANSIT') {
+    available.push('receive');
+    if (!dte) available.push('dte');
+    available.push('cancel');
+  } else if (movement.status === 'RECEIVED' || movement.status === 'PARTIALLY_RECEIVED') {
+    if (dte && ['ISSUED', 'APPROVED'].includes(dte.status)) available.push('close');
+  }
+
+  return available.map((key) => specs[key]);
+};
+
+/* =========================================================================
+   Pantalla
+   ========================================================================= */
 
 export const MovementDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const { canWrite } = useAuth();
-  const [action, setAction] = useState<Action>(null);
-  const [flash, setFlash] = useState<string | null>(null);
+  const [action, setAction] = useState<ActionSpec | null>(null);
+  const [confirming, setConfirming] = useState<ActionSpec | null>(null);
 
   const movement = useResource<Movement>(id ? `/movements/${id}` : null);
   const timeline = useResource<{ events: TimelineEvent[] }>(
     id ? `/traceability/timeline/movement/${id}` : null,
   );
 
-  if (movement.loading) return <Spinner label="Cargando movimiento…" />;
-  if (movement.error) return <Notice tone="danger">{movement.error}</Notice>;
+  if (movement.loading) {
+    return (
+      <div className="stack">
+        <PageHeader title="Movimiento" back={{ to: '/movements', label: 'Movimientos' }} />
+        <Card flush>
+          <SkeletonList rows={4} />
+        </Card>
+      </div>
+    );
+  }
+
+  if (movement.error) {
+    return (
+      <div className="stack">
+        <PageHeader title="Movimiento" back={{ to: '/movements', label: 'Movimientos' }} />
+        <ErrorNotice message={movement.error} onRetry={movement.reload} />
+      </div>
+    );
+  }
+
   if (!movement.data) return null;
 
   const data = movement.data;
   const dte = data.dte;
-  const canDispatch = data.status === 'DRAFT';
-  const canReceive = ['DISPATCHED', 'IN_TRANSIT'].includes(data.status);
-  const canCloseDte =
-    dte && ['ISSUED', 'APPROVED'].includes(dte.status) &&
-    ['RECEIVED', 'PARTIALLY_RECEIVED'].includes(data.status);
+  const actions = canWrite ? buildActions(data) : [];
+  const [primary, ...others] = actions;
 
   const reload = () => {
     movement.reload();
     timeline.reload();
   };
 
+  const run = (spec: ActionSpec) => {
+    // Cancelar destruye trabajo: se confirma antes de abrir el formulario.
+    if (spec.key === 'cancel') setConfirming(spec);
+    else setAction(spec);
+  };
+
   return (
     <div className="stack">
-      <div className="page-header">
-        <div>
-          <div className="row">
-            <h1 className="mono">{data.code}</h1>
-            <StatusBadge status={data.status} />
-          </div>
-          <p className="lead">
-            {humanize(data.movementType)} · {formatQuantity(data.quantity, data.unit)} ·{' '}
-            {data.origin?.name ?? '—'} → {data.destination?.name ?? '—'}
-          </p>
-        </div>
-        <Link className="btn" to={`/trace/forward/movement/${data.id}`}>
-          Ver trazabilidad
-        </Link>
-      </div>
+      <PageHeader
+        title={`${MOVEMENT_TYPES.label(data.movementType)} · ${formatQuantity(data.quantity, data.unit)}`}
+        code={data.code}
+        status={<StatusPill status={data.status} />}
+        sub={`${data.origin?.name ?? '—'} → ${data.destination?.name ?? '—'}`}
+        back={{ to: '/movements', label: 'Movimientos' }}
+        actions={
+          <ButtonLink to={`/trace/forward/movement/${data.id}`} icon="trace">
+            Ver trazabilidad
+          </ButtonLink>
+        }
+      />
 
-      {flash && <Notice tone="ok">{flash}</Notice>}
+      <ResourceNotices resource={movement} />
 
       {data.requiresDocument && !dte && (
-        <Notice tone="warn">
-          Este movimiento requiere <strong>{data.requiredDocumentType}</strong> y todavía no lo
-          tiene. No podrá despacharse hasta registrarlo.
+        <Notice tone="warning" title={`Falta el ${data.requiredDocumentType}`}>
+          La norma vigente a la fecha del traslado lo exige. No se puede despachar hasta
+          registrarlo.
         </Notice>
       )}
 
       {dte?.syncStatus === 'PENDING_SYNC' && (
-        <Notice tone="info">
-          El DT-e está registrado en ApiTrace pero <strong>no sincronizado con SIGSA</strong>. La
-          operación no se pierde: queda pendiente hasta que exista la integración.
+        <Notice tone="info" title="El DT-e todavía no llegó a SIGSA">
+          Esta registrado acá y no se pierde. Se enviará cuando exista la integración.
         </Notice>
       )}
 
-      {canWrite && (
-        <div className="row">
-          {!dte && (
-            <button type="button" className="primary" onClick={() => setAction('dte')}>
-              Registrar DT-e
-            </button>
+      {/* ----------------------------------------- una acción principal */}
+      {primary && (
+        <Card>
+          <div className="next-step">
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 650 }}>Siguiente paso</div>
+              <div className="small muted">
+                {primary.key === 'dte' && 'Registrá el documento para poder despachar.'}
+                {primary.key === 'dispatch' && 'Confirmá la salida del establecimiento de origen.'}
+                {primary.key === 'receive' && 'Registrá que llegó y en qué cantidad.'}
+                {primary.key === 'close' && 'Cerrá el documento ahora que la recepción esta hecha.'}
+                {primary.key === 'cancel' && 'Este movimiento todavía puede cancelarse.'}
+              </div>
+            </div>
+            <Button variant="primary" icon={primary.icon} onClick={() => run(primary)}>
+              {primary.label}
+            </Button>
+          </div>
+          {others.length > 0 && (
+            <div className="row" style={{ marginTop: 'var(--sp-4)' }}>
+              {others.map((spec) => (
+                <Button
+                  key={spec.key}
+                  size="sm"
+                  variant={spec.key === 'cancel' ? 'danger' : 'secondary'}
+                  icon={spec.icon}
+                  onClick={() => run(spec)}
+                >
+                  {spec.label}
+                </Button>
+              ))}
+            </div>
           )}
-          {canDispatch && (
-            <button type="button" className="primary" onClick={() => setAction('dispatch')}>
-              Despachar
-            </button>
-          )}
-          {canReceive && (
-            <button type="button" className="primary" onClick={() => setAction('receive')}>
-              Registrar recepción
-            </button>
-          )}
-          {canCloseDte && (
-            <button type="button" onClick={() => setAction('close')}>
-              Cerrar DT-e
-            </button>
-          )}
-          {['DRAFT', 'DISPATCHED'].includes(data.status) && (
-            <button type="button" className="danger" onClick={() => setAction('cancel')}>
-              Cancelar
-            </button>
-          )}
-        </div>
+        </Card>
       )}
 
-      <div className="grid cols-2">
-        <Card title="Movimiento">
-          <dl className="definition">
-            <dt>Tipo</dt>
-            <dd>{humanize(data.movementType)}</dd>
-            <dt>Material</dt>
-            <dd>{humanize(data.materialType)}</dd>
-            <dt>Origen</dt>
-            <dd>
-              {data.origin?.name ?? '—'}
-              {data.originApiaryId && <span className="small muted"> · desde apiario</span>}
-            </dd>
-            <dt>Destino</dt>
-            <dd>{data.destination?.name ?? '—'}</dd>
-            <dt>Cantidad</dt>
-            <dd>{formatQuantity(data.quantity, data.unit)}</dd>
-            <dt>Programado</dt>
-            <dd>{formatDateTime(data.scheduledAt)}</dd>
-            <dt>Despachado</dt>
-            <dd>{formatDateTime(data.dispatchedAt)}</dd>
-            <dt>Recibido</dt>
-            <dd>{formatDateTime(data.receivedAt)}</dd>
-            {data.notes && (
-              <>
-                <dt>Observaciones</dt>
-                <dd>{data.notes}</dd>
-              </>
-            )}
-          </dl>
+      <div className="grid c2">
+        <Card title="Datos del traslado">
+          <SummaryList
+            rows={[
+              { key: 'Tipo', value: MOVEMENT_TYPES.label(data.movementType) },
+              { key: 'Material', value: MATERIAL_TYPES.label(data.materialType) },
+              {
+                key: 'Sale de',
+                value: (
+                  <>
+                    {data.origin?.name ?? '—'}
+                    {data.originApiaryId && (
+                      <div className="xs faint" style={{ fontWeight: 400 }}>
+                        desde un apiario
+                      </div>
+                    )}
+                  </>
+                ),
+              },
+              { key: 'Llega a', value: data.destination?.name ?? '—' },
+              { key: 'Cantidad', value: formatQuantity(data.quantity, data.unit) },
+              { key: 'Programado', value: formatDateTime(data.scheduledAt) },
+              { key: 'Despachado', value: formatDateTime(data.dispatchedAt) },
+              { key: 'Recibido', value: formatDateTime(data.receivedAt) },
+              ...(data.notes ? [{ key: 'Observaciones', value: data.notes }] : []),
+            ]}
+          />
         </Card>
 
-        <Card title="Documento sanitario">
+        <Card title="Documento sanitario" help="dte">
           {dte ? (
-            <dl className="definition">
-              <dt>Número</dt>
-              <dd className="mono">{dte.number ?? 'sin asignar'}</dd>
-              <dt>Estado interno</dt>
-              <dd>
-                <StatusBadge status={dte.status} />
-              </dd>
-              <dt>Sincronización</dt>
-              <dd>
-                <StatusBadge status={dte.syncStatus} />
-              </dd>
-              <dt>RENSPA origen</dt>
-              <dd className="mono">{dte.originRenspa ?? '—'}</dd>
-              <dt>RENSPA destino</dt>
-              <dd className="mono">{dte.destinationRenspa ?? '—'}</dd>
-              <dt>Emitido</dt>
-              <dd>{formatDateTime(dte.issuedAt)}</dd>
-              <dt>Cerrado</dt>
-              <dd>{formatDateTime(dte.closedAt)}</dd>
-            </dl>
+            <SummaryList
+              rows={[
+                {
+                  key: 'Número',
+                  value: dte.number ? (
+                    <span className="mono">{dte.number}</span>
+                  ) : (
+                    <span className="faint">sin asignar</span>
+                  ),
+                },
+                { key: 'Estado', value: <StatusPill status={dte.status} /> },
+                { key: 'Envío a SIGSA', value: <StatusPill status={dte.syncStatus} /> },
+                {
+                  key: 'RENSPA origen',
+                  value: <span className="mono">{dte.originRenspa ?? '—'}</span>,
+                },
+                {
+                  key: 'RENSPA destino',
+                  value: <span className="mono">{dte.destinationRenspa ?? '—'}</span>,
+                },
+                { key: 'Emitido', value: formatDateTime(dte.issuedAt) },
+                { key: 'Cerrado', value: formatDateTime(dte.closedAt) },
+              ]}
+            />
           ) : (
             <p className="muted small">
-              Sin documento asociado.{' '}
               {data.requiresDocument
-                ? 'La regla vigente lo exige para este traslado.'
-                : 'La regla vigente no lo exige para este traslado.'}
+                ? 'Sin documento asociado. La norma vigente lo exige para este traslado.'
+                : 'Sin documento asociado. La norma vigente no lo exige para este traslado.'}
             </p>
           )}
 
           {data.reception && (
             <>
-              <h3 className="mt">Recepción</h3>
-              <dl className="definition">
-                <dt>Fecha</dt>
-                <dd>{formatDateTime(data.reception.receivedAt)}</dd>
-                <dt>Cantidad recibida</dt>
-                <dd>
-                  {formatQuantity(data.reception.receivedQuantity, data.reception.unit)}{' '}
-                  {data.reception.hasDiscrepancy && <Badge tone="warn">con diferencia</Badge>}
-                </dd>
-                <dt>Resultado</dt>
-                <dd>
-                  <StatusBadge status={data.reception.result} />
-                </dd>
-                {data.reception.discrepancyNotes && (
-                  <>
-                    <dt>Motivo</dt>
-                    <dd>{data.reception.discrepancyNotes}</dd>
-                  </>
-                )}
-              </dl>
+              <div className="form-section-title" style={{ marginTop: 'var(--sp-5)' }}>
+                Recepción
+              </div>
+              <SummaryList
+                rows={[
+                  { key: 'Fecha', value: formatDateTime(data.reception.receivedAt) },
+                  {
+                    key: 'Cantidad recibida',
+                    value: (
+                      <span className="row row-tight" style={{ justifyContent: 'flex-end' }}>
+                        {formatQuantity(data.reception.receivedQuantity, data.reception.unit)}
+                        {data.reception.hasDiscrepancy && (
+                          <Pill tone="warning" icon="warning">
+                            con diferencia
+                          </Pill>
+                        )}
+                      </span>
+                    ),
+                  },
+                  { key: 'Resultado', value: <StatusPill status={data.reception.result} /> },
+                  ...(data.reception.discrepancyNotes
+                    ? [{ key: 'Motivo', value: data.reception.discrepancyNotes }]
+                    : []),
+                ]}
+              />
             </>
           )}
         </Card>
       </div>
 
-      <Card title="Historial del movimiento">
+      <Card title="Historial">
         {timeline.data && timeline.data.events.length > 0 ? (
           <ul className="timeline">
             {timeline.data.events.map((event) => (
               <li key={event.id}>
-                <strong>{event.eventType}</strong>
-                <div className="when">
-                  Registrado {formatDateTime(event.recordedAt)}
+                <div className="timeline-what">{eventLabel(event.eventType)}</div>
+                <div className="timeline-when">
+                  {formatDateTime(event.recordedAt)}
                   {event.occurredAt !== event.recordedAt && (
-                    <> · ocurrió {formatDateTime(event.occurredAt)}</>
+                    <> · ocurrio {formatDateTime(event.occurredAt)}</>
                   )}
                 </div>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="muted small">Sin eventos registrados.</p>
+          <EmptyState
+            icon="audit"
+            title="Sin eventos"
+            description="Cada acción sobre este movimiento va a quedar registrada acá."
+          />
         )}
       </Card>
 
+      {confirming && (
+        <ConfirmDialog
+          title="Cancelar este movimiento"
+          description={
+            <>
+              El movimiento <strong className="mono">{data.code}</strong> queda cancelado y no puede
+              volver atrás. Vas a tener que indicar el motivo.
+            </>
+          }
+          confirmLabel="Sí, cancelar"
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => {
+            const spec = confirming;
+            setConfirming(null);
+            setAction(spec);
+          }}
+        />
+      )}
+
       {action && (
-        <ActionModal
-          action={action}
-          movement={data}
+        <ActionSheet
+          spec={action}
+          movementCode={data.code}
           onClose={() => setAction(null)}
-          onDone={(message) => {
+          onDone={() => {
             setAction(null);
-            setFlash(message);
             reload();
           }}
         />
@@ -236,150 +475,66 @@ export const MovementDetailPage = () => {
   );
 };
 
-const ActionModal = ({
-  action,
-  movement,
+/* =========================================================================
+   Formulario de acción
+   ========================================================================= */
+
+const ActionSheet = ({
+  spec,
+  movementCode,
   onClose,
   onDone,
 }: {
-  action: Exclude<Action, null>;
-  movement: Movement;
+  spec: ActionSpec;
+  movementCode: string;
   onClose: () => void;
-  onDone: (message: string) => void;
+  onDone: () => void;
 }) => {
-  const config: Record<
-    Exclude<Action, null>,
-    { title: string; fields: FieldSpec[]; path: string; submit: string; notice?: string }
-  > = {
-    dte: {
-      title: 'Registrar DT-e',
-      path: `/movements/${movement.id}/dte`,
-      submit: 'Registrar DT-e',
-      notice:
-        'Sin integración con SIGSA el documento queda pendiente de sincronizar, y así lo reporta la trazabilidad.',
-      fields: [
-        {
-          name: 'number',
-          label: 'Número de DT-e',
-          full: true,
-          help: 'Si se omite, el documento queda en borrador hasta que SIGSA asigne número.',
-        },
-        { name: 'issuedAt', label: 'Fecha de emisión', type: 'datetime-local', defaultValue: toLocalInput() },
-      ],
-    },
-    dispatch: {
-      title: 'Despachar movimiento',
-      path: `/movements/${movement.id}/dispatch`,
-      submit: 'Despachar',
-      fields: [
-        {
-          name: 'dispatchedAt',
-          label: 'Fecha y hora de salida',
-          type: 'datetime-local',
-          defaultValue: toLocalInput(),
-        },
-      ],
-    },
-    receive: {
-      title: 'Registrar recepción',
-      path: `/movements/${movement.id}/receive`,
-      submit: 'Confirmar recepción',
-      notice: `Cantidad declarada en origen: ${formatQuantity(movement.quantity, movement.unit)}. Si difiere, hay que dejar constancia del motivo.`,
-      fields: [
-        {
-          name: 'receivedQuantity',
-          label: 'Cantidad recibida',
-          type: 'number',
-          step: '0.001',
-          required: true,
-          defaultValue: movement.quantity,
-        },
-        {
-          name: 'receivedAt',
-          label: 'Fecha y hora',
-          type: 'datetime-local',
-          defaultValue: toLocalInput(),
-        },
-        {
-          name: 'discrepancyNotes',
-          label: 'Motivo de la diferencia',
-          type: 'textarea',
-          full: true,
-          help: 'Obligatorio si la cantidad recibida difiere de la declarada.',
-        },
-      ],
-    },
-    close: {
-      title: 'Cerrar DT-e',
-      path: `/movements/${movement.id}/dte/close`,
-      submit: 'Cerrar documento',
-      notice: 'El cierre lo realiza el establecimiento receptor una vez registrada la recepción.',
-      fields: [
-        {
-          name: 'closedAt',
-          label: 'Fecha y hora de cierre',
-          type: 'datetime-local',
-          defaultValue: toLocalInput(),
-        },
-      ],
-    },
-    cancel: {
-      title: 'Cancelar movimiento',
-      path: `/movements/${movement.id}/cancel`,
-      submit: 'Cancelar movimiento',
-      fields: [{ name: 'reason', label: 'Motivo', type: 'textarea', required: true, full: true }],
-    },
-  };
-
-  const current = config[action];
-  const { values, set } = useForm(current.fields);
+  const { values, set, blur, errors, setErrors, validateAll } = useForm(spec.fields);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ title: string; detail?: string } | null>(null);
+  const feedback = useWriteFeedback();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const body: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(values)) {
-        if (value === '') continue;
-        body[key] = /At$/.test(key)
-          ? new Date(value).toISOString()
-          : key === 'receivedQuantity'
-            ? Number(value)
-            : value;
-      }
+    if (!validateAll()) return;
 
-      const result = await apiSend('POST', current.path, body, {
-        label: `${current.title} — ${movement.code}`,
+    setBusy(true);
+    setFailure(null);
+    try {
+      const result = await apiSend('POST', spec.path, buildBody(values, spec.fields), {
+        label: `${spec.title} — ${movementCode}`,
         entity: '/movements',
       });
-      onDone(
-        result.queued
-          ? 'Sin conexión: la operación quedó en la cola y se enviará al recuperar señal.'
-          : `${current.title} completado para ${movement.code}.`,
-      );
+      if (result.queued) feedback.queued('La operación');
+      else feedback.saved(`${spec.label} listo`, movementCode);
+      onDone();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'No se pudo completar la operación.');
+      const perField = fieldErrors(cause, spec.fields.map((field) => field.name));
+      if (Object.keys(perField).length > 0) setErrors((current) => ({ ...current, ...perField }));
+      else {
+        const message = toUserMessage(cause, 'write');
+        setFailure({ title: message.title, detail: message.detail });
+      }
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal title={current.title} onClose={onClose}>
-      {current.notice && <Notice tone="info">{current.notice}</Notice>}
-      <FormFields
-        fields={current.fields}
-        values={values}
-        onChange={set}
+    <Sheet title={spec.title} subtitle={movementCode} onClose={onClose}>
+      {spec.notice && <Notice tone="info">{spec.notice}</Notice>}
+      <Form
         onSubmit={submit}
-        submitLabel={current.submit}
+        error={failure && <FormError title={failure.title} detail={failure.detail} />}
+        submitLabel={spec.submit}
+        busyLabel={spec.busyLabel}
         onCancel={onClose}
         busy={busy}
-        error={error}
-      />
-    </Modal>
+        cancelLabel="Volver"
+      >
+        <Fields fields={spec.fields} values={values} errors={errors} onChange={set} onBlur={blur} />
+      </Form>
+    </Sheet>
   );
 };

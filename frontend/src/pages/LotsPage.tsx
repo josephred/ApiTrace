@@ -1,126 +1,174 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
-import { ApiError, apiSend } from '../lib/api';
+import { apiSend } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
-import { formatDate, formatQuantity, humanize, toLocalInput } from '../lib/format';
+import { fieldErrors, toUserMessage } from '../lib/errors';
+import { formatDate, formatQuantity, toLocalInput } from '../lib/format';
+import { LOT_TYPES, statusInfo } from '../lib/vocabulary';
 import {
+  Button,
+  ButtonLink,
   Card,
-  Empty,
-  FormFields,
-  Modal,
+  EmptyState,
   Notice,
-  Spinner,
-  StatusBadge,
+  PageHeader,
+  Sheet,
+  StatusPill,
+  useWriteFeedback,
+} from '../components/ui';
+import { DataList, type Column } from '../components/DataList';
+import { ResourceNotices } from '../components/ResourceNotices';
+import {
+  ChoiceGroup,
+  Disclosure,
+  Field,
+  Fields,
+  Form,
+  FormError,
+  buildBody,
   useForm,
   type FieldSpec,
-} from '../components/ui';
+} from '../components/Form';
 import type { Establishment, Extraction, Lot, Paginated } from '../lib/types';
+
+const LOT_STATUSES = ['OPEN', 'CLOSED', 'BLOCKED', 'DISPATCHED', 'CONSUMED'];
+
+/* =========================================================================
+   Listado
+   ========================================================================= */
 
 export const LotsPage = () => {
   const { canWrite } = useAuth();
   const [status, setStatus] = useState('');
+  const [pageSize, setPageSize] = useState(25);
   const [creating, setCreating] = useState(false);
-  const [flash, setFlash] = useState<string | null>(null);
 
   const list = useResource<Paginated<Lot>>(
-    `/lots?pageSize=50${status ? `&status=${status}` : ''}`,
+    `/lots?pageSize=${pageSize}${status ? `&status=${status}` : ''}`,
   );
   const establishments = useResource<Paginated<Establishment>>('/establishments?pageSize=100');
   const extractions = useResource<Paginated<Extraction>>('/extractions?pageSize=100');
   const sourceLots = useResource<Paginated<Lot>>('/lots?pageSize=100&status=OPEN');
 
+  const columns: Column<Lot>[] = [
+    {
+      key: 'code',
+      header: 'Código',
+      role: 'title',
+      cell: (item) => <strong className="mono">{item.code}</strong>,
+    },
+    {
+      key: 'status',
+      header: 'Estado',
+      role: 'status',
+      cell: (item) => <StatusPill status={item.status} />,
+    },
+    { key: 'type', header: 'Tipo', cell: (item) => LOT_TYPES.label(item.lotType) },
+    {
+      key: 'production',
+      header: 'Producción',
+      cell: (item) => <span className="nowrap">{formatDate(item.productionDate)}</span>,
+    },
+    {
+      key: 'quantity',
+      header: 'Cantidad',
+      align: 'right',
+      cell: (item) => formatQuantity(item.quantity, item.unit),
+    },
+    {
+      key: 'available',
+      header: 'Disponible',
+      align: 'right',
+      cell: (item) => formatQuantity(item.availableQuantity, item.unit),
+    },
+  ];
+
   return (
     <div className="stack">
-      <div className="page-header">
-        <div>
-          <h1>Lotes</h1>
-          <p className="lead">
-            El lote es la unidad lógica de trazabilidad. Sus entradas definen de qué se compone y
-            son la arista que permite reconstruir el origen.
-          </p>
-        </div>
-        {canWrite && (
-          <button type="button" className="primary" onClick={() => setCreating(true)}>
-            Nuevo lote
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Lotes"
+        help="lots"
+        actions={
+          canWrite && (
+            <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
+              Nuevo lote
+            </Button>
+          )
+        }
+      />
 
-      {flash && <Notice tone="ok">{flash}</Notice>}
-      {list.error && <Notice tone="danger">{list.error}</Notice>}
+      <ResourceNotices resource={list} />
 
-      <div className="toolbar">
-        <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Estado">
+      <div className="filters">
+        <select
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+          aria-label="Filtrar por estado"
+        >
           <option value="">Todos los estados</option>
-          {['OPEN', 'CLOSED', 'BLOCKED', 'DISPATCHED', 'CONSUMED'].map((option) => (
+          {LOT_STATUSES.map((option) => (
             <option key={option} value={option}>
-              {humanize(option)}
+              {statusInfo(option).label}
             </option>
           ))}
         </select>
-        {list.loading && <Spinner />}
+        {status && (
+          <Button size="sm" icon="close" onClick={() => setStatus('')}>
+            Quitar filtro
+          </Button>
+        )}
       </div>
 
-      <Card tight>
-        {list.data && list.data.data.length > 0 ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Código</th>
-                  <th>Tipo</th>
-                  <th>Producción</th>
-                  <th className="num">Cantidad</th>
-                  <th className="num">Disponible</th>
-                  <th>Estado</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {list.data.data.map((lot) => (
-                  <tr key={lot.id}>
-                    <td className="mono">
-                      <Link to={`/lots/${lot.id}`}>
-                        <strong>{lot.code}</strong>
-                      </Link>
-                    </td>
-                    <td>{humanize(lot.lotType)}</td>
-                    <td className="small nowrap">{formatDate(lot.productionDate)}</td>
-                    <td className="num">{formatQuantity(lot.quantity, lot.unit)}</td>
-                    <td className="num">{formatQuantity(lot.availableQuantity, lot.unit)}</td>
-                    <td>
-                      <StatusBadge status={lot.status} />
-                    </td>
-                    <td>
-                      <Link className="btn small" to={`/trace/backward/lot/${lot.id}`}>
-                        ¿De dónde vino?
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          !list.loading && (
-            <Empty
-              title="Sin lotes"
-              description="Un lote nace de una extracción o del acopio de otros lotes."
+      <Card flush>
+        <DataList
+          items={list.data?.data ?? []}
+          columns={columns}
+          rowKey={(item) => item.id}
+          rowHref={(item) => `/lots/${item.id}`}
+          loading={list.loading}
+          total={list.data?.meta.total}
+          onLoadMore={() => setPageSize((size) => size + 25)}
+          loadingMore={list.loading}
+          rowActions={(item) => (
+            <ButtonLink size="sm" to={`/trace/backward/lot/${item.id}`} icon="trace">
+              De dónde vino
+            </ButtonLink>
+          )}
+          empty={
+            <EmptyState
+              icon="lots"
+              title={status ? 'No hay lotes en ese estado' : 'Todavía no hay lotes'}
+              description={
+                status
+                  ? 'Probá con otro estado o quita el filtro.'
+                  : 'Un lote nace de una extracción o del acopio de otros lotes.'
+              }
+              action={
+                status ? (
+                  <Button onClick={() => setStatus('')} icon="close">
+                    Ver todos
+                  </Button>
+                ) : (
+                  canWrite && (
+                    <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
+                      Crear lote
+                    </Button>
+                  )
+                )
+              }
             />
-          )
-        )}
+          }
+        />
       </Card>
 
       {creating && (
-        <CreateLotModal
+        <CreateLotSheet
           establishments={establishments.data?.data ?? []}
-          extractions={(extractions.data?.data ?? []).filter((e) => e.status === 'COMPLETED')}
+          extractions={(extractions.data?.data ?? []).filter((item) => item.status === 'COMPLETED')}
           sourceLots={sourceLots.data?.data ?? []}
           onClose={() => setCreating(false)}
-          onDone={(message) => {
+          onDone={() => {
             setCreating(false);
-            setFlash(message);
             list.reload();
           }}
         />
@@ -129,7 +177,13 @@ export const LotsPage = () => {
   );
 };
 
-const CreateLotModal = ({
+/* =========================================================================
+   Alta de lote
+   ========================================================================= */
+
+type OriginKind = 'extraction' | 'lot' | 'none';
+
+const CreateLotSheet = ({
   establishments,
   extractions,
   sourceLots,
@@ -140,16 +194,17 @@ const CreateLotModal = ({
   extractions: Extraction[];
   sourceLots: Lot[];
   onClose: () => void;
-  onDone: (message: string) => void;
+  onDone: () => void;
 }) => {
-  const fields: FieldSpec[] = [
+  const core: FieldSpec[] = [
     {
       name: 'establishmentId',
       label: 'Establecimiento',
       type: 'select',
       required: true,
       full: true,
-      options: establishments.map((e) => ({ value: e.id, label: e.name })),
+      defaultValue: establishments.length === 1 ? establishments[0].id : '',
+      options: establishments.map((item) => ({ value: item.id, label: item.name })),
     },
     {
       name: 'lotType',
@@ -157,12 +212,7 @@ const CreateLotModal = ({
       type: 'select',
       required: true,
       defaultValue: 'EXTRACCION',
-      options: [
-        { value: 'EXTRACCION', label: 'De extracción' },
-        { value: 'ACOPIO', label: 'De acopio' },
-        { value: 'MEZCLA', label: 'De mezcla' },
-        { value: 'FRACCIONAMIENTO', label: 'De fraccionamiento' },
-      ],
+      options: LOT_TYPES.options,
     },
     {
       name: 'productionDate',
@@ -171,48 +221,84 @@ const CreateLotModal = ({
       required: true,
       defaultValue: toLocalInput(),
     },
-    { name: 'quantity', label: 'Cantidad', type: 'number', step: '0.001', required: true },
+    {
+      name: 'quantity',
+      label: 'Cantidad',
+      type: 'number',
+      step: '0.001',
+      min: '0',
+      required: true,
+      inputMode: 'decimal',
+    },
     {
       name: 'unit',
       label: 'Unidad',
       type: 'select',
+      required: true,
       defaultValue: 'KG',
-      options: ['KG', 'LITRO', 'TAMBOR'].map((u) => ({ value: u, label: u })),
+      options: ['KG', 'LITRO', 'TAMBOR'].map((unit) => ({ value: unit, label: unit })),
     },
+  ];
+
+  const quality: FieldSpec[] = [
     { name: 'honeyType', label: 'Tipo de miel', placeholder: 'Multifloral' },
-    { name: 'moisturePercent', label: 'Humedad (%)', type: 'number', step: '0.01' },
+    {
+      name: 'moisturePercent',
+      label: 'Humedad (%)',
+      type: 'number',
+      step: '0.01',
+      min: '0',
+      max: '100',
+      inputMode: 'decimal',
+    },
     { name: 'color', label: 'Color', placeholder: 'Ámbar claro' },
   ];
 
-  const { values, set } = useForm(fields);
+  const all = [...core, ...quality];
+  const { values, set, blur, errors, setErrors, validateAll } = useForm(all);
+
+  /**
+   * El origen era antes dos selects que el código excluia entre si pero que en
+   * pantalla parecian independientes. Como eleccion explicita se ve que son
+   * alternativas, y la tercera opcion obliga a asumir que se corta la cadena.
+   */
+  const [origin, setOrigin] = useState<OriginKind>(
+    extractions.length > 0 ? 'extraction' : sourceLots.length > 0 ? 'lot' : 'none',
+  );
   const [extractionId, setExtractionId] = useState('');
   const [sourceLotId, setSourceLotId] = useState('');
-  const [sourceLotQuantity, setSourceLotQuantity] = useState('');
+  const [sourceQuantity, setSourceQuantity] = useState('');
+  const [originError, setOriginError] = useState<string | null>(null);
+
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ title: string; detail?: string } | null>(null);
+  const feedback = useWriteFeedback();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    setOriginError(null);
+
+    if (origin === 'extraction' && !extractionId) {
+      setOriginError('Elegí de qué extracción viene este lote.');
+      return;
+    }
+    if (origin === 'lot' && !sourceLotId) {
+      setOriginError('Elegí de qué lote viene.');
+      return;
+    }
+    if (!validateAll()) return;
+
     setBusy(true);
-    setError(null);
+    setFailure(null);
     try {
-      const body: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(values)) {
-        if (value === '') continue;
-        body[key] =
-          key === 'quantity' || key === 'moisturePercent'
-            ? Number(value)
-            : key === 'productionDate'
-              ? new Date(value).toISOString()
-              : value;
-      }
-      if (extractionId) body.extractionId = extractionId;
-      if (sourceLotId) {
+      const body = buildBody(values, all);
+      if (origin === 'extraction' && extractionId) body.extractionId = extractionId;
+      if (origin === 'lot' && sourceLotId) {
         body.inputs = [
           {
             sourceType: 'LOT',
             sourceLotId,
-            quantity: Number(sourceLotQuantity || values.quantity),
+            quantity: Number(sourceQuantity || values.quantity),
             unit: values.unit || 'KG',
           },
         ];
@@ -222,90 +308,156 @@ const CreateLotModal = ({
         label: `Lote de ${values.quantity} ${values.unit}`,
         entity: '/lots',
       });
-      onDone(
-        result.queued
-          ? 'Sin conexión: el lote quedó en la cola.'
-          : `Lote ${result.data.code} creado.`,
-      );
+      if (result.queued) feedback.queued('El lote');
+      else feedback.saved('Lote creado', result.data.code);
+      onDone();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'No se pudo crear el lote.');
+      const perField = fieldErrors(cause, all.map((field) => field.name));
+      if (Object.keys(perField).length > 0) setErrors((current) => ({ ...current, ...perField }));
+      else {
+        const message = toUserMessage(cause, 'write');
+        setFailure({ title: message.title, detail: message.detail });
+      }
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal title="Nuevo lote" onClose={onClose}>
-      <Notice tone="info">
-        Un lote sin origen declarado queda sin trazabilidad hacia atrás, y el sistema lo reporta
-        como hueco. Indicá la extracción o el lote del que proviene.
-      </Notice>
-      <FormFields
-        fields={fields}
-        values={values}
-        onChange={set}
+    <Sheet title="Nuevo lote" subtitle="Los campos con * son obligatorios." onClose={onClose}>
+      <Form
         onSubmit={submit}
+        error={failure && <FormError title={failure.title} detail={failure.detail} />}
         submitLabel="Crear lote"
+        busyLabel="Creando…"
         onCancel={onClose}
         busy={busy}
-        error={error}
       >
-        <div className="form-row">
-          <div className="field">
-            <label htmlFor="extractionId">Origen: extracción</label>
-            <select
-              id="extractionId"
-              value={extractionId}
-              onChange={(event) => {
-                setExtractionId(event.target.value);
-                if (event.target.value) setSourceLotId('');
-              }}
-            >
-              <option value="">— Ninguna —</option>
-              {extractions.map((extraction) => (
-                <option key={extraction.id} value={extraction.id}>
-                  {extraction.code} ({formatQuantity(extraction.outputQuantity, extraction.unit)})
-                </option>
-              ))}
-            </select>
-            <span className="help">La arista hacia la extracción se agrega sola.</span>
-          </div>
+        <Fields fields={core} values={values} errors={errors} onChange={set} onBlur={blur} />
 
-          <div className="field">
-            <label htmlFor="sourceLotId">Origen: otro lote</label>
-            <select
-              id="sourceLotId"
-              value={sourceLotId}
-              onChange={(event) => {
-                setSourceLotId(event.target.value);
-                if (event.target.value) setExtractionId('');
-              }}
-            >
-              <option value="">— Ninguno —</option>
-              {sourceLots.map((lot) => (
-                <option key={lot.id} value={lot.id}>
-                  {lot.code} (disp. {formatQuantity(lot.availableQuantity, lot.unit)})
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="form-section">
+          <div className="form-section-title">De dónde viene</div>
+          <ChoiceGroup
+            help="lotOrigin"
+            value={origin}
+            onChange={(value) => {
+              setOrigin(value as OriginKind);
+              setOriginError(null);
+            }}
+            options={[
+              {
+                value: 'extraction',
+                title: 'De una extracción',
+                description: 'La miel salió de un proceso en la sala.',
+              },
+              {
+                value: 'lot',
+                title: 'De otro lote',
+                description: 'Acopio o mezcla: se consume parte de un lote existente.',
+              },
+              {
+                value: 'none',
+                title: 'Sin origen declarado',
+                description: 'La trazabilidad hacia atrás va a quedar incompleta.',
+              },
+            ]}
+          />
 
-          {sourceLotId && (
+          {origin === 'extraction' && (
             <div className="field">
-              <label htmlFor="sourceLotQuantity">Cantidad a consumir del lote origen</label>
-              <input
-                id="sourceLotQuantity"
-                type="number"
-                step="0.001"
-                value={sourceLotQuantity}
-                onChange={(event) => setSourceLotQuantity(event.target.value)}
-                placeholder={values.quantity}
-              />
-              <span className="help">Se descuenta de su disponibilidad.</span>
+              <label className="field-label" htmlFor="extractionId">
+                Extracción
+                <span aria-hidden="true" style={{ color: 'var(--danger-fg)' }}>
+                  *
+                </span>
+              </label>
+              <select
+                id="extractionId"
+                value={extractionId}
+                onChange={(event) => setExtractionId(event.target.value)}
+              >
+                <option value="">Elegí una extracción</option>
+                {extractions.map((extraction) => (
+                  <option key={extraction.id} value={extraction.id}>
+                    {extraction.code} — {formatQuantity(extraction.outputQuantity, extraction.unit)}
+                  </option>
+                ))}
+              </select>
+              {extractions.length === 0 && (
+                <span className="field-hint">
+                  No hay extracciones terminadas todavía. Elegí otro origen.
+                </span>
+              )}
             </div>
           )}
+
+          {origin === 'lot' && (
+            <div className="form-grid">
+              <div className="field">
+                <label className="field-label" htmlFor="sourceLotId">
+                  Lote de origen
+                  <span aria-hidden="true" style={{ color: 'var(--danger-fg)' }}>
+                    *
+                  </span>
+                </label>
+                <select
+                  id="sourceLotId"
+                  value={sourceLotId}
+                  onChange={(event) => setSourceLotId(event.target.value)}
+                >
+                  <option value="">Elegí un lote</option>
+                  {sourceLots.map((lot) => (
+                    <option key={lot.id} value={lot.id}>
+                      {lot.code} — quedan {formatQuantity(lot.availableQuantity, lot.unit)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="sourceQuantity">
+                  Cantidad a consumir
+                  <span className="field-optional">opcional</span>
+                </label>
+                <input
+                  id="sourceQuantity"
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  inputMode="decimal"
+                  value={sourceQuantity}
+                  onChange={(event) => setSourceQuantity(event.target.value)}
+                  placeholder={values.quantity || '0'}
+                />
+                <span className="field-hint">
+                  Si lo dejas vacío, se consume la cantidad del lote nuevo.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {origin === 'none' && (
+            <Notice tone="warning" title="Este lote va a quedar sin origen">
+              Al consultar de dónde vino, el sistema no va a poder responder y lo va a marcar como
+              hueco de trazabilidad.
+            </Notice>
+          )}
+
+          {originError && <FormError title={originError} />}
         </div>
-      </FormFields>
-    </Modal>
+
+        <Disclosure label="Datos de calidad (opcional)">
+          {quality.map((spec) => (
+            <Field
+              key={spec.name}
+              spec={spec}
+              value={values[spec.name] ?? ''}
+              error={errors[spec.name]}
+              onChange={(value) => set(spec.name, value)}
+              onBlur={() => blur(spec.name)}
+            />
+          ))}
+        </Disclosure>
+      </Form>
+    </Sheet>
   );
 };

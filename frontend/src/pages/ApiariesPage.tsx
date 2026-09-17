@@ -1,134 +1,170 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
-import { ApiError, apiSend } from '../lib/api';
+import { apiSend } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
-import { formatRelative } from '../lib/format';
+import { fieldErrors, toUserMessage } from '../lib/errors';
 import {
-  Badge,
+  Button,
+  ButtonLink,
   Card,
-  Empty,
-  FormFields,
-  Modal,
+  EmptyState,
   Notice,
-  Spinner,
-  StatusBadge,
+  PageHeader,
+  Pill,
+  Sheet,
+  SkeletonList,
+  StatusPill,
+  useWriteFeedback,
+} from '../components/ui';
+import { DataList, type Column } from '../components/DataList';
+import { ResourceNotices } from '../components/ResourceNotices';
+import {
+  Fields,
+  Form,
+  FormError,
+  buildBody,
   useForm,
   type FieldSpec,
-} from '../components/ui';
+} from '../components/Form';
 import type { Apiary, Establishment, Hive, Paginated } from '../lib/types';
 
 export const ApiariesPage = () => {
   const { canWrite } = useAuth();
   const [creating, setCreating] = useState(false);
   const [hivesFor, setHivesFor] = useState<Apiary | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
+  const [pageSize, setPageSize] = useState(25);
 
-  const list = useResource<Paginated<Apiary>>('/apiaries?pageSize=100');
+  const list = useResource<Paginated<Apiary>>(`/apiaries?pageSize=${pageSize}`);
   const establishments = useResource<Paginated<Establishment>>(
     '/establishments?pageSize=100&type=APIARIO_BASE',
   );
 
+  const noBase = establishments.data && establishments.data.data.length === 0;
+
+  const columns: Column<Apiary>[] = [
+    {
+      key: 'code',
+      header: 'Código',
+      role: 'title',
+      cell: (item) => <strong className="mono">{item.code}</strong>,
+    },
+    {
+      key: 'status',
+      header: 'Estado',
+      role: 'status',
+      cell: (item) => <StatusPill status={item.status} />,
+    },
+    { key: 'name', header: 'Nombre', cell: (item) => item.name ?? '—' },
+    {
+      key: 'establishment',
+      header: 'Establecimiento',
+      cell: (item) => item.establishmentName ?? '—',
+    },
+    {
+      key: 'hives',
+      header: 'Colmenas',
+      align: 'right',
+      cell: (item) => item.hiveCount,
+    },
+    {
+      key: 'coords',
+      header: 'Coordenadas',
+      role: 'hidden',
+      cell: (item) =>
+        item.latitude && item.longitude ? (
+          <span className="mono small">
+            {Number(item.latitude).toFixed(4)}, {Number(item.longitude).toFixed(4)}
+          </span>
+        ) : (
+          '—'
+        ),
+    },
+  ];
+
   return (
     <div className="stack">
-      <div className="page-header">
-        <div>
-          <h1>Apiarios</h1>
-          <p className="lead">
-            Unidad productiva donde están las colmenas. Pertenece a un establecimiento y es el punto
-            de partida real de la trazabilidad hacia adelante.
-          </p>
-        </div>
-        {canWrite && (
-          <button type="button" className="primary" onClick={() => setCreating(true)}>
-            Nuevo apiario
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Apiarios"
+        help="apiaries"
+        actions={
+          canWrite && (
+            <Button
+              variant="primary"
+              icon="plus"
+              onClick={() => setCreating(true)}
+              disabled={Boolean(noBase)}
+            >
+              Nuevo apiario
+            </Button>
+          )
+        }
+      />
 
-      {flash && <Notice tone="ok">{flash}</Notice>}
-      {list.fromCache && (
-        <Notice tone="warn">
-          Datos locales guardados {formatRelative(list.cachedAt)}. Podés seguir consultando y
-          registrando: lo nuevo se envía al recuperar señal.
+      <ResourceNotices resource={list} />
+
+      {/*
+        El orden importa: un apiario necesita un predio que lo contenga. Antes
+        el error aparecia recien al intentar guardar, con el formulario lleno.
+      */}
+      {noBase && canWrite && (
+        <Notice tone="info" title="Primero hace falta un predio apícola">
+          Un apiario vive dentro de un establecimiento. Registrá uno de tipo «Predio apícola» y
+          después volvé acá.
         </Notice>
       )}
-      {list.error && <Notice tone="danger">{list.error}</Notice>}
-      {list.loading && <Spinner />}
 
-      <Card tight>
-        {list.data && list.data.data.length > 0 ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Código</th>
-                  <th>Nombre</th>
-                  <th>Establecimiento</th>
-                  <th className="num">Colmenas</th>
-                  <th>Coordenadas</th>
-                  <th>Estado</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {list.data.data.map((apiary) => (
-                  <tr key={apiary.id}>
-                    <td className="mono">
-                      <strong>{apiary.code}</strong>
-                    </td>
-                    <td>{apiary.name ?? '—'}</td>
-                    <td className="small muted">{apiary.establishmentName ?? '—'}</td>
-                    <td className="num">{apiary.hiveCount}</td>
-                    <td className="small mono">
-                      {apiary.latitude && apiary.longitude
-                        ? `${Number(apiary.latitude).toFixed(4)}, ${Number(apiary.longitude).toFixed(4)}`
-                        : '—'}
-                    </td>
-                    <td>
-                      <StatusBadge status={apiary.status} />
-                    </td>
-                    <td>
-                      <div className="row">
-                        {canWrite && (
-                          <button type="button" className="small" onClick={() => setHivesFor(apiary)}>
-                            Colmenas
-                          </button>
-                        )}
-                        <Link className="btn small" to={`/trace/forward/apiary/${apiary.id}`}>
-                          ¿Dónde terminó?
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          !list.loading && (
-            <Empty
-              title="Sin apiarios"
-              description="Registrá primero un establecimiento de tipo predio apícola y luego el apiario que contiene."
+      <Card flush>
+        <DataList
+          items={list.data?.data ?? []}
+          columns={columns}
+          rowKey={(item) => item.id}
+          loading={list.loading}
+          total={list.data?.meta.total}
+          onLoadMore={() => setPageSize((size) => size + 25)}
+          loadingMore={list.loading}
+          rowActions={(item) => (
+            <>
+              {canWrite && (
+                <Button size="sm" onClick={() => setHivesFor(item)}>
+                  Colmenas
+                </Button>
+              )}
+              <ButtonLink size="sm" to={`/trace/forward/apiary/${item.id}`} icon="trace">
+                Dónde terminó
+              </ButtonLink>
+            </>
+          )}
+          empty={
+            <EmptyState
+              icon="apiaries"
+              title="Todavía no hay apiarios"
+              description="El apiario es el conjunto de colmenas en un punto concreto. Es lo que permite responder de dónde vino la miel."
+              action={
+                canWrite &&
+                !noBase && (
+                  <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
+                    Registrar apiario
+                  </Button>
+                )
+              }
             />
-          )
-        )}
+          }
+        />
       </Card>
 
       {creating && (
-        <CreateApiaryModal
+        <CreateApiarySheet
           establishments={establishments.data?.data ?? []}
           onClose={() => setCreating(false)}
-          onDone={(message) => {
+          onDone={() => {
             setCreating(false);
-            setFlash(message);
             list.reload();
           }}
         />
       )}
 
       {hivesFor && (
-        <HivesModal
+        <HivesSheet
           apiary={hivesFor}
           onClose={() => {
             setHivesFor(null);
@@ -140,14 +176,18 @@ export const ApiariesPage = () => {
   );
 };
 
-const CreateApiaryModal = ({
+/* =========================================================================
+   Alta de apiario
+   ========================================================================= */
+
+const CreateApiarySheet = ({
   establishments,
   onClose,
   onDone,
 }: {
   establishments: Establishment[];
   onClose: () => void;
-  onDone: (message: string) => void;
+  onDone: () => void;
 }) => {
   const fields: FieldSpec[] = [
     {
@@ -156,25 +196,32 @@ const CreateApiaryModal = ({
       type: 'select',
       required: true,
       full: true,
-      options: establishments.map((e) => ({ value: e.id, label: e.name })),
+      defaultValue: establishments.length === 1 ? establishments[0].id : '',
+      options: establishments.map((item) => ({ value: item.id, label: item.name })),
     },
     { name: 'code', label: 'Código', required: true, placeholder: 'API-001' },
-    { name: 'name', label: 'Nombre' },
+    { name: 'name', label: 'Nombre', placeholder: 'El Ceibo' },
     { name: 'latitude', label: 'Latitud', type: 'number', step: 'any' },
     { name: 'longitude', label: 'Longitud', type: 'number', step: 'any' },
     { name: 'locality', label: 'Localidad' },
     { name: 'province', label: 'Provincia' },
   ];
 
-  const { values, set, setValues } = useForm(fields);
+  const { values, setValues, set, blur, errors, setErrors, validateAll } = useForm(fields);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ title: string; detail?: string } | null>(null);
+  const feedback = useWriteFeedback();
 
-  /** Tomar la posición del dispositivo es lo natural estando parado en el apiario. */
+  /** Estando parado en el apiario, tomar la posicion del teléfono es lo natural. */
   const useCurrentPosition = () => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      setLocateError('Este dispositivo no puede darnos la ubicación.');
+      return;
+    }
     setLocating(true);
+    setLocateError(null);
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setValues((current) => ({
@@ -184,154 +231,188 @@ const CreateApiaryModal = ({
         }));
         setLocating(false);
       },
-      () => setLocating(false),
+      () => {
+        setLocating(false);
+        setLocateError('No pudimos obtener la ubicación. Podés cargarla a mano.');
+      },
       { enableHighAccuracy: true, timeout: 10_000 },
     );
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!validateAll()) return;
+
     setBusy(true);
-    setError(null);
+    setFailure(null);
     try {
-      const body: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(values)) {
-        if (value === '') continue;
-        body[key] = key === 'latitude' || key === 'longitude' ? Number(value) : value;
-      }
-      const result = await apiSend<Apiary>('POST', '/apiaries', body, {
+      const result = await apiSend<Apiary>('POST', '/apiaries', buildBody(values, fields), {
         label: `Apiario ${values.code}`,
         entity: '/apiaries',
       });
-      onDone(
-        result.queued
-          ? 'Sin conexión: el apiario quedó en la cola y se enviará al recuperar señal.'
-          : `Apiario ${result.data.code} registrado.`,
-      );
+      if (result.queued) feedback.queued('El apiario');
+      else feedback.saved('Apiario registrado', result.data.code);
+      onDone();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'No se pudo registrar el apiario.');
+      const perField = fieldErrors(cause, fields.map((field) => field.name));
+      if (Object.keys(perField).length > 0) setErrors((current) => ({ ...current, ...perField }));
+      else {
+        const message = toUserMessage(cause, 'write');
+        setFailure({ title: message.title, detail: message.detail });
+      }
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal title="Nuevo apiario" onClose={onClose}>
-      <FormFields
-        fields={fields}
-        values={values}
-        onChange={set}
+    <Sheet title="Nuevo apiario" subtitle="Los campos con * son obligatorios." onClose={onClose}>
+      <Form
         onSubmit={submit}
+        error={failure && <FormError title={failure.title} detail={failure.detail} />}
         submitLabel="Registrar apiario"
+        busyLabel="Registrando…"
         onCancel={onClose}
         busy={busy}
-        error={error}
       >
-        <button type="button" className="small" onClick={useCurrentPosition} disabled={locating}>
-          {locating && <span className="spinner" aria-hidden="true" />}
+        <Fields fields={fields} values={values} errors={errors} onChange={set} onBlur={blur} />
+        <Button icon="location" onClick={useCurrentPosition} busy={locating} busyLabel="Ubicando…">
           Usar mi ubicación actual
-        </button>
-      </FormFields>
-    </Modal>
+        </Button>
+        {locateError && (
+          <p className="field-error" style={{ marginTop: 'var(--sp-2)' }}>
+            {locateError}
+          </p>
+        )}
+      </Form>
+    </Sheet>
   );
 };
 
-const HivesModal = ({ apiary, onClose }: { apiary: Apiary; onClose: () => void }) => {
+/* =========================================================================
+   Colmenas
+   ========================================================================= */
+
+const HivesSheet = ({ apiary, onClose }: { apiary: Apiary; onClose: () => void }) => {
   const hives = useResource<Hive[]>(`/apiaries/${apiary.id}/hives`);
   const [code, setCode] = useState('');
   const [type, setType] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ title: string; detail?: string } | null>(null);
   const [queued, setQueued] = useState(0);
+  const feedback = useWriteFeedback();
 
   const addHive = async (event: FormEvent) => {
     event.preventDefault();
+    if (!code.trim()) return;
+
     setBusy(true);
-    setError(null);
+    setFailure(null);
     try {
-      const result = await apiSend('POST', `/apiaries/${apiary.id}/hives`, {
-        code,
-        ...(type ? { type } : {}),
-      }, {
-        label: `Colmena ${code} en ${apiary.code}`,
-        entity: '/apiaries',
-      });
+      const result = await apiSend(
+        'POST',
+        `/apiaries/${apiary.id}/hives`,
+        { code: code.trim(), ...(type.trim() ? { type: type.trim() } : {}) },
+        { label: `Colmena ${code} en ${apiary.code}`, entity: '/apiaries' },
+      );
       setCode('');
-      if (result.queued) setQueued((n) => n + 1);
-      else hives.reload();
+      if (result.queued) setQueued((count) => count + 1);
+      else {
+        feedback.saved('Colmena agregada', code);
+        hives.reload();
+      }
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'No se pudo registrar la colmena.');
+      const message = toUserMessage(cause, 'write');
+      setFailure({ title: message.title, detail: message.detail });
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal title={`Colmenas de ${apiary.code}`} onClose={onClose}>
-      {error && <Notice tone="danger">{error}</Notice>}
+    <Sheet title="Colmenas" subtitle={`Apiario ${apiary.code}`} onClose={onClose}>
+      {failure && <FormError title={failure.title} detail={failure.detail} />}
       {queued > 0 && (
-        <Notice tone="warn">
-          {queued} colmena(s) en la cola de envío. Se registrarán al recuperar la conexión.
+        <Notice tone="info" title="Guardadas en el dispositivo">
+          {queued === 1
+            ? '1 colmena se enviará al recuperar la señal.'
+            : `${queued} colmenas se enviarán al recuperar la señal.`}
         </Notice>
       )}
 
-      <form onSubmit={addHive} className="mb">
-        <div className="form-row">
+      {/* Alta rapida: cargar colmenas es una tarea repetitiva, el campo vuelve a
+          quedar vacío y con el foco para encadenar varias seguidas. */}
+      <form onSubmit={addHive} style={{ marginBottom: 'var(--sp-5)' }}>
+        <div className="form-grid">
           <div className="field">
-            <label htmlFor="hive-code">Código</label>
+            <label className="field-label" htmlFor="hive-code">
+              Código
+              <span aria-hidden="true" style={{ color: 'var(--danger-fg)' }}>
+                *
+              </span>
+            </label>
             <input
               id="hive-code"
               required
               value={code}
               onChange={(event) => setCode(event.target.value)}
               placeholder="COL-0001"
+              autoComplete="off"
             />
           </div>
           <div className="field">
-            <label htmlFor="hive-type">Tipo</label>
+            <label className="field-label" htmlFor="hive-type">
+              Tipo
+              <span className="field-optional">opcional</span>
+            </label>
             <input
               id="hive-type"
               value={type}
               onChange={(event) => setType(event.target.value)}
               placeholder="Langstroth"
+              autoComplete="off"
             />
           </div>
         </div>
-        <div className="form-actions">
-          <button type="submit" className="primary" disabled={busy || !code}>
-            {busy && <span className="spinner" aria-hidden="true" />}
-            Agregar colmena
-          </button>
-        </div>
+        <Button
+          type="submit"
+          variant="primary"
+          icon="plus"
+          block
+          busy={busy}
+          busyLabel="Agregando…"
+          disabled={!code.trim()}
+        >
+          Agregar colmena
+        </Button>
       </form>
 
-      {hives.loading && <Spinner />}
+      {hives.loading && <SkeletonList rows={3} />}
+
       {hives.data && hives.data.length > 0 ? (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Código</th>
-                <th>Tipo</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {hives.data.map((hive) => (
-                <tr key={hive.id}>
-                  <td className="mono">{hive.code}</td>
-                  <td>{hive.type ?? '—'}</td>
-                  <td>
-                    <Badge tone={hive.status === 'ACTIVE' ? 'ok' : 'neutral'}>{hive.status}</Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="form-section-title">
+            {hives.data.length === 1 ? '1 colmena registrada' : `${hives.data.length} colmenas registradas`}
+          </div>
+          <div className="dl-cards" style={{ display: 'block' }}>
+            {hives.data.map((hive) => (
+              <div className="dl-card" key={hive.id}>
+                <div className="dl-card-top">
+                  <span className="dl-card-title mono">{hive.code}</span>
+                  <Pill tone={hive.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                    {hive.status === 'ACTIVE' ? 'Activa' : hive.status}
+                  </Pill>
+                </div>
+                <div className="small muted">{hive.type ?? 'Sin tipo'}</div>
+              </div>
+            ))}
+          </div>
+        </>
       ) : (
-        !hives.loading && <p className="muted small">Todavía no hay colmenas registradas.</p>
+        !hives.loading && (
+          <p className="muted small">Todavía no hay colmenas cargadas en este apiario.</p>
+        )
       )}
-    </Modal>
+    </Sheet>
   );
 };

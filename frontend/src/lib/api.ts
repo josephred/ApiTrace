@@ -22,14 +22,14 @@ export class ApiError extends Error {
 
 /** Fallo de red: la peticion nunca llego al servidor. Es lo que dispara la cola. */
 export class NetworkError extends Error {
-  constructor(message = 'Sin conexion con el servidor.') {
+  constructor(message = 'Sin conexión con el servidor.') {
     super(message);
     this.name = 'NetworkError';
   }
 }
 
 // --------------------------------------------------------------------------
-// Sesion
+// Sesión
 // --------------------------------------------------------------------------
 
 interface TokenBundle {
@@ -198,9 +198,9 @@ export const apiGet = async <T>(path: string, options: { cache?: boolean } = {})
 // --------------------------------------------------------------------------
 
 export interface WriteOptions {
-  /** Texto legible de la operacion, para mostrar en la cola de pendientes. */
+  /** Texto legible de la operación, para mostrar en la cola de pendientes. */
   label: string;
-  /** Prefijo de cache a invalidar tras el envio, p. ej. "/movements". */
+  /** Prefijo de cache a invalidar tras el envío, p. ej. "/movements". */
   entity: string;
   /** false para operaciones que no tienen sentido diferidas (login, por ejemplo). */
   queueOffline?: boolean;
@@ -213,9 +213,9 @@ export type WriteResult<T> =
 /**
  * Envia una escritura. Si no hay red, la encola en lugar de fallar.
  *
- * Cada operacion lleva una `Idempotency-Key` generada en el cliente y guardada
+ * Cada operación lleva una `Idempotency-Key` generada en el cliente y guardada
  * junto al pedido: el reintento posterior usa exactamente la misma clave, de
- * modo que un movimiento nunca se duplica aunque el envio original si haya
+ * modo que un movimiento nunca se duplica aunque el envío original si haya
  * llegado al servidor y solo se haya perdido la respuesta.
  */
 export const apiSend = async <T>(
@@ -278,7 +278,7 @@ export const replayOutboxItem = async (item: OutboxItem): Promise<unknown> => {
 };
 
 // --------------------------------------------------------------------------
-// Autenticacion (sin cola: iniciar sesion offline no tiene sentido)
+// Autenticacion (sin cola: iniciar sesión offline no tiene sentido)
 // --------------------------------------------------------------------------
 
 export const apiLogin = async <T>(email: string, password: string): Promise<T> => {
@@ -295,7 +295,7 @@ export const apiLogout = async (refreshToken: string): Promise<void> => {
   try {
     await rawRequest('/auth/logout', { method: 'POST', body: { refreshToken }, auth: false });
   } catch {
-    // Cerrar sesion sin red es valido: la sesion local se descarta igual.
+    // Cerrar sesión sin red es valido: la sesión local se descarta igual.
   }
 };
 

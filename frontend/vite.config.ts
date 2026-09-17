@@ -28,7 +28,7 @@ export default defineConfig({
           'Registro y consulta de trazabilidad apicola. Funciona sin conexion y sincroniza al recuperar senal.',
         lang: 'es-AR',
         theme_color: '#c8871b',
-        background_color: '#faf7f0',
+        background_color: '#faf8f3',
         display: 'standalone',
         orientation: 'portrait-primary',
         start_url: '/',
@@ -45,7 +45,7 @@ export default defineConfig({
           },
         ],
         shortcuts: [
-          { name: 'Nuevo movimiento', url: '/movements/new' },
+          { name: 'Movimientos', url: '/movements' },
           { name: 'Trazabilidad', url: '/trace' },
           { name: 'Pendientes de sincronizar', url: '/pending' },
         ],

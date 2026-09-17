@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button, HelpTip } from './ui';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -6,16 +7,17 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 /**
- * Boton de instalacion.
+ * Invitacion a instalar.
  *
- * Solo aparece cuando el navegador considera que la aplicacion es instalable y
- * emite `beforeinstallprompt`. En iOS ese evento no existe, asi que ahi se
- * muestra la instruccion manual, que es el unico camino disponible.
+ * Solo aparece cuando el navegador considera instalable la aplicación y emite
+ * `beforeinstallprompt`. En iOS ese evento no existe, así que ahí se explica el
+ * único camino disponible, y detras de un boton de ayuda para no ocupar la
+ * barra con una instruccion que la mayoria ya conoce.
  */
 export const InstallPrompt = () => {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
-  const [showIosHint, setShowIosHint] = useState(false);
+  const [isIos, setIsIos] = useState(false);
 
   useEffect(() => {
     const standalone =
@@ -37,9 +39,7 @@ export const InstallPrompt = () => {
 
     window.addEventListener('beforeinstallprompt', onPrompt);
     window.addEventListener('appinstalled', onInstalled);
-
-    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    if (isIos) setShowIosHint(true);
+    setIsIos(/iphone|ipad|ipod/i.test(navigator.userAgent));
 
     return () => {
       window.removeEventListener('beforeinstallprompt', onPrompt);
@@ -51,24 +51,27 @@ export const InstallPrompt = () => {
 
   if (deferred) {
     return (
-      <button
-        type="button"
-        className="small"
+      <Button
+        size="sm"
+        icon="download"
         onClick={() => {
           void deferred.prompt();
           setDeferred(null);
         }}
       >
-        Instalar aplicación
-      </button>
+        Instalar
+      </Button>
     );
   }
 
-  if (showIosHint) {
+  if (isIos) {
     return (
-      <span className="small muted">
-        Para instalar: Compartir → «Agregar a inicio»
-      </span>
+      <HelpTip
+        entry={{
+          title: 'Instalar en el teléfono',
+          body: 'Tocá el boton Compartir del navegador y elegí «Agregar a inicio». Asi la abris como una aplicación y funciona sin conexión.',
+        }}
+      />
     );
   }
 

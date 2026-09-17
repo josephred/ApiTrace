@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, NetworkError, apiGet } from './api';
+import { apiGet } from './api';
+import { toUserMessage, type UserMessage } from './errors';
 
 export interface ResourceState<T> {
   data: T | null;
   loading: boolean;
-  error: string | null;
+  /** Fallo ya traducido a lenguaje humano. */
+  error: UserMessage | null;
   /** true cuando el dato viene del almacenamiento local por falta de red. */
   fromCache: boolean;
   cachedAt: number | null;
@@ -17,18 +19,21 @@ export interface ResourceState<T> {
  * Distingue tres situaciones que la interfaz debe tratar distinto: dato fresco
  * del servidor, dato viejo del cache (se muestra con advertencia) y ausencia
  * total de dato (se muestra el error). Confundirlas llevaria a presentar
- * informacion desactualizada como si fuera actual, que en trazabilidad es peor
+ * información desactualizada como si fuera actual, que en trazabilidad es peor
  * que no mostrar nada.
+ *
+ * El error se guarda ya traducido: ninguna pantalla debería tener que decidir
+ * cómo se le cuenta un fallo al usuario.
  */
 export const useResource = <T>(path: string | null, deps: unknown[] = []): ResourceState<T> => {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(Boolean(path));
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<UserMessage | null>(null);
   const [fromCache, setFromCache] = useState(false);
   const [cachedAt, setCachedAt] = useState<number | null>(null);
   const [nonce, setNonce] = useState(0);
 
-  const reload = useCallback(() => setNonce((n) => n + 1), []);
+  const reload = useCallback(() => setNonce((value) => value + 1), []);
 
   useEffect(() => {
     if (!path) {
@@ -50,13 +55,7 @@ export const useResource = <T>(path: string | null, deps: unknown[] = []): Resou
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
-        if (cause instanceof NetworkError) {
-          setError('Sin conexión y sin copia local de estos datos.');
-        } else if (cause instanceof ApiError) {
-          setError(cause.message);
-        } else {
-          setError('Ocurrió un error inesperado.');
-        }
+        setError(toUserMessage(cause));
         setData(null);
       })
       .finally(() => {

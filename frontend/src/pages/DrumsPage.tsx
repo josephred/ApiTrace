@@ -1,130 +1,152 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
-import { ApiError, apiSend } from '../lib/api';
+import { apiSend } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
-import { formatDate, formatQuantity, humanize, toLocalInput } from '../lib/format';
+import { fieldErrors, toUserMessage } from '../lib/errors';
+import { formatDate, formatQuantity, toLocalInput } from '../lib/format';
+import { ESTABLISHMENT_TYPES, statusInfo } from '../lib/vocabulary';
 import {
+  Button,
+  ButtonLink,
   Card,
-  Empty,
-  FormFields,
-  Modal,
-  Notice,
-  Spinner,
-  StatusBadge,
-  useForm,
-  type FieldSpec,
+  EmptyState,
+  PageHeader,
+  Sheet,
+  StatusPill,
+  useWriteFeedback,
 } from '../components/ui';
+import { DataList, type Column } from '../components/DataList';
+import { ResourceNotices } from '../components/ResourceNotices';
+import { Fields, Form, FormError, buildBody, useForm, type FieldSpec } from '../components/Form';
 import type { Drum, Establishment, Paginated } from '../lib/types';
+
+const DRUM_STATUSES = ['FILLED', 'IN_STOCK', 'IN_TRANSIT', 'DISPATCHED', 'CONSUMED', 'EMPTY'];
 
 export const DrumsPage = () => {
   const { canWrite } = useAuth();
   const [status, setStatus] = useState('');
+  const [pageSize, setPageSize] = useState(25);
   const [transferring, setTransferring] = useState<Drum | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
 
   const list = useResource<Paginated<Drum>>(
-    `/drums?pageSize=50${status ? `&status=${status}` : ''}`,
+    `/drums?pageSize=${pageSize}${status ? `&status=${status}` : ''}`,
   );
   const establishments = useResource<Paginated<Establishment>>('/establishments?pageSize=100');
-  const byId = new Map((establishments.data?.data ?? []).map((e) => [e.id, e.name]));
+  const nameById = new Map((establishments.data?.data ?? []).map((item) => [item.id, item.name]));
+
+  const columns: Column<Drum>[] = [
+    {
+      key: 'code',
+      header: 'Código',
+      role: 'title',
+      cell: (item) => <strong className="mono">{item.code}</strong>,
+    },
+    {
+      key: 'status',
+      header: 'Estado',
+      role: 'status',
+      cell: (item) => <StatusPill status={item.status} />,
+    },
+    {
+      key: 'net',
+      header: 'Neto',
+      align: 'right',
+      cell: (item) => formatQuantity(item.netWeight, item.unit),
+    },
+    {
+      key: 'location',
+      header: 'Ubicación',
+      cell: (item) =>
+        item.locationEstablishmentId
+          ? (nameById.get(item.locationEstablishmentId) ?? 'Otro establecimiento')
+          : '—',
+    },
+    {
+      key: 'filled',
+      header: 'Llenado',
+      cell: (item) => <span className="nowrap">{formatDate(item.filledAt)}</span>,
+    },
+  ];
 
   return (
     <div className="stack">
-      <div className="page-header">
-        <div>
-          <h1>Tambores</h1>
-          <p className="lead">
-            Unidad física asociada a un lote. Cambiar su ubicación deja rastro en el historial de
-            inventario, de modo que la trazabilidad no se pierde al moverlo.
-          </p>
-        </div>
-      </div>
+      <PageHeader title="Tambores" help="drums" />
 
-      {flash && <Notice tone="ok">{flash}</Notice>}
-      {list.error && <Notice tone="danger">{list.error}</Notice>}
+      <ResourceNotices resource={list} />
 
-      <div className="toolbar">
-        <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Estado">
+      <div className="filters">
+        <select
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+          aria-label="Filtrar por estado"
+        >
           <option value="">Todos los estados</option>
-          {['FILLED', 'IN_STOCK', 'IN_TRANSIT', 'DISPATCHED', 'CONSUMED', 'EMPTY'].map((option) => (
+          {DRUM_STATUSES.map((option) => (
             <option key={option} value={option}>
-              {humanize(option)}
+              {statusInfo(option).label}
             </option>
           ))}
         </select>
-        {list.loading && <Spinner />}
+        {status && (
+          <Button size="sm" icon="close" onClick={() => setStatus('')}>
+            Quitar filtro
+          </Button>
+        )}
       </div>
 
-      <Card tight>
-        {list.data && list.data.data.length > 0 ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Código</th>
-                  <th className="num">Neto</th>
-                  <th>Ubicación</th>
-                  <th>Llenado</th>
-                  <th>Estado</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {list.data.data.map((drum) => (
-                  <tr key={drum.id}>
-                    <td className="mono">
-                      <strong>{drum.code}</strong>
-                    </td>
-                    <td className="num">{formatQuantity(drum.netWeight, drum.unit)}</td>
-                    <td className="small muted">
-                      {drum.locationEstablishmentId
-                        ? (byId.get(drum.locationEstablishmentId) ?? 'Otro establecimiento')
-                        : '—'}
-                    </td>
-                    <td className="small nowrap">{formatDate(drum.filledAt)}</td>
-                    <td>
-                      <StatusBadge status={drum.status} />
-                    </td>
-                    <td>
-                      <div className="row">
-                        <Link className="btn small" to={`/trace/backward/drum/${drum.id}`}>
-                          Origen
-                        </Link>
-                        {canWrite && drum.status !== 'CONSUMED' && (
-                          <button
-                            type="button"
-                            className="small"
-                            onClick={() => setTransferring(drum)}
-                          >
-                            Transferir
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          !list.loading && (
-            <Empty
-              title="Sin tambores"
-              description="Los tambores se registran desde el detalle de un lote."
+      <Card flush>
+        <DataList
+          items={list.data?.data ?? []}
+          columns={columns}
+          rowKey={(item) => item.id}
+          loading={list.loading}
+          total={list.data?.meta.total}
+          onLoadMore={() => setPageSize((size) => size + 25)}
+          loadingMore={list.loading}
+          rowActions={(item) => (
+            <>
+              <ButtonLink size="sm" to={`/trace/backward/drum/${item.id}`} icon="trace">
+                De dónde vino
+              </ButtonLink>
+              {canWrite && item.status !== 'CONSUMED' && (
+                <Button size="sm" onClick={() => setTransferring(item)}>
+                  Trasladar
+                </Button>
+              )}
+            </>
+          )}
+          empty={
+            <EmptyState
+              icon="drums"
+              title={status ? 'No hay tambores en ese estado' : 'Todavía no hay tambores'}
+              description={
+                status
+                  ? 'Probá con otro estado o quita el filtro.'
+                  : 'Los tambores se registran desde el detalle de un lote, que es de donde sale la miel que envasan.'
+              }
+              action={
+                status ? (
+                  <Button onClick={() => setStatus('')} icon="close">
+                    Ver todos
+                  </Button>
+                ) : (
+                  <ButtonLink to="/lots" variant="primary" icon="lots">
+                    Ir a lotes
+                  </ButtonLink>
+                )
+              }
             />
-          )
-        )}
+          }
+        />
       </Card>
 
       {transferring && (
-        <TransferModal
+        <TransferSheet
           drum={transferring}
           establishments={establishments.data?.data ?? []}
           onClose={() => setTransferring(null)}
-          onDone={(message) => {
+          onDone={() => {
             setTransferring(null);
-            setFlash(message);
             list.reload();
           }}
         />
@@ -133,7 +155,11 @@ export const DrumsPage = () => {
   );
 };
 
-const TransferModal = ({
+/* =========================================================================
+   Traslado
+   ========================================================================= */
+
+const TransferSheet = ({
   drum,
   establishments,
   onClose,
@@ -142,7 +168,7 @@ const TransferModal = ({
   drum: Drum;
   establishments: Establishment[];
   onClose: () => void;
-  onDone: (message: string) => void;
+  onDone: () => void;
 }) => {
   const fields: FieldSpec[] = [
     {
@@ -152,55 +178,72 @@ const TransferModal = ({
       required: true,
       full: true,
       options: establishments
-        .filter((e) => e.id !== drum.locationEstablishmentId)
-        .map((e) => ({ value: e.id, label: `${e.name} (${humanize(e.type)})` })),
+        .filter((item) => item.id !== drum.locationEstablishmentId)
+        .map((item) => ({
+          value: item.id,
+          label: `${item.name} · ${ESTABLISHMENT_TYPES.label(item.type)}`,
+        })),
     },
-    { name: 'occurredAt', label: 'Fecha del traslado', type: 'datetime-local', defaultValue: toLocalInput() },
+    {
+      name: 'occurredAt',
+      label: 'Fecha del traslado',
+      type: 'datetime-local',
+      required: true,
+      full: true,
+      defaultValue: toLocalInput(),
+    },
     { name: 'notes', label: 'Observaciones', type: 'textarea', full: true },
   ];
 
-  const { values, set } = useForm(fields);
+  const { values, set, blur, errors, setErrors, validateAll } = useForm(fields);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ title: string; detail?: string } | null>(null);
+  const feedback = useWriteFeedback();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!validateAll()) return;
+
     setBusy(true);
-    setError(null);
+    setFailure(null);
     try {
-      const body: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(values)) {
-        if (value === '') continue;
-        body[key] = key === 'occurredAt' ? new Date(value).toISOString() : value;
-      }
-      const result = await apiSend('POST', `/drums/${drum.id}/transfer`, body, {
-        label: `Transferencia del tambor ${drum.code}`,
-        entity: '/drums',
-      });
-      onDone(
-        result.queued
-          ? 'Sin conexión: la transferencia quedó en la cola.'
-          : `Tambor ${drum.code} transferido.`,
+      const result = await apiSend(
+        'POST',
+        `/drums/${drum.id}/transfer`,
+        buildBody(values, fields),
+        { label: `Traslado del tambor ${drum.code}`, entity: '/drums' },
       );
+      if (result.queued) feedback.queued('El traslado');
+      else feedback.saved('Tambor trasladado', drum.code);
+      onDone();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'No se pudo transferir el tambor.');
+      const perField = fieldErrors(cause, fields.map((field) => field.name));
+      if (Object.keys(perField).length > 0) setErrors((current) => ({ ...current, ...perField }));
+      else {
+        const message = toUserMessage(cause, 'write');
+        setFailure({ title: message.title, detail: message.detail });
+      }
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal title={`Transferir tambor ${drum.code}`} onClose={onClose}>
-      <FormFields
-        fields={fields}
-        values={values}
-        onChange={set}
+    <Sheet
+      title="Trasladar tambor"
+      subtitle={`${drum.code} · ${formatQuantity(drum.netWeight, drum.unit)}`}
+      onClose={onClose}
+    >
+      <Form
         onSubmit={submit}
-        submitLabel="Transferir"
+        error={failure && <FormError title={failure.title} detail={failure.detail} />}
+        submitLabel="Confirmar traslado"
+        busyLabel="Trasladando…"
         onCancel={onClose}
         busy={busy}
-        error={error}
-      />
-    </Modal>
+      >
+        <Fields fields={fields} values={values} errors={errors} onChange={set} onBlur={blur} />
+      </Form>
+    </Sheet>
   );
 };

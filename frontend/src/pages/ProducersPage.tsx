@@ -1,54 +1,73 @@
 import { useState, type FormEvent } from 'react';
-import { ApiError, apiSend } from '../lib/api';
+import { apiSend } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
-import { formatRelative, humanize } from '../lib/format';
+import { useDebounced } from '../lib/useDebounced';
+import { fieldErrors, toUserMessage } from '../lib/errors';
+import { PERSON_TYPES } from '../lib/vocabulary';
+import { Icon } from '../components/Icon';
 import {
+  Button,
   Card,
-  Empty,
-  FormFields,
-  Modal,
-  Notice,
-  Spinner,
-  StatusBadge,
+  EmptyState,
+  PageHeader,
+  StatusPill,
+  Sheet,
+  useWriteFeedback,
+} from '../components/ui';
+import { DataList, type Column } from '../components/DataList';
+import { ResourceNotices } from '../components/ResourceNotices';
+import {
+  Disclosure,
+  Field,
+  Fields,
+  Form,
+  FormError,
+  buildBody,
   useForm,
   type FieldSpec,
-} from '../components/ui';
+} from '../components/Form';
 import type { Paginated, Producer } from '../lib/types';
 
-const PRODUCER_FIELDS: FieldSpec[] = [
-  { name: 'businessName', label: 'Nombre o razón social', required: true, full: true },
+/* Lo mínimo para dar de alta; el resto vive en un bloque plegado. */
+const REQUIRED_FIELDS: FieldSpec[] = [
+  { name: 'businessName', label: 'Nombre o razón social', required: true, full: true, autoComplete: 'organization' },
   {
     name: 'personType',
     label: 'Tipo de persona',
     type: 'select',
-    options: [
-      { value: 'FISICA', label: 'Física' },
-      { value: 'JURIDICA', label: 'Jurídica' },
-    ],
+    required: true,
     defaultValue: 'FISICA',
+    options: PERSON_TYPES.options,
   },
   {
     name: 'taxId',
     label: 'CUIT',
     placeholder: '20-12345678-9',
-    help: 'Identificador fiscal externo. No es la clave interna del sistema.',
+    inputMode: 'numeric',
+    hint: 'Identificador fiscal. No es la clave interna del sistema.',
   },
-  { name: 'province', label: 'Provincia' },
-  { name: 'locality', label: 'Localidad' },
-  { name: 'email', label: 'Correo', type: 'email' },
-  { name: 'phone', label: 'Teléfono' },
 ];
 
+const OPTIONAL_FIELDS: FieldSpec[] = [
+  { name: 'province', label: 'Provincia' },
+  { name: 'locality', label: 'Localidad' },
+  { name: 'email', label: 'Correo', type: 'email', inputMode: 'email', autoComplete: 'email' },
+  { name: 'phone', label: 'Teléfono', type: 'tel', inputMode: 'tel', autoComplete: 'tel' },
+];
+
+const PRODUCER_FIELDS = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS];
+
 const RENAPA_FIELDS: FieldSpec[] = [
-  { name: 'number', label: 'Número de RENAPA', required: true, full: true },
+  { name: 'number', label: 'Número de RENAPA', required: true, full: true, help: 'renapa' },
   {
     name: 'status',
     label: 'Estado',
     type: 'select',
+    required: true,
     defaultValue: 'PENDING_VERIFICATION',
     options: [
-      { value: 'PENDING_VERIFICATION', label: 'Pendiente de verificación' },
+      { value: 'PENDING_VERIFICATION', label: 'Sin verificar' },
       { value: 'ACTIVE', label: 'Activo' },
       { value: 'SUSPENDED', label: 'Suspendido' },
     ],
@@ -56,131 +75,148 @@ const RENAPA_FIELDS: FieldSpec[] = [
   { name: 'issuedAt', label: 'Fecha de alta', type: 'date' },
 ];
 
+/* =========================================================================
+   Listado
+   ========================================================================= */
+
 export const ProducersPage = () => {
   const { user, canWrite } = useAuth();
   const [search, setSearch] = useState('');
+  const [pageSize, setPageSize] = useState(25);
   const [creating, setCreating] = useState(false);
   const [renapaFor, setRenapaFor] = useState<Producer | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
+
+  const query = useDebounced(search);
+  const list = useResource<Paginated<Producer>>(
+    `/producers?pageSize=${pageSize}${query ? `&q=${encodeURIComponent(query)}` : ''}`,
+  );
 
   const isProducerRole = user?.role === 'PRODUCTOR';
-  const isAdminRole = user?.role === 'ADMIN';
+  const items = list.data?.data ?? [];
+  const canCreate =
+    canWrite && (user?.role === 'ADMIN' || (isProducerRole && list.data && items.length === 0));
 
-  const query = search ? `&q=${encodeURIComponent(search)}` : '';
-  const list = useResource<Paginated<Producer>>(`/producers?pageSize=50${query}`);
-
-  const canCreateProducer =
-    canWrite && (isAdminRole || (isProducerRole && list.data && list.data.data.length === 0));
+  const columns: Column<Producer>[] = [
+    {
+      key: 'name',
+      header: 'Nombre',
+      role: 'title',
+      cell: (item) => <strong>{item.businessName}</strong>,
+    },
+    {
+      key: 'status',
+      header: 'Estado',
+      role: 'status',
+      cell: (item) => <StatusPill status={item.status} />,
+    },
+    { key: 'type', header: 'Tipo', cell: (item) => PERSON_TYPES.label(item.personType) },
+    {
+      key: 'taxId',
+      header: 'CUIT',
+      cell: (item) => <span className="mono">{item.taxId ?? '—'}</span>,
+    },
+    {
+      key: 'place',
+      header: 'Ubicación',
+      cell: (item) => [item.locality, item.province].filter(Boolean).join(', ') || '—',
+    },
+  ];
 
   return (
     <div className="stack">
-      <div className="page-header">
-        <div>
-          <h1>{isProducerRole ? 'Mi Registro de Productor y RENAPA' : 'Productores'}</h1>
-          <p className="lead">
-            {isProducerRole
-              ? 'Información fiscal y registro RENAPA del productor titular.'
-              : 'El productor es el actor responsable de la actividad. Su RENAPA se registra aparte, porque son cosas distintas: un productor puede existir sin RENAPA vigente.'}
-          </p>
-        </div>
-        {canCreateProducer && (
-          <button type="button" className="primary" onClick={() => setCreating(true)}>
-            {isProducerRole ? 'Registrar mis datos de productor' : 'Nuevo productor'}
-          </button>
-        )}
-      </div>
-
-      {flash && <Notice tone="ok">{flash}</Notice>}
-      {list.fromCache && (
-        <Notice tone="warn">
-          Datos locales guardados {formatRelative(list.cachedAt)}. Sin conexión al servidor.
-        </Notice>
-      )}
-      {list.error && <Notice tone="danger">{list.error}</Notice>}
-
-      <div className="toolbar">
-        <input
-          type="search"
-          placeholder="Buscar por nombre o CUIT…"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          aria-label="Buscar productores"
-        />
-        {list.loading && <Spinner />}
-      </div>
-
-      <Card tight>
-        {list.data && list.data.data.length > 0 ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Tipo</th>
-                  <th>CUIT</th>
-                  <th>Ubicación</th>
-                  <th>Estado</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {list.data.data.map((producer) => (
-                  <tr key={producer.id}>
-                    <td>
-                      <strong>{producer.businessName}</strong>
-                    </td>
-                    <td>{humanize(producer.personType)}</td>
-                    <td className="mono">{producer.taxId ?? '—'}</td>
-                    <td className="small muted">
-                      {[producer.locality, producer.province].filter(Boolean).join(', ') || '—'}
-                    </td>
-                    <td>
-                      <StatusBadge status={producer.status} />
-                    </td>
-                    <td>
-                      {canWrite && (
-                        <button
-                          type="button"
-                          className="small"
-                          onClick={() => setRenapaFor(producer)}
-                        >
-                          Asociar RENAPA
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          !list.loading && (
-            <Empty
-              title="Sin productores"
-              description="Registrar el productor es el primer paso de la cadena de trazabilidad."
-            />
+      <PageHeader
+        title={isProducerRole ? 'Mis datos de productor' : 'Productores'}
+        help="producers"
+        actions={
+          canCreate && (
+            <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
+              {isProducerRole ? 'Registrar mis datos' : 'Nuevo productor'}
+            </Button>
           )
-        )}
+        }
+      />
+
+      <ResourceNotices resource={list} />
+
+      {!isProducerRole && (
+        <div className="filters">
+          <div className="search-wrap">
+            <Icon name="search" size={17} />
+            <input
+              type="search"
+              placeholder="Buscar por nombre o CUIT"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              aria-label="Buscar productores"
+            />
+          </div>
+        </div>
+      )}
+
+      <Card flush>
+        <DataList
+          items={items}
+          columns={columns}
+          rowKey={(item) => item.id}
+          loading={list.loading}
+          total={list.data?.meta.total}
+          onLoadMore={() => setPageSize((size) => size + 25)}
+          loadingMore={list.loading}
+          rowActions={
+            canWrite
+              ? (item) => (
+                  <Button size="sm" onClick={() => setRenapaFor(item)}>
+                    Asociar RENAPA
+                  </Button>
+                )
+              : undefined
+          }
+          empty={
+            query ? (
+              <EmptyState
+                icon="search"
+                title="Sin resultados"
+                description={`No encontramos productores que coincidan con «${query}».`}
+                action={
+                  <Button onClick={() => setSearch('')} icon="close">
+                    Limpiar busqueda
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon="producers"
+                title="Todavía no hay productores"
+                description="Registrar al productor es el primer paso de la cadena: es quien responde por la actividad."
+                action={
+                  canCreate && (
+                    <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
+                      Registrar productor
+                    </Button>
+                  )
+                }
+              />
+            )
+          }
+        />
       </Card>
 
       {creating && (
-        <CreateProducerModal
+        <CreateProducerSheet
           onClose={() => setCreating(false)}
-          onDone={(message) => {
+          onDone={() => {
             setCreating(false);
-            setFlash(message);
             list.reload();
           }}
         />
       )}
 
       {renapaFor && (
-        <RenapaModal
+        <RenapaSheet
           producer={renapaFor}
           onClose={() => setRenapaFor(null)}
-          onDone={(message) => {
+          onDone={() => {
             setRenapaFor(null);
-            setFlash(message);
             list.reload();
           }}
         />
@@ -189,110 +225,140 @@ export const ProducersPage = () => {
   );
 };
 
-const CreateProducerModal = ({
-  onClose,
-  onDone,
-}: {
-  onClose: () => void;
-  onDone: (message: string) => void;
-}) => {
-  const { values, set } = useForm(PRODUCER_FIELDS);
+/* =========================================================================
+   Alta de productor
+   ========================================================================= */
+
+const CreateProducerSheet = ({ onClose, onDone }: { onClose: () => void; onDone: () => void }) => {
+  const { values, set, blur, errors, setErrors, validateAll } = useForm(PRODUCER_FIELDS);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ title: string; detail?: string } | null>(null);
+  const feedback = useWriteFeedback();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!validateAll()) return;
+
     setBusy(true);
-    setError(null);
+    setFailure(null);
     try {
-      const body = Object.fromEntries(
-        Object.entries(values).filter(([, value]) => value !== ''),
-      );
-      const result = await apiSend<Producer>('POST', '/producers', body, {
+      const result = await apiSend<Producer>('POST', '/producers', buildBody(values, PRODUCER_FIELDS), {
         label: `Productor ${values.businessName}`,
         entity: '/producers',
       });
-      onDone(
-        result.queued
-          ? 'Sin conexión: el productor quedó en la cola y se enviará al recuperar señal.'
-          : `Productor ${result.data.businessName} registrado.`,
-      );
+      if (result.queued) feedback.queued('El productor');
+      else feedback.saved('Productor registrado', result.data.businessName);
+      onDone();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'No se pudo registrar el productor.');
+      // Los errores por campo van al campo; solo lo que no se puede ubicar
+      // queda como aviso general arriba del formulario.
+      const perField = fieldErrors(cause, PRODUCER_FIELDS.map((field) => field.name));
+      if (Object.keys(perField).length > 0) setErrors((current) => ({ ...current, ...perField }));
+      else {
+        const message = toUserMessage(cause, 'write');
+        setFailure({ title: message.title, detail: message.detail });
+      }
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal title="Nuevo productor" onClose={onClose}>
-      <FormFields
-        fields={PRODUCER_FIELDS}
-        values={values}
-        onChange={set}
+    <Sheet title="Nuevo productor" subtitle="Los campos con * son obligatorios." onClose={onClose}>
+      <Form
         onSubmit={submit}
+        error={failure && <FormError title={failure.title} detail={failure.detail} />}
         submitLabel="Registrar productor"
+        busyLabel="Registrando…"
         onCancel={onClose}
         busy={busy}
-        error={error}
-      />
-    </Modal>
+      >
+        <Fields
+          fields={REQUIRED_FIELDS}
+          values={values}
+          errors={errors}
+          onChange={set}
+          onBlur={blur}
+        />
+        <Disclosure label="Contacto y ubicación (opcional)">
+          {OPTIONAL_FIELDS.map((spec) => (
+            <Field
+              key={spec.name}
+              spec={spec}
+              value={values[spec.name] ?? ''}
+              error={errors[spec.name]}
+              onChange={(value) => set(spec.name, value)}
+              onBlur={() => blur(spec.name)}
+            />
+          ))}
+        </Disclosure>
+      </Form>
+    </Sheet>
   );
 };
 
-const RenapaModal = ({
+/* =========================================================================
+   Asociación de RENAPA
+   ========================================================================= */
+
+const RenapaSheet = ({
   producer,
   onClose,
   onDone,
 }: {
   producer: Producer;
   onClose: () => void;
-  onDone: (message: string) => void;
+  onDone: () => void;
 }) => {
-  const { values, set } = useForm(RENAPA_FIELDS);
+  const { values, set, blur, errors, setErrors, validateAll } = useForm(RENAPA_FIELDS);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ title: string; detail?: string } | null>(null);
+  const feedback = useWriteFeedback();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const body: Record<string, unknown> = { number: values.number, status: values.status };
-      if (values.issuedAt) body.issuedAt = new Date(values.issuedAt).toISOString();
+    if (!validateAll()) return;
 
-      const result = await apiSend('POST', `/producers/${producer.id}/renapa`, body, {
-        label: `RENAPA ${values.number} de ${producer.businessName}`,
-        entity: '/producers',
-      });
-      onDone(
-        result.queued
-          ? 'Sin conexión: la asociación quedó en la cola.'
-          : `RENAPA ${values.number} asociado. Queda pendiente de sincronizar con SENASA.`,
+    setBusy(true);
+    setFailure(null);
+    try {
+      const result = await apiSend(
+        'POST',
+        `/producers/${producer.id}/renapa`,
+        buildBody(values, RENAPA_FIELDS),
+        { label: `RENAPA ${values.number} de ${producer.businessName}`, entity: '/producers' },
       );
+      if (result.queued) feedback.queued('La asociación');
+      else
+        feedback.saved(
+          `RENAPA ${values.number} asociado`,
+          'Queda sin verificar hasta que exista la integración con SENASA.',
+        );
+      onDone();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'No se pudo asociar el RENAPA.');
+      const perField = fieldErrors(cause, RENAPA_FIELDS.map((field) => field.name));
+      if (Object.keys(perField).length > 0) setErrors((current) => ({ ...current, ...perField }));
+      else {
+        const message = toUserMessage(cause, 'write');
+        setFailure({ title: message.title, detail: message.detail });
+      }
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal title={`Asociar RENAPA a ${producer.businessName}`} onClose={onClose}>
-      <Notice tone="info">
-        Mientras no exista integración con SENASA, el registro queda en estado{' '}
-        <strong>pendiente de sincronización</strong> y así lo informa el motor de trazabilidad.
-      </Notice>
-      <FormFields
-        fields={RENAPA_FIELDS}
-        values={values}
-        onChange={set}
+    <Sheet title="Asociar RENAPA" subtitle={producer.businessName} onClose={onClose}>
+      <Form
         onSubmit={submit}
+        error={failure && <FormError title={failure.title} detail={failure.detail} />}
         submitLabel="Asociar RENAPA"
+        busyLabel="Asociando…"
         onCancel={onClose}
         busy={busy}
-        error={error}
-      />
-    </Modal>
+      >
+        <Fields fields={RENAPA_FIELDS} values={values} errors={errors} onChange={set} onBlur={blur} />
+      </Form>
+    </Sheet>
   );
 };

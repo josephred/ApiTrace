@@ -1,103 +1,155 @@
 import { useState } from 'react';
 import { useResource } from '../lib/useResource';
+import { useDebounced } from '../lib/useDebounced';
 import { formatDateTime } from '../lib/format';
-import { Badge, Card, Empty, Notice, Spinner } from '../components/ui';
+import { entityLabel, eventLabel } from '../lib/vocabulary';
+import { Icon } from '../components/Icon';
+import { Button, Card, EmptyState, PageHeader, Pill } from '../components/ui';
+import { DataList, type Column } from '../components/DataList';
+import { ResourceNotices } from '../components/ResourceNotices';
 import type { AuditEvent, Paginated } from '../lib/types';
+
+const ENTITIES = [
+  'movement',
+  'lot',
+  'drum',
+  'producer',
+  'establishment',
+  'apiary',
+  'dte',
+  'user',
+];
 
 export const AuditPage = () => {
   const [entityType, setEntityType] = useState('');
   const [action, setAction] = useState('');
+  const [pageSize, setPageSize] = useState(25);
 
+  const search = useDebounced(action);
   const query = [
-    'pageSize=50',
+    `pageSize=${pageSize}`,
     entityType && `entityType=${entityType}`,
-    action && `action=${encodeURIComponent(action)}`,
+    search && `action=${encodeURIComponent(search)}`,
   ]
     .filter(Boolean)
     .join('&');
 
   const events = useResource<Paginated<AuditEvent>>(`/audit/events?${query}`);
+  const filtered = Boolean(entityType || search);
+
+  const columns: Column<AuditEvent>[] = [
+    {
+      key: 'action',
+      header: 'Acción',
+      role: 'title',
+      cell: (event) => <strong>{eventLabel(event.action)}</strong>,
+    },
+    {
+      key: 'entity',
+      header: 'Entidad',
+      role: 'status',
+      cell: (event) => <Pill tone="brand">{entityLabel(event.entityType)}</Pill>,
+    },
+    {
+      key: 'when',
+      header: 'Momento',
+      cell: (event) => <span className="nowrap">{formatDateTime(event.timestamp)}</span>,
+    },
+    {
+      key: 'actor',
+      header: 'Quién',
+      cell: (event) => event.actorEmail ?? <span className="faint">el sistema</span>,
+    },
+    {
+      key: 'id',
+      header: 'Registro',
+      role: 'hidden',
+      cell: (event) =>
+        event.entityId ? <span className="mono small">{event.entityId.slice(0, 8)}</span> : '—',
+    },
+  ];
 
   return (
     <div className="stack">
-      <div className="page-header">
-        <div>
-          <h1>Auditoría</h1>
-          <p className="lead">
-            Registro independiente de las tablas operativas: quién hizo qué, sobre qué entidad y
-            cuándo. Se escribe automáticamente y nunca hace fallar la operación de negocio.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Auditoría"
+        help="audit"
+        sub="Quién hizo qué, sobre qué registro y cuándo."
+      />
 
-      {events.error && (
-        <Notice tone="danger">
-          {events.error} Esta consulta requiere rol ADMIN o AUDITOR.
-        </Notice>
-      )}
+      <ResourceNotices resource={events} />
 
-      <div className="toolbar">
+      <div className="filters">
         <select
           value={entityType}
           onChange={(event) => setEntityType(event.target.value)}
-          aria-label="Tipo de entidad"
+          aria-label="Filtrar por tipo de registro"
         >
-          <option value="">Todas las entidades</option>
-          {['movement', 'lot', 'drum', 'producer', 'establishment', 'apiary', 'dte', 'user'].map(
-            (option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ),
-          )}
+          <option value="">Todos los registros</option>
+          {ENTITIES.map((option) => (
+            <option key={option} value={option}>
+              {entityLabel(option)}
+            </option>
+          ))}
         </select>
-        <input
-          type="search"
-          placeholder="Acción, p. ej. MOVEMENT_CREATED"
-          value={action}
-          onChange={(event) => setAction(event.target.value)}
-          aria-label="Filtrar por acción"
-        />
-        {events.loading && <Spinner />}
+        <div className="search-wrap">
+          <Icon name="search" size={17} />
+          <input
+            type="search"
+            placeholder="Buscar acción, p. ej. MOVEMENT_CREATED"
+            value={action}
+            onChange={(event) => setAction(event.target.value)}
+            aria-label="Filtrar por acción"
+          />
+        </div>
+        {filtered && (
+          <Button
+            size="sm"
+            icon="close"
+            onClick={() => {
+              setEntityType('');
+              setAction('');
+            }}
+          >
+            Limpiar
+          </Button>
+        )}
       </div>
 
-      <Card tight>
-        {events.data && events.data.data.length > 0 ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Momento</th>
-                  <th>Actor</th>
-                  <th>Acción</th>
-                  <th>Entidad</th>
-                  <th>Origen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.data.data.map((event) => (
-                  <tr key={event.id}>
-                    <td className="small nowrap">{formatDateTime(event.timestamp)}</td>
-                    <td className="small">{event.actorEmail ?? <span className="faint">sistema</span>}</td>
-                    <td>
-                      <Badge tone="accent">{event.action}</Badge>
-                    </td>
-                    <td className="small mono">
-                      {event.entityType}
-                      {event.entityId && (
-                        <span className="faint"> · {event.entityId.slice(0, 8)}</span>
-                      )}
-                    </td>
-                    <td className="small faint">{event.source}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          !events.loading &&
-          !events.error && <Empty title="Sin eventos" description="No hay auditoría para ese filtro." />
-        )}
+      <Card flush>
+        <DataList
+          items={events.data?.data ?? []}
+          columns={columns}
+          rowKey={(event) => event.id}
+          loading={events.loading}
+          total={events.data?.meta.total}
+          onLoadMore={() => setPageSize((size) => size + 25)}
+          loadingMore={events.loading}
+          empty={
+            <EmptyState
+              icon="audit"
+              title={filtered ? 'Sin resultados' : 'Todavía no hay eventos'}
+              description={
+                filtered
+                  ? 'Probá con otro filtro.'
+                  : 'Cada acción sobre el sistema queda registrada acá automáticamente.'
+              }
+              action={
+                filtered && (
+                  <Button
+                    icon="close"
+                    onClick={() => {
+                      setEntityType('');
+                      setAction('');
+                    }}
+                  >
+                    Limpiar filtros
+                  </Button>
+                )
+              }
+            />
+          }
+        />
       </Card>
     </div>
   );

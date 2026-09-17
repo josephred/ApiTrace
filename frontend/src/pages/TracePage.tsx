@@ -1,21 +1,39 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useResource } from '../lib/useResource';
-import { formatDateTime, formatRelative, humanize } from '../lib/format';
+import { formatDateTime } from '../lib/format';
+import { LOT_TYPES, gapExplanation } from '../lib/vocabulary';
 import { TraceGraph } from '../components/TraceGraph';
-import { Badge, Card, Empty, Notice, Spinner, Stat } from '../components/ui';
+import {
+  Card,
+  EmptyState,
+  PageHeader,
+  Pill,
+  SkeletonList,
+  Stat,
+  SummaryList,
+} from '../components/ui';
+import { ResourceNotices } from '../components/ResourceNotices';
+import { ChoiceGroup } from '../components/Form';
 import type { Apiary, Lot, Paginated, TraceResult } from '../lib/types';
 
 type Direction = 'backward' | 'forward';
 type EntityType = 'lot' | 'drum' | 'apiary' | 'producer' | 'establishment' | 'movement';
 
+const ENTITY_LABEL: Record<EntityType, string> = {
+  lot: 'Lote',
+  drum: 'Tambor',
+  apiary: 'Apiario',
+  producer: 'Productor',
+  establishment: 'Establecimiento',
+  movement: 'Movimiento',
+};
+
 const buildPath = (direction: Direction, entityType: EntityType, id: string): string => {
   if (direction === 'backward') {
-    // El backend expone la consulta hacia atras desde el lote y desde el tambor,
+    // El backend expone la consulta hacia atrás desde el lote y desde el tambor,
     // que son los dos puntos de partida naturales de una investigacion.
-    return entityType === 'drum'
-      ? `/drums/${id}/trace/backward`
-      : `/lots/${id}/trace/backward`;
+    return entityType === 'drum' ? `/drums/${id}/trace/backward` : `/lots/${id}/trace/backward`;
   }
   return `/traceability/forward/${entityType}/${id}`;
 };
@@ -42,11 +60,14 @@ export const TracePage = () => {
 
   const options =
     entityType === 'lot'
-      ? (lots.data?.data ?? []).map((lot) => ({ id: lot.id, label: `${lot.code} (${humanize(lot.lotType)})` }))
+      ? (lots.data?.data ?? []).map((lot) => ({
+          id: lot.id,
+          label: `${lot.code} · ${LOT_TYPES.label(lot.lotType)}`,
+        }))
       : entityType === 'apiary'
         ? (apiaries.data?.data ?? []).map((apiary) => ({
             id: apiary.id,
-            label: `${apiary.code} — ${apiary.name ?? ''}`,
+            label: apiary.name ? `${apiary.code} — ${apiary.name}` : apiary.code,
           }))
         : [];
 
@@ -57,63 +78,75 @@ export const TracePage = () => {
     if (nextId) navigate(`/trace/${nextDirection}/${nextEntity}/${nextId}`, { replace: true });
   };
 
+  const onDirection = (value: string) => {
+    const next = value as Direction;
+    // Hacia atrás solo se puede arrancar de un lote o un tambor; si el punto de
+    // partida elegido no sirve para el nuevo sentido, se limpia en vez de
+    // fallar con un pedido invalido.
+    const keeps = next === 'backward' ? entityType === 'lot' || entityType === 'drum' : true;
+    apply(next, keeps ? entityType : 'lot', keeps ? entityId : '');
+  };
+
+  const data = trace.data;
+  const chainState = !data
+    ? null
+    : data.gaps.length === 0
+      ? { tone: 'success' as const, label: 'Completá', icon: 'checkCircle' as const }
+      : data.gaps.some((gap) => gap.severity === 'ERROR')
+        ? { tone: 'danger' as const, label: 'Con errores', icon: 'danger' as const }
+        : { tone: 'warning' as const, label: 'Con observaciones', icon: 'warning' as const };
+
   return (
     <div className="stack">
-      <div className="page-header">
-        <div>
-          <h1>Trazabilidad</h1>
-          <p className="lead">
-            Hacia atrás responde de dónde vino la miel; hacia adelante, dónde terminó la producción
-            de un origen. El grafo muestra la cadena y los huecos detectados.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Trazabilidad"
+        help="trace"
+        sub="Reconstrui la cadena hacia atrás o hacia adelante."
+      />
 
       <Card>
-        <div className="form-row">
-          <div className="field">
-            <label htmlFor="direction">Sentido</label>
-            <select
-              id="direction"
-              value={direction}
-              onChange={(event) => {
-                const next = event.target.value as Direction;
-                const nextEntity: EntityType = next === 'backward' ? 'lot' : entityType;
-                apply(next, nextEntity, next === 'backward' && entityType !== 'lot' && entityType !== 'drum' ? '' : entityId);
-              }}
-            >
-              <option value="backward">Hacia atrás — ¿de dónde vino?</option>
-              <option value="forward">Hacia adelante — ¿dónde terminó?</option>
-            </select>
-          </div>
+        <ChoiceGroup
+          label="Qué querés saber"
+          value={direction}
+          onChange={onDirection}
+          options={[
+            {
+              value: 'backward',
+              title: 'De dónde vino',
+              description: 'Desde un lote o un tambor hasta el apiario de origen.',
+            },
+            {
+              value: 'forward',
+              title: 'Dónde terminó',
+              description: 'Desde un origen productivo hasta los lotes y tambores finales.',
+            },
+          ]}
+        />
 
+        <div className="form-grid">
           <div className="field">
-            <label htmlFor="entityType">Punto de partida</label>
+            <label className="field-label" htmlFor="entityType">
+              Punto de partida
+            </label>
             <select
               id="entityType"
               value={entityType}
               onChange={(event) => apply(direction, event.target.value as EntityType, '')}
             >
-              {direction === 'backward' ? (
-                <>
-                  <option value="lot">Lote</option>
-                  <option value="drum">Tambor</option>
-                </>
-              ) : (
-                <>
-                  <option value="apiary">Apiario</option>
-                  <option value="lot">Lote</option>
-                  <option value="producer">Productor</option>
-                  <option value="establishment">Establecimiento</option>
-                  <option value="movement">Movimiento</option>
-                </>
-              )}
+              {(direction === 'backward'
+                ? (['lot', 'drum'] as EntityType[])
+                : (['apiary', 'lot', 'producer', 'establishment', 'movement'] as EntityType[])
+              ).map((type) => (
+                <option key={type} value={type}>
+                  {ENTITY_LABEL[type]}
+                </option>
+              ))}
             </select>
           </div>
 
-          <div className="field" style={{ gridColumn: options.length > 0 ? undefined : '1 / -1' }}>
-            <label htmlFor="entityId">
-              {entityType === 'lot' ? 'Lote' : entityType === 'apiary' ? 'Apiario' : 'Identificador'}
+          <div className="field">
+            <label className="field-label" htmlFor="entityId">
+              {ENTITY_LABEL[entityType]}
             </label>
             {options.length > 0 ? (
               <select
@@ -121,7 +154,7 @@ export const TracePage = () => {
                 value={entityId}
                 onChange={(event) => apply(direction, entityType, event.target.value)}
               >
-                <option value="">— Seleccionar —</option>
+                <option value="">Elegí uno</option>
                 {options.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.label}
@@ -129,149 +162,174 @@ export const TracePage = () => {
                 ))}
               </select>
             ) : (
-              <input
-                id="entityId"
-                value={entityId}
-                onChange={(event) => setEntityId(event.target.value)}
-                onBlur={() => apply(direction, entityType, entityId)}
-                placeholder="UUID de la entidad"
-              />
+              <>
+                <input
+                  id="entityId"
+                  value={entityId}
+                  onChange={(event) => setEntityId(event.target.value)}
+                  onBlur={() => apply(direction, entityType, entityId)}
+                  placeholder="Pegá el identificador"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <span className="field-hint">
+                  Se consigue desde la pantalla del {ENTITY_LABEL[entityType].toLowerCase()}.
+                </span>
+              </>
             )}
           </div>
         </div>
       </Card>
 
       {!path && (
-        <Empty
-          title="Elegí un punto de partida"
-          description="La consulta hacia atrás arranca de un lote o un tambor. La consulta hacia adelante puede arrancar de un apiario, un productor o un movimiento."
-        />
+        <Card>
+          <EmptyState
+            icon="trace"
+            title="Elegí un punto de partida"
+            description="Hacia atrás se arranca de un lote o un tambor. Hacia adelante, de un apiario, un productor o un movimiento."
+          />
+        </Card>
       )}
 
-      {trace.loading && <Spinner label="Reconstruyendo la cadena…" />}
-      {trace.error && <Notice tone="danger">{trace.error}</Notice>}
-      {trace.fromCache && (
-        <Notice tone="warn">
-          Trazabilidad reconstruida con datos locales de {formatRelative(trace.cachedAt)}. Puede no
-          reflejar operaciones recientes de otras organizaciones.
-        </Notice>
+      {trace.loading && (
+        <Card flush>
+          <SkeletonList rows={4} />
+        </Card>
       )}
 
-      {trace.data && (
+      <ResourceNotices resource={trace} />
+
+      {data && !trace.loading && (
         <>
-          <div className="grid cols-4">
-            <Stat
-              label="Nodos"
-              value={trace.data.nodes.length}
-              hint={`${trace.data.edges.length} relaciones`}
-            />
+          <div className="grid c4">
+            <Stat label="Nodos" value={data.nodes.length} hint={`${data.edges.length} relaciones`} />
             <Stat
               label="Productores"
-              value={trace.data.summary.producers.length}
-              hint={trace.data.summary.producers[0]?.businessName ?? '—'}
+              value={data.summary.producers.length}
+              hint={data.summary.producers[0]?.businessName ?? '—'}
             />
             <Stat
               label="Apiarios"
-              value={trace.data.summary.apiaries.length}
-              hint={trace.data.summary.apiaries.map((a) => a.code).join(', ') || '—'}
+              value={data.summary.apiaries.length}
+              hint={data.summary.apiaries.map((item) => item.code).join(', ') || '—'}
             />
             <Stat
               label="Estado de la cadena"
               value={
-                // "Completa" solo cuando no falta nada. Con advertencias la cadena
-                // se reconstruye, pero decir que esta completa seria enganoso.
-                trace.data.gaps.length === 0 ? (
-                  <Badge tone="ok">Completa</Badge>
-                ) : trace.data.gaps.some((gap) => gap.severity === 'ERROR') ? (
-                  <Badge tone="danger">Con errores</Badge>
-                ) : (
-                  <Badge tone="warn">Con observaciones</Badge>
+                chainState && (
+                  <Pill tone={chainState.tone} icon={chainState.icon}>
+                    {chainState.label}
+                  </Pill>
                 )
               }
               hint={
-                trace.data.gaps.length === 0
-                  ? `generada ${formatDateTime(trace.data.generatedAt)}`
-                  : `${trace.data.gaps.length} punto(s) a revisar`
+                data.gaps.length === 0
+                  ? `generada ${formatDateTime(data.generatedAt)}`
+                  : `${data.gaps.length} punto(s) a revisar`
               }
+              help="gaps"
             />
           </div>
 
-          {trace.data.gaps.length > 0 && (
-            <Card title={`Huecos detectados (${trace.data.gaps.length})`}>
-              <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
-                {trace.data.gaps.map((gap, index) => (
-                  <li key={`${gap.code}-${index}`} style={{ marginBottom: '0.4rem' }}>
-                    <Badge tone={gap.severity === 'ERROR' ? 'danger' : 'warn'}>{gap.code}</Badge>{' '}
-                    {gap.message}
-                  </li>
+          {data.gaps.length > 0 && (
+            <Card title={`Qué falta para cerrar la cadena (${data.gaps.length})`} help="gaps">
+              <div className="stack">
+                {data.gaps.map((gap, index) => (
+                  <div
+                    key={`${gap.code}-${index}`}
+                    className={`notice notice-${gap.severity === 'ERROR' ? 'danger' : 'warning'}`}
+                  >
+                    <div className="notice-body">
+                      <div className="notice-title">{gap.message}</div>
+                      <div className="small" style={{ opacity: 0.9 }}>
+                        {gapExplanation(gap.code)}
+                      </div>
+                    </div>
+                  </div>
                 ))}
-              </ul>
-              <p className="small muted mt">
-                La trazabilidad real rara vez está completa. El sistema informa qué falta en lugar
-                de presentar la cadena como si estuviera cerrada.
+              </div>
+              <p className="small muted" style={{ marginTop: 'var(--sp-3)' }}>
+                La trazabilidad real rara vez esta completa. El sistema prefiere decir qué falta
+                antes que mostrar la cadena como si estuviera cerrada.
               </p>
             </Card>
           )}
 
           <Card
-            title={`Cadena ${trace.data.direction === 'backward' ? 'hacia atrás' : 'hacia adelante'}`}
-            actions={<span className="small muted">Tocá un nodo para ver su detalle</span>}
+            title={`Cadena ${data.direction === 'backward' ? 'hacia atrás' : 'hacia adelante'}`}
+            actions={<span className="small muted desktop-only">Tocá un nodo para ver su detalle</span>}
           >
-            <TraceGraph result={trace.data} />
+            <TraceGraph result={data} />
           </Card>
 
-          <div className="grid cols-2">
+          <div className="grid c2">
             <Card title="Origen productivo">
-              <dl className="definition">
-                <dt>Productores</dt>
-                <dd>
-                  {trace.data.summary.producers.length > 0
-                    ? trace.data.summary.producers.map((producer) => (
-                        <div key={producer.id}>
-                          {producer.businessName}
-                          {producer.renapa.length > 0 && (
-                            <span className="small muted"> · RENAPA {producer.renapa.join(', ')}</span>
-                          )}
-                        </div>
-                      ))
-                    : '—'}
-                </dd>
-                <dt>RENSPA</dt>
-                <dd className="mono small">{trace.data.summary.renspa.join(' · ') || '—'}</dd>
-                <dt>Establecimientos</dt>
-                <dd className="small">
-                  {trace.data.summary.establishments
-                    .map((establishment) => establishment.name)
-                    .join(' · ') || '—'}
-                </dd>
-              </dl>
+              <SummaryList
+                rows={[
+                  {
+                    key: 'Productores',
+                    value:
+                      data.summary.producers.length > 0
+                        ? data.summary.producers.map((producer) => (
+                            <div key={producer.id}>
+                              {producer.businessName}
+                              {producer.renapa.length > 0 && (
+                                <div className="small muted">
+                                  RENAPA {producer.renapa.join(', ')}
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        : '—',
+                  },
+                  {
+                    key: 'RENSPA',
+                    value: <span className="mono">{data.summary.renspa.join(' · ') || '—'}</span>,
+                  },
+                  {
+                    key: 'Establecimientos',
+                    value:
+                      data.summary.establishments.map((item) => item.name).join(' · ') || '—',
+                  },
+                ]}
+              />
             </Card>
 
-            <Card title="Producto y documentación">
-              <dl className="definition">
-                <dt>Movimientos</dt>
-                <dd className="small">
-                  {trace.data.summary.movements.length > 0
-                    ? trace.data.summary.movements.map((movement) => (
-                        <div key={movement.id}>
-                          <span className="mono">{movement.code}</span>{' '}
-                          <Badge>{movement.status}</Badge>{' '}
-                          {movement.dteNumber && (
-                            <span className="small muted">DT-e {movement.dteNumber}</span>
-                          )}
-                        </div>
-                      ))
-                    : '—'}
-                </dd>
-                <dt>Lotes</dt>
-                <dd className="small mono">
-                  {trace.data.summary.lots.map((lot) => lot.code).join(' · ') || '—'}
-                </dd>
-                <dt>Tambores</dt>
-                <dd className="small mono">
-                  {trace.data.summary.drums.map((drum) => drum.code).join(' · ') || '—'}
-                </dd>
-              </dl>
+            <Card title="Producto y documentacion">
+              <SummaryList
+                rows={[
+                  {
+                    key: 'Movimientos',
+                    value:
+                      data.summary.movements.length > 0
+                        ? data.summary.movements.map((movement) => (
+                            <div key={movement.id} className="row row-tight" style={{ justifyContent: 'flex-end' }}>
+                              <span className="mono">{movement.code}</span>
+                              {movement.dteNumber && (
+                                <span className="small muted">DT-e {movement.dteNumber}</span>
+                              )}
+                            </div>
+                          ))
+                        : '—',
+                  },
+                  {
+                    key: 'Lotes',
+                    value: (
+                      <span className="mono">
+                        {data.summary.lots.map((lot) => lot.code).join(' · ') || '—'}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'Tambores',
+                    value: (
+                      <span className="mono">
+                        {data.summary.drums.map((drum) => drum.code).join(' · ') || '—'}
+                      </span>
+                    ),
+                  },
+                ]}
+              />
             </Card>
           </div>
         </>

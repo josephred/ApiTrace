@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TraceEdge, TraceNode, TraceNodeType, TraceResult } from '../lib/types';
-import { formatDateTime, humanize } from '../lib/format';
-import { Badge } from './ui';
+import { formatDateTime } from '../lib/format';
+import { humanizeCode } from '../lib/vocabulary';
+import { Button, Pill, SummaryList } from './ui';
 
 /**
  * Columnas del grafo, en el orden natural de la cadena apicola.
@@ -39,17 +40,17 @@ const TYPE_LABEL: Record<TraceNodeType, string> = {
 };
 
 const TYPE_COLOR: Record<TraceNodeType, string> = {
-  producer: 'var(--info)',
-  renapa: 'var(--info)',
-  renspa: 'var(--info)',
-  establishment: 'var(--text-muted)',
-  apiary: 'var(--ok)',
-  movement: 'var(--accent)',
-  dte: 'var(--warn)',
-  reception: 'var(--warn)',
-  extraction: 'var(--accent)',
-  lot: 'var(--ok)',
-  drum: 'var(--ok)',
+  producer: 'var(--info-fg)',
+  renapa: 'var(--info-fg)',
+  renspa: 'var(--info-fg)',
+  establishment: 'var(--text-2)',
+  apiary: 'var(--success-fg)',
+  movement: 'var(--brand)',
+  dte: 'var(--warning-fg)',
+  reception: 'var(--warning-fg)',
+  extraction: 'var(--brand)',
+  lot: 'var(--success-fg)',
+  drum: 'var(--success-fg)',
 };
 
 const NODE_W = 154;
@@ -97,7 +98,7 @@ const layout = (nodes: TraceNode[]): { placed: Placed[]; width: number; height: 
 
 const edgePath = (from: Placed, to: Placed): string => {
   // Se conecta siempre por el lado que enfrenta al otro nodo, de modo que las
-  // aristas hacia atras no crucen por encima de las cajas.
+  // aristas hacia atrás no crucen por encima de las cajas.
   const fromRight = to.x >= from.x;
   const x1 = fromRight ? from.x + NODE_W : from.x;
   const x2 = fromRight ? to.x : to.x + NODE_W;
@@ -117,7 +118,7 @@ export const TraceGraph = ({ result }: { result: TraceResult }) => {
   const { placed, width, height } = useMemo(() => layout(result.nodes), [result.nodes]);
 
   /**
-   * Una cadena completa es mas ancha que la pantalla. El contenedor permite
+   * Una cadena completa es más ancha que la pantalla. El contenedor permite
    * desplazarse, pero eso obliga a descubrirlo: por defecto se ajusta al ancho
    * disponible para que la cadena entera se vea de un vistazo, y quien necesite
    * leer las etiquetas puede volver al 100 %.
@@ -151,33 +152,31 @@ export const TraceGraph = ({ result }: { result: TraceResult }) => {
 
   return (
     <div>
-      <div className="row between mb">
+      <div className="row-between" style={{ marginBottom: 'var(--sp-3)', flexWrap: 'wrap' }}>
         <span className="small muted">
           {result.nodes.length} nodos · {result.edges.length} relaciones
         </span>
-        <div className="row">
-          <button type="button" className="small" onClick={fitToWidth}>
-            Ajustar al ancho
-          </button>
-          <button
-            type="button"
-            className="small"
+        <div className="row row-tight">
+          <Button size="sm" onClick={fitToWidth}>
+            Ajustar
+          </Button>
+          <Button
+            size="sm"
             onClick={() => setScale((current) => Math.max(0.4, current - 0.15))}
             aria-label="Alejar"
           >
             −
-          </button>
+          </Button>
           <span className="small mono nowrap" style={{ minWidth: '3.2rem', textAlign: 'center' }}>
             {Math.round(scale * 100)} %
           </span>
-          <button
-            type="button"
-            className="small"
+          <Button
+            size="sm"
             onClick={() => setScale((current) => Math.min(2, current + 0.15))}
             aria-label="Acercar"
           >
             +
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -199,7 +198,7 @@ export const TraceGraph = ({ result }: { result: TraceResult }) => {
               markerHeight="7"
               orient="auto-start-reverse"
             >
-              <path d="M 0 0 L 8 4 L 0 8 z" fill="var(--border-strong)" />
+              <path d="M 0 0 L 8 4 L 0 8 z" fill="var(--border-control)" />
             </marker>
           </defs>
 
@@ -212,7 +211,7 @@ export const TraceGraph = ({ result }: { result: TraceResult }) => {
                   key={`${edge.from}-${edge.to}-${i}`}
                   d={edgePath(from, to)}
                   fill="none"
-                  stroke="var(--border-strong)"
+                  stroke="var(--border-control)"
                   strokeWidth={1.4}
                   markerEnd="url(#arrow)"
                 >
@@ -252,10 +251,10 @@ export const TraceGraph = ({ result }: { result: TraceResult }) => {
                     strokeWidth={isRoot || isSelected ? 2 : 1}
                   />
                   <rect width={4} height={NODE_H} rx={2} fill={TYPE_COLOR[node.type]} />
-                  <text x={14} y={19} fontSize={9.5} fill="var(--text-muted)" letterSpacing="0.05em">
+                  <text x={14} y={19} fontSize={9.5} fill="var(--text-2)" letterSpacing="0.05em">
                     {TYPE_LABEL[node.type].toUpperCase()}
                   </text>
-                  <text x={14} y={37} fontSize={12.5} fontWeight={620} fill="var(--text)">
+                  <text x={14} y={37} fontSize={12.5} fontWeight={620} fill="var(--text-1)">
                     {truncate(node.label)}
                   </text>
                   {isRoot && (
@@ -272,7 +271,7 @@ export const TraceGraph = ({ result }: { result: TraceResult }) => {
 
       <div className="trace-legend">
         {typesPresent.map((type) => (
-          <span key={type} className="badge">
+          <span key={type} className="pill">
             <span className="dot" style={{ background: TYPE_COLOR[type] }} />
             {TYPE_LABEL[type]}
           </span>
@@ -280,35 +279,32 @@ export const TraceGraph = ({ result }: { result: TraceResult }) => {
       </div>
 
       {selected && (
-        <div className="card mt">
-          <div className="card-header">
-            <div className="row">
-              <Badge tone="accent">{TYPE_LABEL[selected.type]}</Badge>
+        <div className="card" style={{ marginTop: 'var(--sp-4)' }}>
+          <div className="card-head">
+            <div className="row row-tight">
+              <Pill tone="brand">{TYPE_LABEL[selected.type]}</Pill>
               <strong>{selected.label}</strong>
             </div>
-            <button type="button" className="ghost small" onClick={() => setSelected(null)}>
+            <Button variant="ghost" size="sm" icon="close" onClick={() => setSelected(null)}>
               Cerrar
-            </button>
+            </Button>
           </div>
           <div className="card-body">
-            <dl className="definition">
-              {Object.entries(selected.attributes)
+            <SummaryList
+              rows={Object.entries(selected.attributes)
                 .filter(([, value]) => value !== null && value !== undefined && value !== '')
-                .map(([key, value]) => (
-                  <div key={key} style={{ display: 'contents' }}>
-                    <dt>{humanize(key.replace(/([A-Z])/g, ' $1'))}</dt>
-                    <dd>
-                      {typeof value === 'boolean'
-                        ? value
-                          ? 'Sí'
-                          : 'No'
-                        : /At$|Date$/.test(key)
-                          ? formatDateTime(String(value))
-                          : String(value)}
-                    </dd>
-                  </div>
-                ))}
-            </dl>
+                .map(([key, value]) => ({
+                  key: humanizeCode(key.replace(/([A-Z])/g, ' $1')),
+                  value:
+                    typeof value === 'boolean'
+                      ? value
+                        ? 'Sí'
+                        : 'No'
+                      : /At$|Date$/.test(key)
+                        ? formatDateTime(String(value))
+                        : String(value),
+                }))}
+            />
           </div>
         </div>
       )}

@@ -1,185 +1,216 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ApiError, apiSend } from '../lib/api';
+import { apiSend } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
-import { formatDate, formatDateTime, formatQuantity, humanize, toLocalInput } from '../lib/format';
+import { fieldErrors, toUserMessage } from '../lib/errors';
+import { formatDate, formatDateTime, formatQuantity, toLocalInput } from '../lib/format';
+import { LOT_TYPES, SOURCE_TYPES, eventLabel } from '../lib/vocabulary';
 import {
-  Badge,
+  Button,
+  ButtonLink,
   Card,
-  Empty,
-  FormFields,
-  Modal,
+  EmptyState,
+  ErrorNotice,
   Notice,
-  Spinner,
+  PageHeader,
+  Pill,
+  Sheet,
+  SkeletonList,
   Stat,
-  StatusBadge,
-  useForm,
-  type FieldSpec,
+  StatusPill,
+  useWriteFeedback,
 } from '../components/ui';
-import type { Lot, TimelineEvent } from '../lib/types';
-
-const SOURCE_LABEL: Record<string, string> = {
-  MOVEMENT: 'Movimiento',
-  LOT: 'Lote previo',
-  EXTRACTION: 'Extracción',
-  MANUAL: 'Carga manual',
-};
+import { DataList, type Column } from '../components/DataList';
+import { ResourceNotices } from '../components/ResourceNotices';
+import { Fields, Form, FormError, buildBody, useForm, type FieldSpec } from '../components/Form';
+import type { Drum, Lot, LotInput, TimelineEvent } from '../lib/types';
 
 export const LotDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const { canWrite } = useAuth();
   const [addingDrum, setAddingDrum] = useState(false);
   const [addingSample, setAddingSample] = useState(false);
-  const [flash, setFlash] = useState<string | null>(null);
 
   const lot = useResource<Lot>(id ? `/lots/${id}` : null);
   const timeline = useResource<{ events: TimelineEvent[] }>(
     id ? `/traceability/timeline/lot/${id}` : null,
   );
 
-  if (lot.loading) return <Spinner label="Cargando lote…" />;
-  if (lot.error) return <Notice tone="danger">{lot.error}</Notice>;
+  if (lot.loading) {
+    return (
+      <div className="stack">
+        <PageHeader title="Lote" back={{ to: '/lots', label: 'Lotes' }} />
+        <Card flush>
+          <SkeletonList rows={4} />
+        </Card>
+      </div>
+    );
+  }
+
+  if (lot.error) {
+    return (
+      <div className="stack">
+        <PageHeader title="Lote" back={{ to: '/lots', label: 'Lotes' }} />
+        <ErrorNotice message={lot.error} onRetry={lot.reload} />
+      </div>
+    );
+  }
+
   if (!lot.data) return null;
 
   const data = lot.data;
   const summary = data.summary;
-  const drumCoverage =
+  const packed =
     summary && summary.quantity > 0
       ? Math.round((summary.netWeightInDrums / summary.quantity) * 100)
       : 0;
+  const withoutOrigin = data.inputs && data.inputs.length === 0;
+
+  const inputColumns: Column<LotInput>[] = [
+    {
+      key: 'source',
+      header: 'Origen',
+      role: 'title',
+      cell: (item) => (
+        <span className="row row-tight">
+          <Pill tone="info">{SOURCE_TYPES[item.sourceType] ?? item.sourceType}</Pill>
+          {item.sourceLotId && <Link to={`/lots/${item.sourceLotId}`}>ver lote</Link>}
+          {item.sourceMovementId && (
+            <Link to={`/movements/${item.sourceMovementId}`}>ver movimiento</Link>
+          )}
+        </span>
+      ),
+    },
+    {
+      key: 'quantity',
+      header: 'Cantidad',
+      align: 'right',
+      cell: (item) => formatQuantity(item.quantity, item.unit),
+    },
+  ];
+
+  const drumColumns: Column<Drum>[] = [
+    {
+      key: 'code',
+      header: 'Código',
+      role: 'title',
+      cell: (item) => <span className="mono">{item.code}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Estado',
+      role: 'status',
+      cell: (item) => <StatusPill status={item.status} />,
+    },
+    {
+      key: 'net',
+      header: 'Neto',
+      align: 'right',
+      cell: (item) => formatQuantity(item.netWeight, item.unit),
+    },
+    {
+      key: 'seal',
+      header: 'Precinto',
+      cell: (item) => <span className="mono">{item.sealNumber ?? '—'}</span>,
+    },
+  ];
 
   return (
     <div className="stack">
-      <div className="page-header">
-        <div>
-          <div className="row">
-            <h1 className="mono">{data.code}</h1>
-            <StatusBadge status={data.status} />
-            <Badge tone="accent">{humanize(data.lotType)}</Badge>
-          </div>
-          <p className="lead">
-            {data.honeyType ?? 'Sin clasificar'} · producido el {formatDate(data.productionDate)}
-          </p>
-        </div>
-        <div className="row">
-          <Link className="btn" to={`/trace/backward/lot/${data.id}`}>
-            ¿De dónde vino?
-          </Link>
-          <Link className="btn" to={`/trace/forward/lot/${data.id}`}>
-            ¿Dónde terminó?
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title={data.honeyType ?? 'Lote sin clasificar'}
+        code={data.code}
+        status={<StatusPill status={data.status} />}
+        sub={`${LOT_TYPES.label(data.lotType)} · producido el ${formatDate(data.productionDate)}`}
+        back={{ to: '/lots', label: 'Lotes' }}
+        actions={
+          <>
+            <ButtonLink to={`/trace/backward/lot/${data.id}`} icon="trace">
+              De dónde vino
+            </ButtonLink>
+            <ButtonLink to={`/trace/forward/lot/${data.id}`} icon="forward">
+              Dónde terminó
+            </ButtonLink>
+          </>
+        }
+      />
 
-      {flash && <Notice tone="ok">{flash}</Notice>}
+      <ResourceNotices resource={lot} />
 
-      {data.inputs && data.inputs.length === 0 && (
-        <Notice tone="warn">
-          Este lote no declara entradas: su origen no puede reconstruirse. La consulta de
-          trazabilidad lo reportará como hueco.
+      {withoutOrigin && (
+        <Notice tone="warning" title="Este lote no declara de qué se compone">
+          Su origen no puede reconstruirse: la consulta de trazabilidad lo va a reportar como hueco.
         </Notice>
       )}
 
-      <div className="grid cols-4">
+      <div className="grid c4">
         <Stat label="Cantidad" value={formatQuantity(data.quantity, data.unit)} />
         <Stat
           label="Disponible"
           value={formatQuantity(data.availableQuantity, data.unit)}
-          hint="lo no consumido por otros lotes"
+          hint="sin consumir por otros lotes"
+          help="availableQuantity"
         />
         <Stat
           label="Tambores"
           value={summary?.drumCount ?? 0}
-          hint={`${formatQuantity(summary?.netWeightInDrums, data.unit)} · ${drumCoverage}% del lote`}
+          hint={`${formatQuantity(summary?.netWeightInDrums, data.unit)} · ${packed} % envasado`}
+          help="drums"
         />
-        <Stat label="Humedad" value={data.moisturePercent ? `${data.moisturePercent} %` : '—'} />
+        <Stat
+          label="Humedad"
+          value={data.moisturePercent ? `${data.moisturePercent} %` : '—'}
+        />
       </div>
 
-      <div className="grid cols-2">
-        <Card
-          title="Composición"
-          actions={<span className="small muted">De qué se compone este lote</span>}
-        >
-          {data.inputs && data.inputs.length > 0 ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Origen</th>
-                    <th className="num">Cantidad</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.inputs.map((input) => (
-                    <tr key={input.id}>
-                      <td>
-                        <Badge tone="info">{SOURCE_LABEL[input.sourceType] ?? input.sourceType}</Badge>
-                        {input.sourceLotId && (
-                          <Link className="small" to={`/lots/${input.sourceLotId}`}>
-                            {' '}
-                            ver lote origen
-                          </Link>
-                        )}
-                        {input.sourceMovementId && (
-                          <Link className="small" to={`/movements/${input.sourceMovementId}`}>
-                            {' '}
-                            ver movimiento
-                          </Link>
-                        )}
-                      </td>
-                      <td className="num">{formatQuantity(input.quantity, input.unit)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="muted small">Sin entradas declaradas.</p>
-          )}
+      <div className="grid c2">
+        <Card title="De qué se compone" help="lotOrigin" flush>
+          <DataList
+            items={data.inputs ?? []}
+            columns={inputColumns}
+            rowKey={(item) => item.id}
+            empty={
+              <EmptyState
+                icon="warning"
+                title="Sin origen declarado"
+                description="No se registró de donde viene la miel de este lote."
+              />
+            }
+          />
         </Card>
 
         <Card
           title="Tambores"
+          help="drums"
           actions={
             canWrite && (
-              <button type="button" className="small primary" onClick={() => setAddingDrum(true)}>
+              <Button size="sm" variant="primary" icon="plus" onClick={() => setAddingDrum(true)}>
                 Registrar tambor
-              </button>
+              </Button>
             )
           }
+          flush
         >
-          {data.drums && data.drums.length > 0 ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Código</th>
-                    <th className="num">Neto</th>
-                    <th>Precinto</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.drums.map((drum) => (
-                    <tr key={drum.id}>
-                      <td className="mono">{drum.code}</td>
-                      <td className="num">{formatQuantity(drum.netWeight, drum.unit)}</td>
-                      <td className="small mono">{drum.sealNumber ?? '—'}</td>
-                      <td>
-                        <StatusBadge status={drum.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <Empty
-              title="Sin tambores"
-              description="El tambor es la unidad física; la suma de sus pesos netos no puede superar la cantidad del lote."
-            />
-          )}
+          <DataList
+            items={data.drums ?? []}
+            columns={drumColumns}
+            rowKey={(item) => item.id}
+            empty={
+              <EmptyState
+                icon="drums"
+                title="Todavía no hay tambores"
+                description="El tambor es la unidad física. La suma de los pesos netos no puede superar la cantidad del lote."
+                action={
+                  canWrite && (
+                    <Button variant="primary" icon="plus" onClick={() => setAddingDrum(true)}>
+                      Registrar el primero
+                    </Button>
+                  )
+                }
+              />
+            }
+          />
         </Card>
       </div>
 
@@ -187,9 +218,9 @@ export const LotDetailPage = () => {
         title="Historial"
         actions={
           canWrite && (
-            <button type="button" className="small" onClick={() => setAddingSample(true)}>
+            <Button size="sm" icon="document" onClick={() => setAddingSample(true)}>
               Registrar muestra
-            </button>
+            </Button>
           )
         }
       >
@@ -197,23 +228,26 @@ export const LotDetailPage = () => {
           <ul className="timeline">
             {timeline.data.events.map((event) => (
               <li key={event.id}>
-                <strong>{event.eventType}</strong>
-                <div className="when">Registrado {formatDateTime(event.recordedAt)}</div>
+                <div className="timeline-what">{eventLabel(event.eventType)}</div>
+                <div className="timeline-when">{formatDateTime(event.recordedAt)}</div>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="muted small">Sin eventos registrados.</p>
+          <EmptyState
+            icon="audit"
+            title="Sin eventos"
+            description="Cada acción sobre este lote va a quedar registrada acá."
+          />
         )}
       </Card>
 
       {addingDrum && (
-        <DrumModal
+        <DrumSheet
           lot={data}
           onClose={() => setAddingDrum(false)}
-          onDone={(message) => {
+          onDone={() => {
             setAddingDrum(false);
-            setFlash(message);
             lot.reload();
             timeline.reload();
           }}
@@ -221,12 +255,11 @@ export const LotDetailPage = () => {
       )}
 
       {addingSample && (
-        <SampleModal
+        <SampleSheet
           lot={data}
           onClose={() => setAddingSample(false)}
-          onDone={(message) => {
+          onDone={() => {
             setAddingSample(false);
-            setFlash(message);
             timeline.reload();
           }}
         />
@@ -235,133 +268,178 @@ export const LotDetailPage = () => {
   );
 };
 
-const DrumModal = ({
+/* =========================================================================
+   Tambor
+   ========================================================================= */
+
+const DrumSheet = ({
   lot,
   onClose,
   onDone,
 }: {
   lot: Lot;
   onClose: () => void;
-  onDone: (message: string) => void;
+  onDone: () => void;
 }) => {
-  const remaining =
-    Number(lot.quantity) - (lot.summary?.netWeightInDrums ?? 0);
+  const remaining = Number(lot.quantity) - (lot.summary?.netWeightInDrums ?? 0);
 
   const fields: FieldSpec[] = [
-    { name: 'code', label: 'Código', help: 'Si se omite, se genera automáticamente.' },
-    { name: 'netWeight', label: 'Peso neto (kg)', type: 'number', step: '0.001', required: true },
-    { name: 'tareWeight', label: 'Tara (kg)', type: 'number', step: '0.001' },
-    { name: 'grossWeight', label: 'Bruto (kg)', type: 'number', step: '0.001' },
+    {
+      name: 'netWeight',
+      label: 'Peso neto (kg)',
+      type: 'number',
+      step: '0.001',
+      min: '0',
+      required: true,
+      inputMode: 'decimal',
+      validate: (value) =>
+        Number(value) > remaining
+          ? `Quedan ${formatQuantity(remaining, lot.unit)} sin envasar en este lote.`
+          : null,
+    },
+    {
+      name: 'filledAt',
+      label: 'Fecha de llenado',
+      type: 'datetime-local',
+      required: true,
+      defaultValue: toLocalInput(),
+    },
+    {
+      name: 'code',
+      label: 'Código',
+      hint: 'Si lo dejas vacío, se genera solo.',
+    },
     { name: 'sealNumber', label: 'Precinto' },
-    { name: 'filledAt', label: 'Fecha de llenado', type: 'datetime-local', defaultValue: toLocalInput() },
+    { name: 'tareWeight', label: 'Tara (kg)', type: 'number', step: '0.001', inputMode: 'decimal' },
+    { name: 'grossWeight', label: 'Bruto (kg)', type: 'number', step: '0.001', inputMode: 'decimal' },
   ];
 
-  const { values, set } = useForm(fields);
+  const { values, set, blur, errors, setErrors, validateAll } = useForm(fields);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ title: string; detail?: string } | null>(null);
+  const feedback = useWriteFeedback();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!validateAll()) return;
+
     setBusy(true);
-    setError(null);
+    setFailure(null);
     try {
-      const body: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(values)) {
-        if (value === '') continue;
-        body[key] = /Weight$/.test(key)
-          ? Number(value)
-          : key === 'filledAt'
-            ? new Date(value).toISOString()
-            : value;
-      }
-      const result = await apiSend('POST', `/lots/${lot.id}/drums`, body, {
+      const result = await apiSend('POST', `/lots/${lot.id}/drums`, buildBody(values, fields), {
         label: `Tambor de ${values.netWeight} kg en ${lot.code}`,
         entity: '/lots',
       });
-      onDone(
-        result.queued ? 'Sin conexión: el tambor quedó en la cola.' : 'Tambor registrado.',
-      );
+      if (result.queued) feedback.queued('El tambor');
+      else feedback.saved('Tambor registrado', `${values.netWeight} kg en ${lot.code}`);
+      onDone();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'No se pudo registrar el tambor.');
+      const perField = fieldErrors(cause, fields.map((field) => field.name));
+      if (Object.keys(perField).length > 0) setErrors((current) => ({ ...current, ...perField }));
+      else {
+        const message = toUserMessage(cause, 'write');
+        setFailure({ title: message.title, detail: message.detail });
+      }
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal title={`Registrar tambor en ${lot.code}`} onClose={onClose}>
-      <Notice tone="info">
-        Quedan <strong>{formatQuantity(remaining, lot.unit)}</strong> del lote sin envasar. Si el
-        peso bruto y la tara están cargados, el neto debe coincidir con su diferencia.
+    <Sheet title="Registrar tambor" subtitle={`Lote ${lot.code}`} onClose={onClose}>
+      <Notice tone="info" title={`Quedan ${formatQuantity(remaining, lot.unit)} sin envasar`}>
+        Si cargás bruto y tara, el neto tiene que coincidir con la diferencia.
       </Notice>
-      <FormFields
-        fields={fields}
-        values={values}
-        onChange={set}
+      <Form
         onSubmit={submit}
+        error={failure && <FormError title={failure.title} detail={failure.detail} />}
         submitLabel="Registrar tambor"
+        busyLabel="Registrando…"
         onCancel={onClose}
         busy={busy}
-        error={error}
-      />
-    </Modal>
+      >
+        <Fields fields={fields} values={values} errors={errors} onChange={set} onBlur={blur} />
+      </Form>
+    </Sheet>
   );
 };
 
-const SampleModal = ({
+/* =========================================================================
+   Muestra
+   ========================================================================= */
+
+const SampleSheet = ({
   lot,
   onClose,
   onDone,
 }: {
   lot: Lot;
   onClose: () => void;
-  onDone: (message: string) => void;
+  onDone: () => void;
 }) => {
   const fields: FieldSpec[] = [
-    { name: 'takenAt', label: 'Fecha de toma', type: 'datetime-local', required: true, defaultValue: toLocalInput() },
+    {
+      name: 'takenAt',
+      label: 'Fecha de toma',
+      type: 'datetime-local',
+      required: true,
+      defaultValue: toLocalInput(),
+    },
     { name: 'takenBy', label: 'Tomada por' },
-    { name: 'analysisType', label: 'Análisis solicitado', full: true, placeholder: 'HMF, humedad y conductividad' },
+    {
+      name: 'analysisType',
+      label: 'Análisis solicitado',
+      full: true,
+      placeholder: 'HMF, humedad y conductividad',
+    },
     { name: 'notes', label: 'Observaciones', type: 'textarea', full: true },
   ];
 
-  const { values, set } = useForm(fields);
+  const { values, set, blur, errors, setErrors, validateAll } = useForm(fields);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ title: string; detail?: string } | null>(null);
+  const feedback = useWriteFeedback();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!validateAll()) return;
+
     setBusy(true);
-    setError(null);
+    setFailure(null);
     try {
-      const body: Record<string, unknown> = { lotId: lot.id };
-      for (const [key, value] of Object.entries(values)) {
-        if (value === '') continue;
-        body[key] = key === 'takenAt' ? new Date(value).toISOString() : value;
-      }
-      const result = await apiSend('POST', '/samples', body, {
-        label: `Muestra del lote ${lot.code}`,
-        entity: '/lots',
-      });
-      onDone(result.queued ? 'Sin conexión: la muestra quedó en la cola.' : 'Muestra registrada.');
+      const result = await apiSend(
+        'POST',
+        '/samples',
+        { lotId: lot.id, ...buildBody(values, fields) },
+        { label: `Muestra del lote ${lot.code}`, entity: '/lots' },
+      );
+      if (result.queued) feedback.queued('La muestra');
+      else feedback.saved('Muestra registrada', lot.code);
+      onDone();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'No se pudo registrar la muestra.');
+      const perField = fieldErrors(cause, fields.map((field) => field.name));
+      if (Object.keys(perField).length > 0) setErrors((current) => ({ ...current, ...perField }));
+      else {
+        const message = toUserMessage(cause, 'write');
+        setFailure({ title: message.title, detail: message.detail });
+      }
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal title={`Registrar muestra del lote ${lot.code}`} onClose={onClose}>
-      <FormFields
-        fields={fields}
-        values={values}
-        onChange={set}
+    <Sheet title="Registrar muestra" subtitle={`Lote ${lot.code}`} onClose={onClose}>
+      <Form
         onSubmit={submit}
+        error={failure && <FormError title={failure.title} detail={failure.detail} />}
         submitLabel="Registrar muestra"
+        busyLabel="Registrando…"
         onCancel={onClose}
         busy={busy}
-        error={error}
-      />
-    </Modal>
+      >
+        <Fields fields={fields} values={values} errors={errors} onChange={set} onBlur={blur} />
+      </Form>
+    </Sheet>
   );
 };

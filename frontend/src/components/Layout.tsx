@@ -1,248 +1,130 @@
-import { useState, useEffect, useMemo, type ReactNode } from 'react';
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useSync } from '../lib/sync';
 import { formatRelative } from '../lib/format';
-import { Badge } from './ui';
+import { itemLabel, navFor, quickNavFor, type NavItem } from '../lib/nav';
+import { roleLabel } from '../lib/vocabulary';
+import { Icon, Logo } from './Icon';
+import { Button, HelpTip, Sheet } from './ui';
 import { InstallPrompt } from './InstallPrompt';
-import type { UserRole } from '../lib/types';
 
-const Logo = () => (
-  <svg width="24" height="24" viewBox="0 0 64 64" aria-hidden="true">
-    <rect width="64" height="64" rx="14" fill="var(--accent)" />
-    <g fill="none" stroke="var(--accent-contrast)" strokeWidth="3" strokeLinejoin="round">
-      <path d="M32 12l7 4v8l-7 4-7-4v-8z" />
-      <path d="M18 34l7 4v8l-7 4-7-4v-8z" />
-      <path d="M46 34l7 4v8l-7 4-7-4v-8z" />
-    </g>
-    <path
-      d="M32 32l7 4v8l-7 4-7-4v-8z"
-      fill="var(--text)"
-      stroke="var(--accent-contrast)"
-      strokeWidth="3"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
+/* =========================================================================
+   Estado de los datos — un solo lugar
+   ========================================================================= */
 
-const Icons = {
-  dashboard: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect width="7" height="9" x="3" y="3" rx="1" />
-      <rect width="7" height="5" x="14" y="3" rx="1" />
-      <rect width="7" height="9" x="14" y="12" rx="1" />
-      <rect width="7" height="5" x="3" y="16" rx="1" />
-    </svg>
-  ),
-  trace: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="6" cy="6" r="3" />
-      <circle cx="6" cy="18" r="3" />
-      <line x1="6" y1="9" x2="6" y2="15" />
-      <path d="M18 9a9 9 0 0 1-9 9" />
-      <circle cx="18" cy="9" r="3" />
-    </svg>
-  ),
-  producers: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  ),
-  establishments: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
-  ),
-  apiaries: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2l8 4.5v9L12 20l-8-4.5v-9L12 2z" />
-      <path d="M12 12l8-4.5" />
-      <path d="M12 12v8" />
-      <path d="M12 12L4 7.5" />
-    </svg>
-  ),
-  movements: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" />
-      <path d="M15 18H9" />
-      <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14" />
-      <circle cx="17" cy="18" r="2" />
-      <circle cx="7" cy="18" r="2" />
-    </svg>
-  ),
-  extractions: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" />
-    </svg>
-  ),
-  lots: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
-      <path d="m22 12.5-8.58 3.91a2 2 0 0 1-1.66 0L2.6 12.5" />
-      <path d="m22 17.5-8.58 3.91a2 2 0 0 1-1.66 0L2.6 17.5" />
-    </svg>
-  ),
-  drums: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <ellipse cx="12" cy="5" rx="9" ry="3" />
-      <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" />
-      <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3" />
-    </svg>
-  ),
-  rules: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
-      <path d="m9 12 2 2 4-4" />
-    </svg>
-  ),
-  audit: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
-      <polyline points="10 9 9 9 8 9" />
-    </svg>
-  ),
-  pending: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-    </svg>
-  ),
-  menu: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="4" x2="20" y1="12" y2="12" />
-      <line x1="4" x2="20" y1="6" y2="6" />
-      <line x1="4" x2="20" y1="18" y2="18" />
-    </svg>
-  ),
-  close: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </svg>
-  ),
+/**
+ * Antes el estado de conexión se repetia en tres sitios (barra, insignia del
+ * encabezado y contador del menu) y aun así no quedaba claro que pasaba con lo
+ * registrado. Aca hay cuatro situaciones y una sola barra, y solo la última
+ * interrumpe, porque es la única que necesita a una persona.
+ */
+const SyncBar = () => {
+  const { online, syncing, pendingCount, failedCount, flush } = useSync();
+  const navigate = useNavigate();
+
+  if (failedCount > 0) {
+    return (
+      <div className="statusbar statusbar-failed">
+        <Icon name="danger" size={16} />
+        <span>
+          {failedCount === 1
+            ? '1 operación necesita tu revisión'
+            : `${failedCount} operaciones necesitan tu revisión`}
+        </span>
+        <Button size="sm" variant="ghost" onClick={() => navigate('/pending')}>
+          Revisar
+        </Button>
+      </div>
+    );
+  }
+
+  if (!online) {
+    return (
+      <div className="statusbar statusbar-offline">
+        <Icon name="offline" size={16} />
+        <span>Sin conexión. Podés seguir trabajando.</span>
+        <HelpTip topic="offline" />
+      </div>
+    );
+  }
+
+  if (syncing) {
+    return (
+      <div className="statusbar statusbar-syncing">
+        <span className="spinner" aria-hidden="true" />
+        <span>Enviando lo que quedó pendiente…</span>
+      </div>
+    );
+  }
+
+  if (pendingCount > 0) {
+    return (
+      <div className="statusbar statusbar-syncing">
+        <Icon name="sync" size={16} />
+        <span>
+          {pendingCount === 1 ? '1 operación por enviar' : `${pendingCount} operaciones por enviar`}
+        </span>
+        <Button size="sm" variant="ghost" onClick={() => void flush()}>
+          Enviar ahora
+        </Button>
+      </div>
+    );
+  }
+
+  return null;
 };
 
-interface NavItem {
-  to: string;
-  label: string | ((role?: UserRole) => string);
-  icon: ReactNode;
-  end?: boolean;
-  roles?: UserRole[];
-}
+/* =========================================================================
+   Datos de la sesión
+   ========================================================================= */
 
-interface NavSection {
-  section: string;
-  items: NavItem[];
-}
+const initials = (fullName: string): string =>
+  fullName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
 
-const ROLE_NAMES: Record<UserRole, string> = {
-  ADMIN: 'Administrador',
-  PRODUCTOR: 'Productor',
-  SALA: 'Sala de extracción',
-  ACOPIADOR: 'Acopiador',
-  FRACCIONADOR: 'Fraccionador',
-  TRANSPORTISTA: 'Transportista',
-  LABORATORIO: 'Laboratorio',
-  EXPORTADOR: 'Exportador',
-  AUDITOR: 'Auditor SENASA',
-  CONSULTA: 'Consulta',
+const AccountBlock = ({ onLogout }: { onLogout: () => void }) => {
+  const { user } = useAuth();
+  const { lastSyncAt } = useSync();
+  if (!user) return null;
+
+  return (
+    <div className="sidebar-footer">
+      <span className="avatar" aria-hidden="true">
+        {initials(user.fullName)}
+      </span>
+      <div className="grow" style={{ minWidth: 0 }}>
+        <div className="small truncate" style={{ fontWeight: 650 }}>
+          {user.fullName}
+        </div>
+        <div className="xs faint truncate">
+          {roleLabel(user.role)} · al día {formatRelative(lastSyncAt)}
+        </div>
+      </div>
+      <Button variant="ghost" className="btn-icon" onClick={onLogout} aria-label="Cerrar sesión">
+        <Icon name="logout" size={18} />
+      </Button>
+    </div>
+  );
 };
 
-const NAV: NavSection[] = [
-  {
-    section: 'Trazabilidad',
-    items: [
-      { to: '/', label: 'Panel', icon: Icons.dashboard, end: true },
-      { to: '/trace', label: 'Consultar trazabilidad', icon: Icons.trace },
-    ],
-  },
-  {
-    section: 'Registros',
-    items: [
-      {
-        to: '/producers',
-        label: (role) => (role === 'PRODUCTOR' ? 'Mi RENAPA' : 'Productores'),
-        icon: Icons.producers,
-        roles: ['ADMIN', 'PRODUCTOR', 'AUDITOR'],
-      },
-      {
-        to: '/establishments',
-        label: 'Establecimientos',
-        icon: Icons.establishments,
-        roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'AUDITOR'],
-      },
-      {
-        to: '/apiaries',
-        label: 'Apiarios',
-        icon: Icons.apiaries,
-        roles: ['ADMIN', 'PRODUCTOR', 'AUDITOR'],
-      },
-    ],
-  },
-  {
-    section: 'Operación',
-    items: [
-      {
-        to: '/movements',
-        label: 'Movimientos',
-        icon: Icons.movements,
-        roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'TRANSPORTISTA', 'AUDITOR'],
-      },
-      {
-        to: '/extractions',
-        label: 'Extracciones',
-        icon: Icons.extractions,
-        roles: ['ADMIN', 'SALA', 'ACOPIADOR', 'AUDITOR'],
-      },
-      {
-        to: '/lots',
-        label: 'Lotes',
-        icon: Icons.lots,
-        roles: ['ADMIN', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'LABORATORIO', 'AUDITOR'],
-      },
-      {
-        to: '/drums',
-        label: 'Tambores',
-        icon: Icons.drums,
-        roles: ['ADMIN', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'EXPORTADOR', 'AUDITOR'],
-      },
-    ],
-  },
-  {
-    section: 'Control',
-    items: [
-      {
-        to: '/rules',
-        label: 'Reglas documentales',
-        icon: Icons.rules,
-        roles: ['ADMIN', 'AUDITOR'],
-      },
-      {
-        to: '/audit',
-        label: 'Auditoría',
-        icon: Icons.audit,
-        roles: ['ADMIN', 'AUDITOR'],
-      },
-    ],
-  },
-];
+/* =========================================================================
+   Composicion
+   ========================================================================= */
 
 export const Layout = () => {
   const { user, logout } = useAuth();
-  const { online, syncing, pendingCount, failedCount, lastSyncAt, flush } = useSync();
+  const { pendingCount, failedCount } = useSync();
   const navigate = useNavigate();
   const location = useLocation();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
-  // Cerrar el menú móvil automáticamente al navegar
   useEffect(() => {
-    setMobileMenuOpen(false);
+    setMoreOpen(false);
   }, [location.pathname]);
 
   const handleLogout = async () => {
@@ -250,162 +132,133 @@ export const Layout = () => {
     navigate('/login', { replace: true });
   };
 
-  const filteredNav = useMemo(() => {
-    if (!user) return [];
-    return NAV.map((group) => {
-      const visibleItems = group.items.filter(
-        (item) => !item.roles || item.roles.includes(user.role) || user.role === 'ADMIN',
-      );
-      return {
-        ...group,
-        items: visibleItems,
-      };
-    }).filter((group) => group.items.length > 0);
-  }, [user]);
+  if (!user) return null;
 
-  const formatRoleName = (role?: UserRole): string => {
-    if (!role) return '—';
-    return ROLE_NAMES[role] ?? role;
-  };
+  const groups = navFor(user.role);
+  const quick = quickNavFor(user.role);
+  const quickPaths = new Set(quick.map((item) => item.to));
+  const rest = groups
+    .map((group) => ({ ...group, items: group.items.filter((item) => !quickPaths.has(item.to)) }))
+    .filter((group) => group.items.length > 0);
 
-  const getItemLabel = (item: NavItem): string => {
-    if (typeof item.label === 'function') {
-      return item.label(user?.role);
-    }
-    return item.label;
-  };
+  const queueCount = pendingCount + failedCount;
+  const renderNavLink = (item: NavItem) => (
+    <NavLink
+      key={item.to}
+      to={item.to}
+      end={item.end}
+      className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+    >
+      <Icon name={item.icon} size={18} />
+      <span className="nav-text">{itemLabel(item, user.role)}</span>
+      {item.to === '/pending' && queueCount > 0 && (
+        <span className={failedCount > 0 ? 'pill pill-danger' : 'pill pill-warning'}>
+          {queueCount}
+        </span>
+      )}
+    </NavLink>
+  );
 
   return (
     <div className="app">
-      {/* Backdrop oscuro para móvil cuando el menú está abierto */}
-      {mobileMenuOpen && (
-        <div
-          className="sidebar-backdrop"
-          onClick={() => setMobileMenuOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      <aside className={`sidebar ${mobileMenuOpen ? 'open' : ''}`}>
+      {/* --------------------------------------------- escritorio: lateral */}
+      <aside className="sidebar">
         <div className="brand">
-          <div className="row" style={{ gap: '0.6rem', alignItems: 'center' }}>
-            <Logo />
-            <span>ApiTrace</span>
-          </div>
-          <button
-            type="button"
-            className="mobile-close-btn ghost icon-only"
-            onClick={() => setMobileMenuOpen(false)}
-            aria-label="Cerrar menú"
-          >
-            {Icons.close}
-          </button>
+          <Logo size={28} />
+          <span>ApiTrace</span>
         </div>
-
-        <nav className="nav">
-          {filteredNav.map((group) => (
-            <div key={group.section}>
-              <div className="nav-section">{group.section}</div>
-              {group.items.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end}
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <span className="nav-item-content">
-                    <span className="nav-icon">{item.icon}</span>
-                    <span className="nav-label">{getItemLabel(item)}</span>
-                  </span>
-                </NavLink>
-              ))}
+        <nav className="nav" aria-label="Secciones">
+          {groups.map((group) => (
+            <div className="nav-group" key={group.group}>
+              <div className="nav-group-label">{group.group}</div>
+              {group.items.map(renderNavLink)}
             </div>
           ))}
-          <div>
-            <div className="nav-section">Sincronización</div>
-            <NavLink to="/pending" onClick={() => setMobileMenuOpen(false)}>
-              <span className="nav-item-content">
-                <span className="nav-icon">{Icons.pending}</span>
-                <span className="nav-label">Pendientes</span>
-              </span>
-              {pendingCount + failedCount > 0 && (
-                <Badge tone={failedCount > 0 ? 'danger' : 'warn'}>
-                  {pendingCount + failedCount}
-                </Badge>
-              )}
-            </NavLink>
+          <div style={{ padding: 'var(--sp-3) var(--sp-3) 0' }}>
+            <InstallPrompt />
           </div>
         </nav>
-
-        <div className="sidebar-footer">
-          <div className="small">
-            <strong>{user?.fullName}</strong>
-          </div>
-          <div className="small faint">
-            {formatRoleName(user?.role)} · sinc. {formatRelative(lastSyncAt)}
-          </div>
-        </div>
+        <AccountBlock onLogout={() => void handleLogout()} />
       </aside>
 
       <div className="main">
-        {!online && (
-          <div className="offline-bar">
-            <span className="badge danger">
-              <span className="dot" /> Sin conexión
-            </span>
-            Trabajando con datos locales. Lo que registres se enviará al recuperar señal.
-          </div>
-        )}
-        {online && syncing && (
-          <div className="offline-bar syncing">
-            <span className="spinner" aria-hidden="true" />
-            Sincronizando operaciones pendientes…
-          </div>
-        )}
+        <SyncBar />
 
-        <header className="topbar">
-          <button
-            type="button"
-            className="menu-toggle ghost icon-only"
-            onClick={() => setMobileMenuOpen((prev) => !prev)}
-            aria-label="Abrir menú de navegación"
-          >
-            {Icons.menu}
-          </button>
-
-          <div className="mobile-brand">
-            <Logo />
-            <span>ApiTrace</span>
-          </div>
-
-          <InstallPrompt />
-          <div className="spacer" />
-
-          {online ? (
-            <Badge tone="ok">
-              <span className="dot" /> <span className="hide-on-mobile">En línea</span>
-            </Badge>
-          ) : (
-            <Badge tone="danger">
-              <span className="dot" /> <span className="hide-on-mobile">Offline</span>
-            </Badge>
-          )}
-
-          {(pendingCount > 0 || failedCount > 0) && online && (
-            <button type="button" className="small" onClick={() => void flush()} disabled={syncing}>
-              Sincronizar
-            </button>
-          )}
-
-          <button type="button" className="ghost small" onClick={() => void handleLogout()}>
-            Salir
-          </button>
-        </header>
-
-        <main className="content">
+        {/*
+          En el telefono no hay barra superior: el titulo ya lo da el encabezado
+          de cada pagina y la barra inferior dice donde esta el usuario. Quitarla
+          devuelve 56 px de alto util en cada pantalla, que en un movil valen mas
+          que repetir el nombre de la seccion dos veces.
+        */}
+        <main className="content" id="contenido">
           <Outlet />
         </main>
       </div>
+
+      {/* ------------------------------------------------ movil: pestanas */}
+      <nav className="tabbar" aria-label="Navegacion principal">
+        {quick.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
+          >
+            <Icon name={item.icon} size={21} />
+            <span className="tab-label">{itemLabel(item, user.role)}</span>
+          </NavLink>
+        ))}
+        <button
+          type="button"
+          className={moreOpen ? 'tab active' : 'tab'}
+          onClick={() => setMoreOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={moreOpen}
+        >
+          <Icon name="more" size={21} />
+          <span className="tab-label">Más</span>
+          {!quickPaths.has('/pending') && queueCount > 0 && (
+            <span className="tab-badge" aria-hidden="true">
+              {queueCount}
+            </span>
+          )}
+        </button>
+      </nav>
+
+      {moreOpen && (
+        <Sheet title="Todas las secciones" onClose={() => setMoreOpen(false)}>
+          <nav aria-label="Más secciones">
+            {rest.map((group) => (
+              <div className="nav-group" key={group.group} style={{ marginBottom: 'var(--sp-4)' }}>
+                <div className="nav-group-label">{group.group}</div>
+                {group.items.map(renderNavLink)}
+              </div>
+            ))}
+          </nav>
+          <div
+            style={{
+              borderTop: '1px solid var(--border)',
+              marginTop: 'var(--sp-2)',
+              paddingTop: 'var(--sp-4)',
+            }}
+          >
+            <div className="row-between">
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 650 }} className="truncate">
+                  {user.fullName}
+                </div>
+                <div className="small faint">{roleLabel(user.role)}</div>
+              </div>
+              <div className="row row-tight">
+                <InstallPrompt />
+                <Button variant="secondary" icon="logout" onClick={() => void handleLogout()}>
+                  Salir
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Sheet>
+      )}
     </div>
   );
 };
