@@ -18,7 +18,7 @@ export type Database = NodePgDatabase<typeof schema>;
       useFactory: (config: ConfigService) => {
         const url = config.getOrThrow<string>('database.url');
         const ssl = config.get<boolean>('database.ssl');
-        return new Pool({
+        const pool = new Pool({
           connectionString: url,
           max: config.get<number>('database.poolMax') ?? 10,
           ssl: ssl ? { rejectUnauthorized: false } : undefined,
@@ -30,6 +30,15 @@ export type Database = NodePgDatabase<typeof schema>;
           // y el siguiente request falla en lugar de reconectar.
           keepAlive: true,
         });
+
+        const poolLogger = new Logger('PgPool');
+        pool.on('error', (err) => {
+          poolLogger.warn(
+            `Conexión inactiva de PostgreSQL reiniciada por el proveedor: ${err.message}`,
+          );
+        });
+
+        return pool;
       },
     },
     {

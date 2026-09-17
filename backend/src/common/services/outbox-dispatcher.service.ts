@@ -119,6 +119,10 @@ export class OutboxDispatcher implements OnModuleInit, OnModuleDestroy {
         }
       }
       return rows.length;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Error al consultar outbox_event (se reintentará): ${msg}`);
+      return 0;
     } finally {
       this.running = false;
     }
