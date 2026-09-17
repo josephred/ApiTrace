@@ -14,7 +14,7 @@ const AccessDenied = ({ allowedRoles, role }: { allowedRoles: UserRole[]; role: 
   <Card>
     <EmptyState
       icon="lock"
-      title="Esta sección no esta disponible para tu rol"
+      title="Esta sección no está disponible para tu rol"
       description={`Entraste como ${roleLabel(role)}. Pueden verla: ${allowedRoles
         .map(roleLabel)
         .join(', ')}.`}

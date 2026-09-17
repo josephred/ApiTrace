@@ -249,7 +249,7 @@ export const TracePage = () => {
                 ))}
               </div>
               <p className="small muted" style={{ marginTop: 'var(--sp-3)' }}>
-                La trazabilidad real rara vez esta completa. El sistema prefiere decir qué falta
+                La trazabilidad real rara vez está completa. El sistema prefiere decir qué falta
                 antes que mostrar la cadena como si estuviera cerrada.
               </p>
             </Card>

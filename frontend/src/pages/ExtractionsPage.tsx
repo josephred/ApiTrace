@@ -212,7 +212,7 @@ const NewExtractionWizard = ({
     if (!value) return true;
     const parsed = Number(value);
     if (Number.isNaN(parsed) || parsed < 0) {
-      setOutputError('Escribí una cantidad valida.');
+      setOutputError('Escribí una cantidad válida.');
       return false;
     }
     if (parsed > totalInput) {

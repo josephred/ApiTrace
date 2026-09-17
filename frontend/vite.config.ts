@@ -60,7 +60,12 @@ export default defineConfig({
     port: 5173,
     proxy: {
       // En desarrollo se evita CORS enviando /api al backend local.
-      '/api': { target: 'http://localhost:3000', changeOrigin: true },
+      //
+      // La clave es una expresion regular y no el prefijo '/api' porque Vite
+      // compara por prefijo: '/api' tambien capturaba '/apiaries', de modo que
+      // recargar esa ruta devolvia una respuesta vacia en lugar de la
+      // aplicacion. Exigir la barra deja fuera las rutas del enrutador.
+      '^/api/': { target: 'http://localhost:3000', changeOrigin: true },
     },
   },
   // El mismo proxy en `preview` permite probar el build de produccion, con su
@@ -68,7 +73,7 @@ export default defineConfig({
   preview: {
     port: 4173,
     proxy: {
-      '/api': { target: 'http://localhost:3000', changeOrigin: true },
+      '^/api/': { target: 'http://localhost:3000', changeOrigin: true },
     },
   },
   build: {

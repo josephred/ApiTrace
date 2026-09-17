@@ -474,12 +474,26 @@ a:hover { text-decoration: underline; }
 .statusbar-offline { background: var(--warning-bg); color: var(--warning-fg); border-color: var(--warning-br); }
 .statusbar-syncing { background: var(--info-bg);    color: var(--info-fg);    border-color: var(--info-br); }
 .statusbar-failed  { background: var(--danger-bg);  color: var(--danger-fg);  border-color: var(--danger-br); }
+.statusbar-update  { background: var(--primary-soft); color: var(--primary-soft-fg); border-color: var(--primary-soft-br); }
+.statusbar-ready   { background: var(--success-bg); color: var(--success-fg); border-color: var(--success-br); }
+.statusbar-dismiss {
+  background: none; border: none; cursor: pointer; color: inherit;
+  padding: var(--sp-1); border-radius: var(--r-sm); display: inline-flex; opacity: 0.7;
+}
+.statusbar-dismiss:hover { opacity: 1; }
 .statusbar a, .statusbar .btn { color: inherit; }
 
 /* ========================================================================
    Avisos flotantes
    ======================================================================== */
 
+/*
+   Avisos flotantes.
+   Regla dura: un aviso NUNCA bloquea lo que tiene debajo. Solo sus propios
+   controles reciben el toque; el resto lo deja pasar. Sin esto, un aviso que
+   cae encima del boton principal de una hoja lo vuelve intocable hasta que se
+   cierra solo, y el usuario no entiende por que su toque no hace nada.
+*/
 .toast-region {
   position: fixed;
   z-index: 200;
@@ -489,11 +503,11 @@ a:hover { text-decoration: underline; }
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  width: min(440px, calc(100vw - var(--sp-8)));
+  width: min(420px, calc(100vw - var(--sp-8)));
   pointer-events: none;
 }
 .toast {
-  pointer-events: auto;
+  pointer-events: none;
   display: flex;
   align-items: flex-start;
   gap: var(--sp-3);
@@ -509,6 +523,8 @@ a:hover { text-decoration: underline; }
 .toast-info    { background: var(--info-bg);    color: var(--info-fg);    border-color: var(--info-br); }
 .toast-warning { background: var(--warning-bg); color: var(--warning-fg); border-color: var(--warning-br); }
 .toast-danger  { background: var(--danger-bg);  color: var(--danger-fg);  border-color: var(--danger-br); }
+.toast a,
+.toast button { pointer-events: auto; }
 .toast a { color: inherit; text-decoration: underline; font-weight: 650; }
 .toast-close {
   background: none; border: none; cursor: pointer; color: inherit;

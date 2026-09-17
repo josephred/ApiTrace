@@ -368,3 +368,77 @@ export const HELP: Record<string, HelpEntry> = {
     body: 'Cada operación viaja con una clave generada en tu dispositivo. Si el envío llegó pero se perdió la respuesta, el reintento usa la misma clave y el servidor lo reconoce.',
   },
 };
+
+// ---------------------------------------------------------------------------
+// Atributos de los nodos del grafo de trazabilidad
+// ---------------------------------------------------------------------------
+
+/**
+ * El backend devuelve los atributos de cada nodo con el nombre del campo del
+ * modelo, en ingles. Mostrarlos tal cual era la unica parte de la aplicacion
+ * que no hablaba el idioma del usuario (hallazgo H-04 de la guia de pantallas).
+ */
+const NODE_ATTRS: Record<string, string> = {
+  code: 'Código',
+  name: 'Nombre',
+  label: 'Etiqueta',
+  status: 'Estado',
+  syncStatus: 'Envío a SIGSA',
+  type: 'Tipo',
+  number: 'Número',
+  businessName: 'Razón social',
+  personType: 'Tipo de persona',
+  taxId: 'CUIT',
+  locality: 'Localidad',
+  province: 'Provincia',
+  address: 'Domicilio',
+  latitude: 'Latitud',
+  longitude: 'Longitud',
+  rne: 'RNE',
+  activity: 'Actividad',
+  hiveCount: 'Colmenas',
+  establishmentName: 'Establecimiento',
+  movementType: 'Tipo de traslado',
+  materialType: 'Material',
+  quantity: 'Cantidad',
+  unit: 'Unidad',
+  scheduledAt: 'Fecha del traslado',
+  dispatchedAt: 'Despachado',
+  receivedAt: 'Recibido',
+  issuedAt: 'Emitido',
+  closedAt: 'Cerrado',
+  requiresDocument: 'Exige documento',
+  requiredDocumentType: 'Documento exigido',
+  originRenspa: 'RENSPA origen',
+  destinationRenspa: 'RENSPA destino',
+  receivedQuantity: 'Cantidad recibida',
+  hasDiscrepancy: 'Con diferencia',
+  discrepancyNotes: 'Motivo de la diferencia',
+  result: 'Resultado',
+  startedAt: 'Inicio',
+  finishedAt: 'Fin',
+  inputQuantity: 'Ingresado',
+  outputQuantity: 'Obtenido',
+  operatorName: 'Operario',
+  lotType: 'Tipo de lote',
+  productionDate: 'Fecha de producción',
+  availableQuantity: 'Disponible',
+  honeyType: 'Tipo de miel',
+  moisturePercent: 'Humedad (%)',
+  color: 'Color',
+  netWeight: 'Peso neto',
+  tareWeight: 'Tara',
+  grossWeight: 'Peso bruto',
+  sealNumber: 'Precinto',
+  filledAt: 'Fecha de llenado',
+  registeredAt: 'Registrado',
+  depth: 'Profundidad en la cadena',
+  organizationId: 'Organización',
+};
+
+export const nodeAttrLabel = (key: string): string =>
+  NODE_ATTRS[key] ?? humanizeCode(key.replace(/([A-Z])/g, ' $1'));
+
+/** Campos cuyo valor es un estado del dominio y debe traducirse tambien. */
+export const isStatusAttr = (key: string): boolean =>
+  key === 'status' || key === 'syncStatus' || key === 'result';

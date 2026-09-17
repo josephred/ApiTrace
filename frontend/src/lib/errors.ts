@@ -23,7 +23,7 @@ export interface UserMessage {
  */
 const KNOWN: { match: RegExp; message: UserMessage }[] = [
   {
-    match: /no tiene una organización asignada|sin organización/i,
+    match: /no tiene una organizaci[oó]n asignada|sin organizaci[oó]n/i,
     message: {
       title: 'Tu usuario todavía no puede operar',
       detail: 'No tiene una organización asignada. Pedile a un administrador que te asigne una.',
@@ -35,7 +35,7 @@ const KNOWN: { match: RegExp; message: UserMessage }[] = [
     match: /credenciales|invalid credentials|contrase(n|ñ)a incorrecta/i,
     message: {
       title: 'Correo o contraseña incorrectos',
-      detail: 'Revisá los datos e intenta de nuevo.',
+      detail: 'Revisá los datos e intentá de nuevo.',
       tone: 'danger',
       retryable: true,
     },
@@ -53,15 +53,15 @@ const KNOWN: { match: RegExp; message: UserMessage }[] = [
     match: /requires document|requiere documento|sin dt-?e/i,
     message: {
       title: 'Falta el documento del traslado',
-      detail: 'Registra el DT-e antes de despachar este movimiento.',
+      detail: 'Registrá el DT-e antes de despachar este movimiento.',
       tone: 'warning',
       retryable: false,
     },
   },
   {
-    match: /already consumed|ya fue procesad|ya consumid/i,
+    match: /already consumed|ya fue procesad|ya consumid|ya se proces/i,
     message: {
-      title: 'Ese movimiento ya se proceso',
+      title: 'Ese movimiento ya se procesó',
       detail: 'Un movimiento recibido solo puede alimentar una extracción.',
       tone: 'warning',
       retryable: false,
@@ -77,10 +77,10 @@ const KNOWN: { match: RegExp; message: UserMessage }[] = [
     },
   },
   {
-    match: /invalid state|estado inválido|transition/i,
+    match: /invalid state|estado inv[aá]lido|transition/i,
     message: {
       title: 'Esa acción no corresponde ahora',
-      detail: 'El estado del registro cambió. Actualizá la pantalla y volve a intentar.',
+      detail: 'El estado del registro cambió. Actualizá la pantalla y volvé a intentar.',
       tone: 'warning',
       retryable: true,
     },
@@ -95,7 +95,7 @@ const BY_STATUS: Record<number, UserMessage> = {
     retryable: false,
   },
   401: {
-    title: 'Tu sesión vencio',
+    title: 'Tu sesión venció',
     detail: 'Volvé a iniciar sesión para continuar.',
     tone: 'warning',
     retryable: false,
@@ -126,7 +126,7 @@ const BY_STATUS: Record<number, UserMessage> = {
   },
   429: {
     title: 'Demasiados intentos seguidos',
-    detail: 'Esperá un momento y volve a intentar.',
+    detail: 'Esperá un momento y volvé a intentar.',
     tone: 'warning',
     retryable: true,
   },
@@ -143,7 +143,7 @@ const BY_STATUS: Record<number, UserMessage> = {
     retryable: true,
   },
   503: {
-    title: 'El servicio esta en mantenimiento',
+    title: 'El servicio está en mantenimiento',
     detail: 'Probá de nuevo en unos minutos.',
     tone: 'danger',
     retryable: true,
@@ -243,9 +243,9 @@ const translateValidation = (line: string, field: string): string => {
     [/should not be empty|must not be empty|is required/i, 'Completá este campo.'],
     [/must be a (positive )?number|must be a number/i, 'Tiene que ser un número.'],
     [/must be a positive/i, 'Tiene que ser mayor que cero.'],
-    [/must be an email/i, 'Escribí un correo valido.'],
-    [/must be a valid (ISO ?8601 )?date|must be a Date/i, 'Elegí una fecha valida.'],
-    [/must be a UUID/i, 'El identificador no es valido.'],
+    [/must be an email/i, 'Escribí un correo válido.'],
+    [/must be a valid (ISO ?8601 )?date|must be a Date/i, 'Elegí una fecha válida.'],
+    [/must be a UUID/i, 'El identificador no es válido.'],
     [/must be longer than or equal to (\d+)/i, 'Es demasiado corto.'],
     [/must be shorter than or equal to (\d+)/i, 'Es demasiado largo.'],
     [/must be one of/i, 'Elegí una de las opciones.'],

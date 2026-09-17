@@ -3,7 +3,6 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './lib/auth';
 import { Layout } from './components/Layout';
 import { RoleRoute } from './components/RoleRoute';
-import { UpdatePrompt } from './components/UpdatePrompt';
 import { Logo } from './components/Icon';
 import { SkeletonList } from './components/ui';
 import { LoginPage } from './pages/LoginPage';
@@ -62,8 +61,7 @@ export const App = () => {
   if (!ready) return <Booting />;
 
   return (
-    <>
-      <Routes>
+    <Routes>
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
         <Route element={user ? <Layout /> : <Navigate to="/login" replace />}>
           <Route
@@ -214,8 +212,6 @@ export const App = () => {
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
-      </Routes>
-      <UpdatePrompt />
-    </>
+    </Routes>
   );
 };

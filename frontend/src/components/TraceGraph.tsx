@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TraceEdge, TraceNode, TraceNodeType, TraceResult } from '../lib/types';
 import { formatDateTime } from '../lib/format';
-import { humanizeCode } from '../lib/vocabulary';
+import { isStatusAttr, nodeAttrLabel, statusInfo } from '../lib/vocabulary';
 import { Button, Pill, SummaryList } from './ui';
 
 /**
@@ -294,15 +294,17 @@ export const TraceGraph = ({ result }: { result: TraceResult }) => {
               rows={Object.entries(selected.attributes)
                 .filter(([, value]) => value !== null && value !== undefined && value !== '')
                 .map(([key, value]) => ({
-                  key: humanizeCode(key.replace(/([A-Z])/g, ' $1')),
+                  key: nodeAttrLabel(key),
                   value:
                     typeof value === 'boolean'
                       ? value
                         ? 'Sí'
                         : 'No'
-                      : /At$|Date$/.test(key)
-                        ? formatDateTime(String(value))
-                        : String(value),
+                      : isStatusAttr(key)
+                        ? statusInfo(String(value)).label
+                        : /At$|Date$/.test(key)
+                          ? formatDateTime(String(value))
+                          : String(value),
                 }))}
             />
           </div>

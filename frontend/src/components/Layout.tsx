@@ -8,6 +8,7 @@ import { roleLabel } from '../lib/vocabulary';
 import { Icon, Logo } from './Icon';
 import { Button, HelpTip, Sheet } from './ui';
 import { InstallPrompt } from './InstallPrompt';
+import { UpdatePrompt } from './UpdatePrompt';
 
 /* =========================================================================
    Estado de los datos — un solo lugar
@@ -183,6 +184,7 @@ export const Layout = () => {
 
       <div className="main">
         <SyncBar />
+        <UpdatePrompt />
 
         {/*
           En el telefono no hay barra superior: el titulo ya lo da el encabezado

@@ -62,14 +62,14 @@ const validateField = (
 
   if (spec.type === 'number') {
     const parsed = Number(trimmed);
-    if (Number.isNaN(parsed)) return 'Escribí solo numeros.';
+    if (Number.isNaN(parsed)) return 'Escribí solo números.';
     if (spec.min !== undefined && parsed < Number(spec.min))
       return `No puede ser menor que ${spec.min}.`;
     if (spec.max !== undefined && parsed > Number(spec.max))
       return `No puede ser mayor que ${spec.max}.`;
   }
   if (spec.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed))
-    return 'Escribí un correo valido.';
+    return 'Escribí un correo válido.';
 
   return spec.validate?.(trimmed, all) ?? null;
 };
