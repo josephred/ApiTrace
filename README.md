@@ -39,9 +39,13 @@ ApiTrace/
 ├── 03-ArquitecturaTecnica...md          Arquitectura de referencia
 ├── 04-MVP-ApiTrace.md                   Alcance, modelo de datos, contrato, riesgos
 ├── 05-ADR-Decisiones-Tecnicas.md        Decisiones que se apartan del doc 03
+├── 06-Guia-de-Pantallas-ApiTrace.md     Catálogo visual y funcional v2.0 de pantallas y capturas
+├── 07-Rediseno-UX-UI-ApiTrace.md        Diagnóstico, arquitectura UX/UI y sistema de componentes
+├── 08-Iteraciones-Futuras-y-Roadmap...  Hoja de ruta tecnológica, integraciones oficiales e IoT
 ├── backend/                             API REST · NestJS + Drizzle + PostgreSQL
-├── frontend/                            Web instalable (PWA) · React + Vite
-├── render.yaml                          Blueprint de despliegue
+├── frontend/                            Web instalable (PWA) · React 19 + Vite 6
+├── landing/                             Landing page estática promocional y SEO
+├── render.yaml                          Blueprint de despliegue en Render
 └── .github/workflows/ci.yml             Build y tests de ambos proyectos
 ```
 
