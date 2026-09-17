@@ -5,14 +5,34 @@
  * Playwright, interceptando la API con datos deterministas. Las capturas no son
  * maquetas: es la aplicacion real, con su hoja de estilos y su service worker.
  *
- *   node capturas.mjs            → escribe en ./capturas/{escritorio,movil}
+ * Requisitos:
+ *   npm i -D playwright && npx playwright install chromium
+ *   npm run build && npm run preview
+ *   node capturas.mjs            → escribe en ../docs/capturas/{escritorio,movil}
+ *   OUT_DIR=/ruta node capturas.mjs
  */
-import pw from '/home/claude/.npm-global/lib/node_modules/playwright/index.js';
 import { mkdirSync } from 'node:fs';
-const { chromium } = pw;
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
-const BASE = 'http://localhost:4173';
-const OUT = '/home/claude/capturas';
+let chromium;
+try {
+  const pw = await import('playwright');
+  chromium = pw.chromium;
+} catch {
+  console.error(
+    'Error: Playwright no está instalado. Para generar las capturas:\n' +
+    '  npm i -D playwright\n' +
+    '  npx playwright install chromium\n'
+  );
+  process.exit(1);
+}
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const BASE = process.env.BASE_URL || 'http://localhost:4173';
+const OUT = process.env.OUT_DIR || resolve(__dirname, '../docs/capturas');
 
 /* ======================================================================
    Datos de demostracion — la cadena completa del circuito apicola
