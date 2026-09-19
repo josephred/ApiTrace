@@ -1,12 +1,17 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../database/database.module';
-import { producer, renapaRegistration } from '../../database/schema';
+import { producer, renapaRegistration, senasaDelegation } from '../../database/schema';
 import { AccessControlService } from '../../common/services/access-control.service';
 import { DomainEvents, EventsService } from '../../common/services/events.service';
 import type { AuthenticatedUser } from '../../common/types';
 import type { PaginationQueryDto } from '../../common/dto/pagination.dto';
-import type { AssociateRenapaDto, CreateProducerDto, UpdateProducerDto } from './dto/producer.dto';
+import type {
+  AssociateRenapaDto,
+  CreateProducerDto,
+  UpdateProducerDto,
+  UpsertSenasaDelegationDto,
+} from './dto/producer.dto';
 
 const normalizeTaxId = (value?: string | null): string | null =>
   value ? value.replace(/-/g, '') : null;
@@ -208,5 +213,74 @@ export class ProducerService {
       .from(renapaRegistration)
       .where(eq(renapaRegistration.producerId, producerId))
       .orderBy(asc(renapaRegistration.createdAt));
+  }
+
+  async listDelegations(producerId: string, actor: AuthenticatedUser) {
+    await this.findOne(producerId, actor);
+    return this.db
+      .select()
+      .from(senasaDelegation)
+      .where(eq(senasaDelegation.producerId, producerId))
+      .orderBy(asc(senasaDelegation.createdAt));
+  }
+
+  async upsertDelegation(
+    producerId: string,
+    dto: UpsertSenasaDelegationDto,
+    actor: AuthenticatedUser,
+  ) {
+    this.access.assertCanWrite(actor);
+    await this.findOne(producerId, actor);
+
+    const [existing] = await this.db
+      .select()
+      .from(senasaDelegation)
+      .where(
+        and(
+          eq(senasaDelegation.producerId, producerId),
+          eq(senasaDelegation.service, dto.service),
+        ),
+      )
+      .limit(1);
+
+    const now = new Date();
+    const acceptedAt = dto.status === 'ACEPTADA' ? now : null;
+    const revokedAt = dto.status === 'REVOCADA' ? now : null;
+
+    if (existing) {
+      const [updated] = await this.db
+        .update(senasaDelegation)
+        .set({
+          status: dto.status,
+          delegatedToTaxId: dto.delegatedToTaxId ? normalizeTaxId(dto.delegatedToTaxId) : existing.delegatedToTaxId,
+          formNumber: dto.formNumber ?? existing.formNumber,
+          acceptedAt: acceptedAt ?? existing.acceptedAt,
+          revokedAt: revokedAt ?? existing.revokedAt,
+          notes: dto.notes ?? existing.notes,
+          updatedById: actor.id,
+          updatedAt: now,
+        })
+        .where(eq(senasaDelegation.id, existing.id))
+        .returning();
+      return updated;
+    }
+
+    const [created] = await this.db
+      .insert(senasaDelegation)
+      .values({
+        producerId,
+        service: dto.service,
+        status: dto.status,
+        delegatedToTaxId: dto.delegatedToTaxId ? normalizeTaxId(dto.delegatedToTaxId) : null,
+        formNumber: dto.formNumber ?? null,
+        requestedAt: now,
+        acceptedAt,
+        revokedAt,
+        notes: dto.notes ?? null,
+        updatedById: actor.id,
+      })
+      .returning();
+
+    return created;
   }
 }

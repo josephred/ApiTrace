@@ -21,9 +21,16 @@ export const DomainEvents = {
   MovementRejected: 'MovementRejected',
   MovementCancelled: 'MovementCancelled',
   DteCreated: 'DteCreated',
+  DteRequested: 'DteRequested',
   DteIssued: 'DteIssued',
   DteApproved: 'DteApproved',
+  DteBecameValid: 'DteBecameValid',
+  DteExpired: 'DteExpired',
+  DteLapsed: 'DteLapsed',
   DteClosed: 'DteClosed',
+  DteVoided: 'DteVoided',
+  DteNoArrival: 'DteNoArrival',
+  DteRegularized: 'DteRegularized',
   DteRejected: 'DteRejected',
   ExtractionRegistered: 'ExtractionRegistered',
   ExtractionCompleted: 'ExtractionCompleted',
@@ -48,6 +55,7 @@ export interface DomainEventInput {
   correlationId?: string | null;
   occurredAt?: Date;
   payload?: Record<string, unknown>;
+  recordInTimeline?: boolean;
 }
 
 /**
@@ -67,16 +75,18 @@ export class EventsService {
     const occurredAt = event.occurredAt ?? new Date();
     const payload = event.payload ?? {};
 
-    await executor.insert(traceabilityEvent).values({
-      eventType: event.eventType,
-      entityType: event.entityType,
-      entityId: event.entityId,
-      occurredAt,
-      actorUserId: event.actorUserId ?? null,
-      organizationId: event.organizationId ?? null,
-      correlationId: event.correlationId ?? null,
-      payload: payload as never,
-    });
+    if (event.recordInTimeline !== false) {
+      await executor.insert(traceabilityEvent).values({
+        eventType: event.eventType,
+        entityType: event.entityType,
+        entityId: event.entityId,
+        occurredAt,
+        actorUserId: event.actorUserId ?? null,
+        organizationId: event.organizationId ?? null,
+        correlationId: event.correlationId ?? null,
+        payload: payload as never,
+      });
+    }
 
     await executor.insert(outboxEvent).values({
       eventType: event.eventType,

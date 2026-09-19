@@ -173,6 +173,69 @@ const UNKNOWN: UserMessage = {
   retryable: true,
 };
 
+const CODE_MESSAGES: Record<string, UserMessage> = {
+  EXCESO_CANTIDAD_DECLARADA: {
+    title: 'La cantidad recibida supera la declarada',
+    detail: 'No podés recibir más alzas o tambores de los declarados en el DT-e oficial. Verificá el conteo físico.',
+    tone: 'danger',
+    retryable: false,
+  },
+  DTE_NO_VIGENTE: {
+    title: 'El DT-e no está vigente',
+    detail: 'El documento está fuera de su período de validez o en un estado que no autoriza el tránsito.',
+    tone: 'danger',
+    retryable: false,
+  },
+  DTE_TRANSITO_EXPIRADO: {
+    title: 'Plazo de tránsito expirado',
+    detail: 'El DT-e superó las 72 horas desde la salida sin confirmación de arribo en la sala.',
+    tone: 'danger',
+    retryable: false,
+  },
+  CODIGO_VERIFICACION_INVALIDO: {
+    title: 'Código de verificación incorrecto',
+    detail: 'El código ingresado no coincide con el emitido oficialmente por SENASA.',
+    tone: 'danger',
+    retryable: true,
+  },
+  DTE_NO_CERRADO: {
+    title: 'El DT-e debe estar cerrado',
+    detail: 'La sala de extracción debe confirmar la recepción y cerrar el DT-e antes de iniciar el extractado.',
+    tone: 'warning',
+    retryable: false,
+  },
+  TRANSITO_NO_AUTORIZADO: {
+    title: 'Tránsito no autorizado',
+    detail: 'El semáforo o estado del DT-e no autoriza el despacho en este momento.',
+    tone: 'danger',
+    retryable: false,
+  },
+  ORGANIZACION_NO_AUTORIZADA: {
+    title: 'Operación no permitida para tu organización',
+    detail: 'Solo la organización titular o el receptor autorizado pueden realizar esta acción.',
+    tone: 'warning',
+    retryable: false,
+  },
+  DTE_YA_CERRADO: {
+    title: 'El DT-e ya fue cerrado',
+    detail: 'Este documento sanitario ya completó su ciclo de vida.',
+    tone: 'info',
+    retryable: false,
+  },
+  DTE_NO_ANULABLE: {
+    title: 'No se puede anular el DT-e',
+    detail: 'El documento ya está en tránsito o fue cerrado en destino.',
+    tone: 'warning',
+    retryable: false,
+  },
+  FALTA_DELEGACION_SENASA: {
+    title: 'Falta delegación de servicios SENASA',
+    detail: 'El CUIT del productor debe delegar el servicio en AFIP/ARCA a ApiTrace.',
+    tone: 'warning',
+    retryable: false,
+  },
+};
+
 /**
  * Convierte cualquier fallo en algo que se pueda mostrar tal cual.
  *
@@ -184,6 +247,10 @@ export const toUserMessage = (cause: unknown, kind: 'read' | 'write' = 'read'): 
   if (cause instanceof NetworkError) return kind === 'write' ? OFFLINE_WRITE : OFFLINE_READ;
 
   if (cause instanceof ApiError) {
+    if (cause.code && CODE_MESSAGES[cause.code]) {
+      return CODE_MESSAGES[cause.code];
+    }
+
     const text = String(cause.message ?? '');
     const known = KNOWN.find((entry) => entry.match.test(text));
     if (known) return known.message;

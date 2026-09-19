@@ -16,6 +16,7 @@ import {
 } from '../components/ui';
 import { DataList, type Column } from '../components/DataList';
 import { ResourceNotices } from '../components/ResourceNotices';
+import { OfficialRegistrySheet } from '../components/OfficialRegistrySheet';
 import {
   Disclosure,
   Field,
@@ -34,6 +35,7 @@ export const EstablishmentsPage = () => {
   const [pageSize, setPageSize] = useState(25);
   const [creating, setCreating] = useState(false);
   const [renspaFor, setRenspaFor] = useState<Establishment | null>(null);
+  const [senasaFor, setSenasaFor] = useState<Establishment | null>(null);
 
   const list = useResource<Paginated<Establishment>>(
     `/establishments?pageSize=${pageSize}${typeFilter ? `&type=${typeFilter}` : ''}`,
@@ -63,6 +65,16 @@ export const EstablishmentsPage = () => {
       key: 'rne',
       header: 'RNE',
       cell: (item) => <span className="mono">{item.rne ?? '—'}</span>,
+    },
+    {
+      key: 'senasa',
+      header: 'SENASA',
+      cell: (item) =>
+        item.senasaCode ? (
+          <span className="mono font-medium">{item.senasaCode}</span>
+        ) : (
+          <span className="faint small">Sin registrar</span>
+        ),
     },
   ];
 
@@ -107,16 +119,21 @@ export const EstablishmentsPage = () => {
           onLoadMore={() => setPageSize((size) => size + 25)}
           loadingMore={list.loading}
           rowActions={(item) => (
-            <>
+            <div className="row row-tight">
               <ButtonLink size="sm" to={`/trace/forward/establishment/${item.id}`} icon="trace">
                 Trazar
               </ButtonLink>
               {canWrite && (
-                <Button size="sm" onClick={() => setRenspaFor(item)}>
-                  Asociar RENSPA
-                </Button>
+                <>
+                  <Button size="sm" onClick={() => setRenspaFor(item)}>
+                    RENSPA
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => setSenasaFor(item)}>
+                    Habilitación SENASA
+                  </Button>
+                </>
               )}
-            </>
+            </div>
           )}
           empty={
             <EmptyState
@@ -163,6 +180,17 @@ export const EstablishmentsPage = () => {
           onClose={() => setRenspaFor(null)}
           onDone={() => {
             setRenspaFor(null);
+            list.reload();
+          }}
+        />
+      )}
+
+      {senasaFor && (
+        <OfficialRegistrySheet
+          target={{ type: 'establishment', data: senasaFor }}
+          onClose={() => setSenasaFor(null)}
+          onDone={() => {
+            setSenasaFor(null);
             list.reload();
           }}
         />

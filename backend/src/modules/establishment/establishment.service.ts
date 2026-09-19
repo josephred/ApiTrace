@@ -52,6 +52,9 @@ export class EstablishmentService {
           latitude: dto.latitude !== undefined ? String(dto.latitude) : null,
           longitude: dto.longitude !== undefined ? String(dto.longitude) : null,
           rne: dto.rne ?? null,
+          senasaCode: dto.senasaCode ?? null,
+          senasaStatus: dto.senasaStatus ?? 'PENDING_VERIFICATION',
+          senasaValidTo: dto.senasaValidTo ?? null,
           createdById: actor.id,
         })
         .returning();
@@ -142,6 +145,48 @@ export class EstablishmentService {
   async findManyRaw(ids: string[]) {
     if (ids.length === 0) return [];
     return this.db.select().from(establishment).where(inArray(establishment.id, ids));
+  }
+
+  /**
+   * Resuelve el hallazgo H-02: permite a cualquier usuario o productor consultar
+   * salas de extraccion y acopios habilitados de todo el sistema para seleccionar
+   * como destino de un movimiento o DT-e, independientemente de la organizacion.
+   */
+  async listReceivers(search?: string) {
+    const conditions: SQL[] = [
+      inArray(establishment.type, ['SALA_EXTRACCION', 'ACOPIO']),
+      eq(establishment.status, 'ACTIVE'),
+    ];
+
+    if (search) {
+      const term = `%${search.trim()}%`;
+      conditions.push(
+        or(
+          ilike(establishment.name, term),
+          ilike(establishment.locality, term),
+          ilike(establishment.senasaCode, term),
+        )!,
+      );
+    }
+
+    const rows = await this.db
+      .select({
+        id: establishment.id,
+        name: establishment.name,
+        type: establishment.type,
+        locality: establishment.locality,
+        province: establishment.province,
+        senasaCode: establishment.senasaCode,
+        senasaStatus: establishment.senasaStatus,
+        senasaValidTo: establishment.senasaValidTo,
+        organizationId: establishment.organizationId,
+      })
+      .from(establishment)
+      .where(and(...conditions))
+      .orderBy(asc(establishment.name))
+      .limit(100);
+
+    return rows;
   }
 
   async update(id: string, dto: UpdateEstablishmentDto, actor: AuthenticatedUser) {

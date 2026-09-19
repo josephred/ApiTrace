@@ -62,6 +62,9 @@ export class ApiaryService {
           province: dto.province ?? parent.province,
           hiveCount: dto.hiveCount ?? 0,
           registeredAt: dto.registeredAt ? new Date(dto.registeredAt) : new Date(),
+          renapaCode: dto.renapaCode ?? null,
+          renapaStatus: dto.renapaStatus ?? 'PENDING_VERIFICATION',
+          renapaValidTo: dto.renapaValidTo ?? null,
           notes: dto.notes ?? null,
           createdById: actor.id,
         })

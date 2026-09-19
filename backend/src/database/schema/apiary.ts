@@ -18,6 +18,9 @@ export const apiary = pgTable(
     province: varchar('province', { length: 100 }),
     hiveCount: integer('hive_count').notNull().default(0),
     status: entityStatusEnum('status').notNull().default('ACTIVE'),
+    renapaCode: varchar('renapa_code', { length: 40 }),
+    renapaStatus: varchar('renapa_status', { length: 40 }).notNull().default('PENDING_VERIFICATION'),
+    renapaValidTo: varchar('renapa_valid_to', { length: 10 }),
     registeredAt: timestamp('registered_at', { withTimezone: true }),
     notes: varchar('notes', { length: 1000 }),
     createdById: uuid('created_by_id'),
@@ -27,6 +30,7 @@ export const apiary = pgTable(
   (t) => [
     unique('apiary_establishment_code_uq').on(t.establishmentId, t.code),
     index('apiary_status_idx').on(t.status),
+    index('apiary_renapa_code_idx').on(t.renapaCode),
   ],
 );
 

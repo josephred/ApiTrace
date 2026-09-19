@@ -43,7 +43,20 @@ const STATUS: Record<string, StatusInfo> = {
   REJECTED: { label: 'Rechazado', tone: 'danger', hint: 'El destino no aceptó la mercadería.' },
   CANCELLED: { label: 'Cancelado', tone: 'danger' },
 
-  // --- documento sanitario -------------------------------------------------
+  // --- documento sanitario oficial API-SEM (11 estados) --------------------
+  BORRADOR: { label: 'Borrador', tone: 'neutral', hint: 'Borrador local antes de solicitar a SENASA.' },
+  SOLICITADO: { label: 'Solicitado', tone: 'info', hint: 'Enviado a SENASA, esperando número oficial.' },
+  EMITIDO: { label: 'Emitido', tone: 'info', hint: 'Emitido con número oficial; carga pendiente.' },
+  VIGENTE: { label: 'Vigente', tone: 'success', hint: 'En tránsito amparado por el DT-e.' },
+  VENCIDO: { label: 'Vencido', tone: 'warning', hint: 'Superó la fecha de vencimiento sin cierre en sala.' },
+  CADUCADO: { label: 'Caducado', tone: 'danger', hint: 'Caducado por SENASA sin completarse el traslado.' },
+  CERRADO: { label: 'Cerrado', tone: 'success', hint: 'El destino confirmó la recepción y cerró el documento.' },
+  SIN_ARRIBO: { label: 'Sin arribo', tone: 'danger', hint: 'El destino confirmó que la carga nunca llegó.' },
+  ANULADO: { label: 'Anulado', tone: 'danger', hint: 'Anulado por el emisor antes de la carga.' },
+  ELIMINADO: { label: 'Eliminado', tone: 'neutral', hint: 'Borrador descartado.' },
+  RECHAZADO: { label: 'Rechazado', tone: 'danger', hint: 'Rechazado por SENASA o por el receptor.' },
+
+  // --- documento sanitario (compatibilidad) --------------------------------
   ISSUED: { label: 'Emitido', tone: 'info' },
   APPROVED: { label: 'Aprobado', tone: 'success' },
   CLOSED: { label: 'Cerrado', tone: 'success', hint: 'El destino cerró el documento tras recibir.' },
@@ -162,6 +175,45 @@ export const UNITS = dict({
   UNIDAD: 'Unidades',
 });
 
+export const DTE_STATUSES = dict({
+  BORRADOR: 'Borrador',
+  SOLICITADO: 'Solicitado',
+  EMITIDO: 'Emitido',
+  VIGENTE: 'Vigente',
+  VENCIDO: 'Vencido',
+  CADUCADO: 'Caducado',
+  CERRADO: 'Cerrado',
+  SIN_ARRIBO: 'Sin arribo',
+  ANULADO: 'Anulado',
+  ELIMINADO: 'Eliminado',
+  RECHAZADO: 'Rechazado',
+});
+
+export const DELEGATION_STATUSES = dict({
+  PENDING: 'Pendiente',
+  ACTIVE: 'Activa',
+  EXPIRED: 'Vencida',
+  REVOKED: 'Revocada',
+});
+
+export const SENASA_SERVICES = dict({
+  DTE_APICOLA: 'DT-e Apícola (API-SEM)',
+  SIGSA_GENERAL: 'SIGSA General',
+  RENSPA: 'Consulta RENSPA',
+});
+
+export const ISSUE_MODES = dict({
+  MANUAL: 'Carga manual (contingencia)',
+  SIMULADO: 'Simulado (entorno de pruebas)',
+  SIGSA: 'Web Service SIGSA (oficial)',
+});
+
+export const TRANSPORT_TYPES = dict({
+  PROPIO: 'Transporte propio',
+  TERCERO: 'Transporte de terceros',
+  OTRO: 'Otro',
+});
+
 export const ROLES: Record<string, string> = {
   ADMIN: 'Administrador',
   PRODUCTOR: 'Productor',
@@ -196,9 +248,20 @@ const EVENTS: Record<string, string> = {
   MOVEMENT_PARTIALLY_RECEIVED: 'Recibido con diferencia',
   MOVEMENT_REJECTED: 'Rechazado en destino',
   MOVEMENT_CANCELLED: 'Cancelado',
-  DTE_ISSUED: 'DT-e registrado',
-  DTE_CLOSED: 'DT-e cerrado',
+  DTE_CREATED: 'DT-e borrador creado',
+  DTE_REQUESTED: 'DT-e solicitado a SENASA',
+  DTE_ISSUED: 'DT-e emitido',
+  DTE_BECOMES_ACTIVE: 'DT-e entró en vigencia',
+  DTE_EXPIRED: 'DT-e vencido',
+  DTE_CLOSED: 'DT-e cerrado en destino',
+  DTE_NO_ARRIVAL: 'DT-e declarado sin arribo',
+  DTE_VOIDED: 'DT-e anulado',
+  DTE_REGULARIZED: 'DT-e regularizado',
+  DTE_REJECTED: 'DT-e rechazado por SENASA',
   DTE_APPROVED: 'DT-e aprobado',
+  DTE_SYNC_OUTBOX_ENQUEUED: 'Sincronización encolada',
+  DTE_SYNC_OUTBOX_SUCCESS: 'Sincronización enviada',
+  DTE_SYNC_OUTBOX_FAILED: 'Fallo al sincronizar',
   EXTRACTION_STARTED: 'Extracción iniciada',
   EXTRACTION_COMPLETED: 'Extracción terminada',
   LOT_CREATED: 'Lote creado',
@@ -366,6 +429,18 @@ export const HELP: Record<string, HelpEntry> = {
   idempotency: {
     title: 'Por qué no se duplica',
     body: 'Cada operación viaja con una clave generada en tu dispositivo. Si el envío llegó pero se perdió la respuesta, el reintento usa la misma clave y el servidor lo reconoce.',
+  },
+  dteTransit: {
+    title: 'Semáforo de tránsito DT-e',
+    body: 'Indica si la carga puede circular según la fecha de carga, vencimiento y estado ante SENASA. Solo el semáforo VERDE autoriza circular y el AMARILLO advierte vencimiento inminente.',
+  },
+  dtePreflight: {
+    title: 'Verificación previa (preflight)',
+    body: 'Comprueba antes de emitir que los RENSPA de origen y destino estén activos, las patentes sean válidas, la delegación esté activa y las cantidades no excedan los topes.',
+  },
+  senasaDelegation: {
+    title: 'Delegación de servicios SENASA / ARCA',
+    body: 'Autorización legal (Formulario 3283/E) para que ApiTrace gestione y emita documentos sanitarios en nombre del CUIT del productor apícola.',
   },
 };
 

@@ -26,6 +26,8 @@ const EstablishmentsPage = page(() => import('./pages/EstablishmentsPage'), 'Est
 const ApiariesPage = page(() => import('./pages/ApiariesPage'), 'ApiariesPage');
 const MovementsPage = page(() => import('./pages/MovementsPage'), 'MovementsPage');
 const MovementDetailPage = page(() => import('./pages/MovementDetailPage'), 'MovementDetailPage');
+const DtePage = page(() => import('./pages/DtePage'), 'DtePage');
+const DteDetailPage = page(() => import('./pages/DteDetailPage'), 'DteDetailPage');
 const ExtractionsPage = page(() => import('./pages/ExtractionsPage'), 'ExtractionsPage');
 const LotsPage = page(() => import('./pages/LotsPage'), 'LotsPage');
 const LotDetailPage = page(() => import('./pages/LotDetailPage'), 'LotDetailPage');
@@ -120,6 +122,26 @@ export const App = () => {
               <RoleRoute allowedRoles={OPERATION_ROLES}>
                 <Suspense fallback={<SkeletonList />}>
                   <MovementDetailPage />
+                </Suspense>
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="dte"
+            element={
+              <RoleRoute allowedRoles={['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'AUDITOR']}>
+                <Suspense fallback={<SkeletonList />}>
+                  <DtePage />
+                </Suspense>
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="dte/:id"
+            element={
+              <RoleRoute allowedRoles={['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'AUDITOR']}>
+                <Suspense fallback={<SkeletonList />}>
+                  <DteDetailPage />
                 </Suspense>
               </RoleRoute>
             }

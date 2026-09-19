@@ -31,6 +31,16 @@ export interface AppConfig {
     ttlMs: number;
     limit: number;
   };
+  senasa: {
+    mode: 'MANUAL' | 'SIMULADO' | 'SIGSA';
+    apiUrl: string;
+    apiKey: string;
+    timeoutMs: number;
+  };
+  dteLifecycle: {
+    enabled: boolean;
+    intervalMs: number;
+  };
 }
 
 const toBool = (value: string | undefined, fallback: boolean): boolean => {
@@ -99,6 +109,18 @@ export const configuration = (): AppConfig => {
     throttle: {
       ttlMs: toInt(process.env.THROTTLE_TTL_MS, 60000),
       limit: toInt(process.env.THROTTLE_LIMIT, 240),
+    },
+    senasa: {
+      mode: (['MANUAL', 'SIMULADO', 'SIGSA'].includes(process.env.SENASA_MODE?.toUpperCase() ?? '')
+        ? process.env.SENASA_MODE!.toUpperCase()
+        : 'SIMULADO') as 'MANUAL' | 'SIMULADO' | 'SIGSA',
+      apiUrl: process.env.SENASA_API_URL ?? 'https://api-sem.senasa.gob.ar/v1',
+      apiKey: process.env.SENASA_API_KEY ?? '',
+      timeoutMs: toInt(process.env.SENASA_TIMEOUT_MS, 15000),
+    },
+    dteLifecycle: {
+      enabled: toBool(process.env.DTE_LIFECYCLE_ENABLED, true),
+      intervalMs: toInt(process.env.DTE_LIFECYCLE_INTERVAL_MS, 60000),
     },
   };
 };

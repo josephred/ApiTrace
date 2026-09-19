@@ -1,13 +1,15 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpStatus,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../database/database.module';
-import { extraction, extractionInput, movement } from '../../database/schema';
+import { dte, extraction, extractionInput, movement } from '../../database/schema';
+import { DomainRuleException } from '../../common/exceptions/domain-rule.exception';
 import { AccessControlService } from '../../common/services/access-control.service';
 import { CodeService } from '../../common/services/code.service';
 import { DomainEvents, EventsService } from '../../common/services/events.service';
@@ -62,6 +64,33 @@ export class ExtractionService {
         throw new ConflictException(
           `El movimiento ${source.code} esta en estado ${source.status}; debe estar recibido para procesarse.`,
         );
+      }
+    }
+
+    // Verificar que los DT-e de los movimientos que lo requieren esten CERRADOS en sala
+    const movementDtes = await this.db
+      .select()
+      .from(dte)
+      .where(inArray(dte.movementId, movementIds));
+
+    for (const source of sources) {
+      if (source.requiresDocument) {
+        const dteRecord = movementDtes.find((d) => d.movementId === source.id);
+        if (!dteRecord) {
+          throw new DomainRuleException(
+            HttpStatus.BAD_REQUEST,
+            'DTE_NO_ENCONTRADO',
+            `El movimiento ${source.code} exige DT-e pero no posee ningun registro documental asociado.`,
+          );
+        }
+        if (dteRecord.status !== 'CERRADO' && dteRecord.status !== 'CLOSED') {
+          throw new DomainRuleException(
+            HttpStatus.BAD_REQUEST,
+            'DTE_NO_CERRADO',
+            `El movimiento ${source.code} tiene su DT-e en estado ${dteRecord.status}. La normativa exige que el DT-e este formalmente CERRADO en la sala antes de iniciar la extraccion.`,
+            { movementCode: source.code, dteStatus: dteRecord.status },
+          );
+        }
       }
     }
 

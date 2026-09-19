@@ -10,7 +10,12 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ProducerService } from './producer.service';
-import { AssociateRenapaDto, CreateProducerDto, UpdateProducerDto } from './dto/producer.dto';
+import {
+  AssociateRenapaDto,
+  CreateProducerDto,
+  UpdateProducerDto,
+  UpsertSenasaDelegationDto,
+} from './dto/producer.dto';
 import { Audit, CorrelationId, CurrentUser, Roles } from '../../common/decorators';
 import { PaginationQueryDto, paginated } from '../../common/dto/pagination.dto';
 import type { AuthenticatedUser } from '../../common/types';
@@ -85,5 +90,23 @@ export class ProducerController {
   @Get(':id/renapa')
   listRenapa(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: AuthenticatedUser) {
     return this.producers.listRenapa(id, actor);
+  }
+
+  @Get(':id/senasa-delegations')
+  @ApiOperation({ summary: 'Consultar delegaciones de clave fiscal ARCA para servicios SENASA (F3283/E)' })
+  listDelegations(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.producers.listDelegations(id, actor);
+  }
+
+  @Post(':id/senasa-delegations')
+  @Roles('ADMIN', 'PRODUCTOR')
+  @Audit('SENASA_DELEGATION_UPDATED', 'senasa_delegation')
+  @ApiOperation({ summary: 'Actualizar o registrar delegacion ARCA para SIGSA / SITA' })
+  upsertDelegation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpsertSenasaDelegationDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.producers.upsertDelegation(id, dto, actor);
   }
 }

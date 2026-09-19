@@ -9,6 +9,8 @@ import {
 
 /** Error de la API con el detalle que devuelve el backend. */
 export class ApiError extends Error {
+  readonly code?: string;
+
   constructor(
     readonly status: number,
     message: string,
@@ -17,6 +19,9 @@ export class ApiError extends Error {
   ) {
     super(message);
     this.name = 'ApiError';
+    if (detail && typeof detail === 'object' && 'code' in detail && typeof (detail as { code?: unknown }).code === 'string') {
+      this.code = (detail as { code: string }).code;
+    }
   }
 }
 

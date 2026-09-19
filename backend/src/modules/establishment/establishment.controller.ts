@@ -41,6 +41,15 @@ export class EstablishmentController {
     return paginated(rows, total, query);
   }
 
+  @Get('receivers')
+  @ApiOperation({
+    summary: 'Listar salas de extraccion y acopios habilitados (H-02)',
+    description: 'Permite seleccionar destinos inter-empresa para la emision de DT-e.',
+  })
+  listReceivers(@Query('q') q?: string) {
+    return this.establishments.listReceivers(q);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Detalle del establecimiento con sus RENSPA.' })
   findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: AuthenticatedUser) {

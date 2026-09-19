@@ -55,6 +55,20 @@ export interface Producer {
   locality: string | null;
   createdAt: string;
   renapa?: RenapaRegistration[];
+  delegations?: SenasaDelegation[];
+}
+
+export interface SenasaDelegation {
+  id: string;
+  producerId: string;
+  service: string; // 'SIGSA_DTE' | 'SITA'
+  status: string; // 'NO_INICIADA' | 'PENDIENTE' | 'ACEPTADA' | 'REVOCADA' | 'RECHAZADA'
+  delegatedToTaxId: string | null;
+  formNumber: string | null;
+  requestedAt: string | null;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  notes: string | null;
 }
 
 export interface RenapaRegistration {
@@ -79,6 +93,9 @@ export interface Establishment {
   longitude: string | null;
   status: string;
   rne: string | null;
+  senasaCode?: string | null;
+  senasaStatus?: string;
+  senasaValidTo?: string | null;
   renspa?: RenspaRegistration[];
 }
 
@@ -104,6 +121,9 @@ export interface Apiary {
   province: string | null;
   hiveCount: number;
   status: string;
+  renapaCode?: string | null;
+  renapaStatus?: string;
+  renapaValidTo?: string | null;
   registeredAt: string | null;
 }
 
@@ -155,16 +175,78 @@ export interface Movement {
   reception?: Reception | null;
 }
 
+export interface DteStatusHistory {
+  id: string;
+  dteId: string;
+  fromStatus: string | null;
+  toStatus: string;
+  source: string;
+  reason: string | null;
+  actorUserId: string | null;
+  occurredAt: string;
+}
+
+export interface DtePreflightCheck {
+  key: string;
+  label: string;
+  passed: boolean;
+  message: string;
+  severity: 'ERROR' | 'WARNING' | 'INFO';
+}
+
+export interface DtePreflightResult {
+  ready: boolean;
+  movementId: string;
+  checks: DtePreflightCheck[];
+  suggestedDeclaredQuantity: number;
+  defaultDates: {
+    loadDate: string;
+    expiryDate: string;
+  };
+}
+
 export interface Dte {
   id: string;
   movementId: string;
   number: string | null;
   status: string;
-  issuedAt: string | null;
-  closedAt: string | null;
-  originRenspa: string | null;
-  destinationRenspa: string | null;
-  syncStatus: string;
+  issueMode?: string;
+  movementTypeCode?: string;
+  transitReason?: string;
+  productCode?: string;
+  productName?: string;
+  unit?: string;
+  loadDate?: string | null;
+  expiryDate?: string | null;
+  declaredQuantity?: number | string | null;
+  estimatedQuantity?: number | string | null;
+  confirmedQuantity?: number | string | null;
+  arrivalAt?: string | null;
+  issuedAt?: string | null;
+  closedAt?: string | null;
+  verificationCode?: string | null;
+  canSeeVerificationCode?: boolean;
+  pdfUrl?: string | null;
+  transportType?: string | null;
+  transportPlate?: string | null;
+  transportTrailerPlate?: string | null;
+  voidedAt?: string | null;
+  voidReason?: string | null;
+  regularizedAt?: string | null;
+  regularizationNote?: string | null;
+  feePaid?: boolean;
+  originRenspa?: string | null;
+  destinationRenspa?: string | null;
+  originCode?: string | null;
+  destinationCode?: string | null;
+  issuerOrganizationId?: string | null;
+  destinationOrganizationId?: string | null;
+  holderProducerId?: string | null;
+  syncStatus?: string;
+  transitSemaphore?: 'VERDE' | 'AMARILLO' | 'ROJO' | 'AZUL' | 'GRIS';
+  transitReasonText?: string;
+  canTransit?: boolean;
+  history?: DteStatusHistory[];
 }
 
 export interface Reception {

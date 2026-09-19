@@ -8,9 +8,13 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
+import { DomainRuleException } from '../exceptions/domain-rule.exception';
+
 interface ErrorBody {
   statusCode: number;
   error: string;
+  code?: string;
+  details?: Record<string, unknown>;
   message: string | string[];
   correlationId?: string;
   path: string;
@@ -30,8 +34,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: string | string[] = 'Error interno del servidor.';
     let error = 'Internal Server Error';
+    let code: string | undefined;
+    let details: Record<string, unknown> | undefined;
 
-    if (exception instanceof HttpException) {
+    if (exception instanceof DomainRuleException) {
+      status = exception.getStatus();
+      code = exception.code;
+      error = exception.code;
+      message = exception.message;
+      details = exception.details;
+    } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       const payload = exception.getResponse();
       if (typeof payload === 'string') {
@@ -41,6 +53,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
         const record = payload as Record<string, unknown>;
         message = (record.message as string | string[]) ?? exception.message;
         error = (record.error as string) ?? exception.name;
+        if (typeof record.code === 'string') code = record.code;
+        if (record.details && typeof record.details === 'object') {
+          details = record.details as Record<string, unknown>;
+        }
       }
     } else if (this.isUniqueViolation(exception)) {
       status = HttpStatus.CONFLICT;
@@ -62,6 +78,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const body: ErrorBody = {
       statusCode: status,
       error,
+      ...(code ? { code } : {}),
+      ...(details ? { details } : {}),
       message,
       correlationId: request.correlationId,
       path: request.url,

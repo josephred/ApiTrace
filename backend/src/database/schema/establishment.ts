@@ -29,6 +29,9 @@ export const establishment = pgTable(
     latitude: numeric('latitude', { precision: 9, scale: 6 }),
     longitude: numeric('longitude', { precision: 9, scale: 6 }),
     status: entityStatusEnum('status').notNull().default('ACTIVE'),
+    senasaCode: varchar('senasa_code', { length: 40 }),
+    senasaStatus: varchar('senasa_status', { length: 40 }).notNull().default('PENDING_VERIFICATION'),
+    senasaValidTo: varchar('senasa_valid_to', { length: 10 }),
     /** RNE: identificador SIFeGA del establecimiento alimentario (referencia externa). */
     rne: varchar('rne', { length: 60 }),
     createdById: uuid('created_by_id'),
@@ -38,6 +41,7 @@ export const establishment = pgTable(
   (t) => [
     index('establishment_org_status_idx').on(t.organizationId, t.status),
     index('establishment_type_status_idx').on(t.type, t.status),
+    index('establishment_senasa_code_idx').on(t.senasaCode),
   ],
 );
 

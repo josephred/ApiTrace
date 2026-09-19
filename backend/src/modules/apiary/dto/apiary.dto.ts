@@ -70,6 +70,24 @@ export class CreateApiaryDto {
   @IsDateString()
   registeredAt?: string;
 
+  @ApiPropertyOptional({ example: '12.345.678' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  renapaCode?: string;
+
+  @ApiPropertyOptional({ example: 'ACTIVE' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  renapaStatus?: string;
+
+  @ApiPropertyOptional({ example: '2027-12-31' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  renapaValidTo?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -122,6 +140,24 @@ export class UpdateApiaryDto {
   @IsOptional()
   @IsEnum(['ACTIVE', 'INACTIVE', 'SUSPENDED'])
   status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+
+  @ApiPropertyOptional({ example: '12.345.678' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  renapaCode?: string;
+
+  @ApiPropertyOptional({ example: 'ACTIVE' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  renapaStatus?: string;
+
+  @ApiPropertyOptional({ example: '2027-12-31' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  renapaValidTo?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -100,6 +100,7 @@ export const DashboardPage = () => {
   const movements = useResource<Paginated<Movement>>('/movements?pageSize=5');
   const awaiting = useResource<Paginated<Movement>>('/movements?status=DISPATCHED&pageSize=1');
   const drafts = useResource<Paginated<Movement>>('/movements?status=DRAFT&pageSize=1');
+  const dteSummary = useResource<{ vigentes: number; vencidos: number; total: number }>('/dte/summary');
 
   const lots = useResource<Paginated<Lot>>(!isProducer ? '/lots?pageSize=5' : null);
   const apiaries = useResource<Paginated<Apiary>>(
@@ -116,7 +117,9 @@ export const DashboardPage = () => {
 
   const awaitingTotal = awaiting.data?.meta.total ?? 0;
   const draftTotal = drafts.data?.meta.total ?? 0;
-  const hasTasks = failedCount > 0 || awaitingTotal > 0 || draftTotal > 0;
+  const dteVencidos = dteSummary.data?.vencidos ?? 0;
+  const dteVigentes = dteSummary.data?.vigentes ?? 0;
+  const hasTasks = failedCount > 0 || awaitingTotal > 0 || draftTotal > 0 || dteVencidos > 0 || dteVigentes > 0;
 
   const movementColumns: Column<Movement>[] = [
     {
@@ -220,6 +223,34 @@ export const DashboardPage = () => {
               detail="Están creados pero todavía no salieron del establecimiento."
               to="/movements?status=DRAFT"
               cta="Ver borradores"
+            />
+          )}
+          {dteVencidos > 0 && (
+            <TaskCard
+              icon="warning"
+              tone="danger"
+              title={
+                dteVencidos === 1
+                  ? 'Un DT-e vencido sin regularizar'
+                  : `${dteVencidos} DT-e vencidos sin regularizar`
+              }
+              detail="Expiró el plazo de tránsito y requiere justificación técnica para el ingreso."
+              to="/dte?status=VENCIDO"
+              cta="Ver DT-e vencidos"
+            />
+          )}
+          {dteVigentes > 0 && (
+            <TaskCard
+              icon="document"
+              tone="info"
+              title={
+                dteVigentes === 1
+                  ? 'Un DT-e vigente en ruta'
+                  : `${dteVigentes} DT-e vigentes en ruta`
+              }
+              detail="Cargas amparadas por DT-e oficial que se dirigen a destino."
+              to="/dte?status=VIGENTE"
+              cta="Ver en tránsito"
             />
           )}
         </div>

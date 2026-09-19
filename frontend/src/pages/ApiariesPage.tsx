@@ -18,6 +18,7 @@ import {
 } from '../components/ui';
 import { DataList, type Column } from '../components/DataList';
 import { ResourceNotices } from '../components/ResourceNotices';
+import { OfficialRegistrySheet } from '../components/OfficialRegistrySheet';
 import {
   Fields,
   Form,
@@ -32,6 +33,7 @@ export const ApiariesPage = () => {
   const { canWrite } = useAuth();
   const [creating, setCreating] = useState(false);
   const [hivesFor, setHivesFor] = useState<Apiary | null>(null);
+  const [renapaFor, setRenapaFor] = useState<Apiary | null>(null);
   const [pageSize, setPageSize] = useState(25);
 
   const list = useResource<Paginated<Apiary>>(`/apiaries?pageSize=${pageSize}`);
@@ -59,6 +61,16 @@ export const ApiariesPage = () => {
       key: 'establishment',
       header: 'Establecimiento',
       cell: (item) => item.establishmentName ?? '—',
+    },
+    {
+      key: 'renapa',
+      header: 'RENAPA',
+      cell: (item) =>
+        item.renapaCode ? (
+          <span className="mono font-medium">{item.renapaCode}</span>
+        ) : (
+          <span className="faint small">Sin registrar</span>
+        ),
     },
     {
       key: 'hives',
@@ -123,16 +135,21 @@ export const ApiariesPage = () => {
           onLoadMore={() => setPageSize((size) => size + 25)}
           loadingMore={list.loading}
           rowActions={(item) => (
-            <>
+            <div className="row row-tight">
               {canWrite && (
-                <Button size="sm" onClick={() => setHivesFor(item)}>
-                  Colmenas
-                </Button>
+                <>
+                  <Button size="sm" onClick={() => setHivesFor(item)}>
+                    Colmenas
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => setRenapaFor(item)}>
+                    RENAPA
+                  </Button>
+                </>
               )}
               <ButtonLink size="sm" to={`/trace/forward/apiary/${item.id}`} icon="trace">
                 Dónde terminó
               </ButtonLink>
-            </>
+            </div>
           )}
           empty={
             <EmptyState
@@ -168,6 +185,17 @@ export const ApiariesPage = () => {
           apiary={hivesFor}
           onClose={() => {
             setHivesFor(null);
+            list.reload();
+          }}
+        />
+      )}
+
+      {renapaFor && (
+        <OfficialRegistrySheet
+          target={{ type: 'apiary', data: renapaFor }}
+          onClose={() => setRenapaFor(null)}
+          onDone={() => {
+            setRenapaFor(null);
             list.reload();
           }}
         />

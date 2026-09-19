@@ -10,6 +10,8 @@
  *             -> EXTRACCION -> LOTE -> TAMBOR -> MOVIMIENTO -> ACOPIO -> LOTE MEZCLA
  */
 import 'dotenv/config';
+process.env.DTE_LIFECYCLE_ENABLED = 'false';
+process.env.OUTBOX_ENABLED = 'false';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
@@ -43,45 +45,45 @@ const MOVEMENT_RULES = [
     name: 'Regla general: movimientos sin documento sanitario obligatorio',
     movementType: null,
     materialType: null,
-    originType: null,
-    destinationType: null,
+    sourceEstablishmentType: null,
+    destinationEstablishmentType: null,
     requiresDocument: false,
     requiredDocumentType: null,
     effectiveFrom: new Date('2020-01-01T00:00:00Z'),
     effectiveTo: null,
     priority: 900,
-    legalReference: null,
-    notes: 'Comodin de menor prioridad: se aplica cuando ninguna regla especifica coincide.',
+    legalBasis: null,
+    description: 'Comodin de menor prioridad: se aplica cuando ninguna regla especifica coincide.',
   },
   {
     name: 'DT-e obligatorio: material melario de apiario a sala de extraccion',
     movementType: 'MATERIAL_MELARIO' as const,
     materialType: 'MATERIAL_MELARIO' as const,
-    originType: 'APIARIO_BASE' as const,
-    destinationType: 'SALA_EXTRACCION' as const,
+    sourceEstablishmentType: 'APIARIO_BASE' as const,
+    destinationEstablishmentType: 'SALA_EXTRACCION' as const,
     requiresDocument: true,
     requiredDocumentType: 'DTE' as const,
     effectiveFrom: new Date('2026-08-01T00:00:00Z'),
     effectiveTo: null,
     priority: 10,
-    legalReference:
+    legalBasis:
       'SENASA - Optimizacion de controles de movimientos de material apicola desde apiarios a salas de extraccion (vigencia 01/08/2026). Gestion en SIGSA; cierre por la sala.',
-    notes:
+    description:
       'Antes del 01/08/2026 este mismo traslado no exigia DT-e: por eso la regla tiene vigencia y no esta hardcodeada.',
   },
   {
     name: 'Documento de respaldo: miel a granel entre establecimientos',
     movementType: 'MIEL_A_GRANEL' as const,
     materialType: 'MIEL' as const,
-    originType: null,
-    destinationType: null,
+    sourceEstablishmentType: null,
+    destinationEstablishmentType: null,
     requiresDocument: true,
     requiredDocumentType: 'REMITO' as const,
     effectiveFrom: new Date('2020-01-01T00:00:00Z'),
     effectiveTo: null,
     priority: 100,
-    legalReference: null,
-    notes: 'Remito comercial. Ajustar segun la operatoria real de cada jurisdiccion.',
+    legalBasis: null,
+    description: 'Remito comercial. Ajustar segun la operatoria real de cada jurisdiccion.',
   },
 ];
 
@@ -226,6 +228,18 @@ async function main(): Promise<void> {
       userProductor,
     );
 
+    await producers.upsertDelegation(
+      productor.id,
+      {
+        service: 'SIGSA_DTE',
+        status: 'ACEPTADA',
+        delegatedToTaxId: '30-71999888-9',
+        formNumber: 'F3283-99884',
+        notes: 'Delegacion F3283/E aceptada en ARCA',
+      },
+      userProductor,
+    );
+
     const estApiario = await establishments.create(
       {
         name: 'Predio Los Talas',
@@ -258,6 +272,9 @@ async function main(): Promise<void> {
         name: 'Apiario Monte Grande',
         latitude: -34.5721,
         longitude: -59.1099,
+        renapaCode: '02.045.123',
+        renapaStatus: 'ACTIVE',
+        renapaValidTo: '2027-12-31',
         hiveCount: 0,
         registeredAt: '2024-09-01T00:00:00.000Z',
       },
@@ -284,6 +301,9 @@ async function main(): Promise<void> {
         locality: 'Mercedes',
         province: 'Buenos Aires',
         rne: 'RNE-02-045678',
+        senasaCode: 'SEF-B-008',
+        senasaStatus: 'ACTIVE',
+        senasaValidTo: '2027-12-31',
       },
       userSala,
     );

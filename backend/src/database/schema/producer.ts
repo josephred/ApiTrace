@@ -60,3 +60,32 @@ export const renapaRegistration = pgTable(
   },
   (t) => [index('renapa_producer_status_idx').on(t.producerId, t.status)],
 );
+
+/**
+ * Delegacion de servicios de SENASA en ApiTrace ante ARCA (F3283/E).
+ */
+export const senasaDelegation = pgTable(
+  'senasa_delegation',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    producerId: uuid('producer_id')
+      .notNull()
+      .references(() => producer.id, { onDelete: 'cascade' }),
+    service: varchar('service', { length: 40 }).notNull(), // 'SIGSA_DTE' | 'SITA'
+    status: varchar('status', { length: 40 }).notNull().default('NO_INICIADA'),
+    delegatedToTaxId: varchar('delegated_to_tax_id', { length: 20 }),
+    formNumber: varchar('form_number', { length: 60 }),
+    requestedAt: timestamp('requested_at', { withTimezone: true }),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    notes: varchar('notes', { length: 600 }),
+    updatedById: uuid('updated_by_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('senasa_delegation_producer_idx').on(t.producerId),
+    index('senasa_delegation_status_idx').on(t.status),
+  ],
+);
+

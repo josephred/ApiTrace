@@ -41,6 +41,12 @@ export const NAV: NavGroup[] = [
         roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'TRANSPORTISTA', 'AUDITOR'],
       },
       {
+        to: '/dte',
+        label: 'DT-e SENASA',
+        icon: 'document',
+        roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'AUDITOR'],
+      },
+      {
         to: '/extractions',
         label: 'Extracciones',
         icon: 'extractions',

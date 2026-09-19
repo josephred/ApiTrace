@@ -1,12 +1,14 @@
 import { useState, type FormEvent } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { apiSend } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
 import { fieldErrors, toUserMessage } from '../lib/errors';
 import { formatDateTime, formatQuantity, toLocalInput } from '../lib/format';
+import { formatDay } from '../lib/dte';
 import { MATERIAL_TYPES, MOVEMENT_TYPES, eventLabel } from '../lib/vocabulary';
 import type { IconName } from '../components/Icon';
+import { TransitSemaphoreBadge } from '../components/TransitSemaphoreBadge';
 import {
   Button,
   ButtonLink,
@@ -351,38 +353,78 @@ export const MovementDetailPage = () => {
           />
         </Card>
 
-        <Card title="Documento sanitario" help="dte">
+        <Card
+          title="Documento sanitario oficial"
+          help="dte"
+          actions={
+            dte ? (
+              <Link to={`/dte/${dte.id}`} className="small font-medium">
+                Ver DT-e oficial →
+              </Link>
+            ) : undefined
+          }
+        >
           {dte ? (
-            <SummaryList
-              rows={[
-                {
-                  key: 'Número',
-                  value: dte.number ? (
-                    <span className="mono">{dte.number}</span>
-                  ) : (
-                    <span className="faint">sin asignar</span>
-                  ),
-                },
-                { key: 'Estado', value: <StatusPill status={dte.status} /> },
-                { key: 'Envío a SIGSA', value: <StatusPill status={dte.syncStatus} /> },
-                {
-                  key: 'RENSPA origen',
-                  value: <span className="mono">{dte.originRenspa ?? '—'}</span>,
-                },
-                {
-                  key: 'RENSPA destino',
-                  value: <span className="mono">{dte.destinationRenspa ?? '—'}</span>,
-                },
-                { key: 'Emitido', value: formatDateTime(dte.issuedAt) },
-                { key: 'Cerrado', value: formatDateTime(dte.closedAt) },
-              ]}
-            />
+            <div className="stack" style={{ gap: 'var(--sp-3)' }}>
+              <div className="row row-tight" style={{ alignItems: 'center' }}>
+                <TransitSemaphoreBadge
+                  semaphore={dte.transitSemaphore}
+                  reason={dte.transitReasonText}
+                  size="sm"
+                  showReason
+                />
+              </div>
+              <SummaryList
+                rows={[
+                  {
+                    key: 'Número Oficial',
+                    value: dte.number ? (
+                      <span className="mono font-medium">{dte.number}</span>
+                    ) : (
+                      <span className="faint">Borrador (S/N)</span>
+                    ),
+                  },
+                  { key: 'Estado DT-e', value: <StatusPill status={dte.status} /> },
+                  { key: 'Fecha de carga', value: formatDay(dte.loadDate) },
+                  { key: 'Vencimiento', value: formatDay(dte.expiryDate) },
+                  {
+                    key: 'Cant. declarada (+15%)',
+                    value: `${dte.declaredQuantity ?? 0} ${dte.unit ?? 'ALZA'}`,
+                  },
+                  {
+                    key: 'Patente vehículo',
+                    value: dte.transportPlate ? (
+                      <span className="mono">{dte.transportPlate}</span>
+                    ) : (
+                      '—'
+                    ),
+                  },
+                  {
+                    key: 'Acceso oficial',
+                    value: (
+                      <Link to={`/dte/${dte.id}`} className="font-medium">
+                        Gestionar DT-e oficial →
+                      </Link>
+                    ),
+                  },
+                ]}
+              />
+            </div>
           ) : (
-            <p className="muted small">
-              {data.requiresDocument
-                ? 'Sin documento asociado. La norma vigente lo exige para este traslado.'
-                : 'Sin documento asociado. La norma vigente no lo exige para este traslado.'}
-            </p>
+            <div className="stack" style={{ gap: 'var(--sp-2)' }}>
+              <p className="muted small">
+                {data.requiresDocument
+                  ? 'Sin documento asociado. La norma vigente lo exige para este traslado.'
+                  : 'Sin documento asociado. La norma vigente no lo exige para este traslado.'}
+              </p>
+              {data.requiresDocument && canWrite && (
+                <div>
+                  <Link to="/dte" className="btn btn-secondary btn-sm">
+                    Preparar DT-e oficial
+                  </Link>
+                </div>
+              )}
+            </div>
           )}
 
           {data.reception && (

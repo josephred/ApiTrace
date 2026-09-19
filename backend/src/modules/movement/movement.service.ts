@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpStatus,
   Inject,
   Injectable,
   NotFoundException,
@@ -8,6 +9,7 @@ import {
 import { and, desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../database/database.module';
 import { apiary, dte, establishment, movement, reception } from '../../database/schema';
+import { DomainRuleException } from '../../common/exceptions/domain-rule.exception';
 import { AccessControlService } from '../../common/services/access-control.service';
 import { CodeService } from '../../common/services/code.service';
 import { DomainEvents, EventsService } from '../../common/services/events.service';
@@ -207,7 +209,12 @@ export class MovementService {
       destination?.organizationId ?? null,
     );
 
-    const [document] = await this.db.select().from(dte).where(eq(dte.movementId, id)).limit(1);
+    const [document] = await this.db
+      .select()
+      .from(dte)
+      .where(eq(dte.movementId, id))
+      .orderBy(desc(dte.createdAt))
+      .limit(1);
     const [received] = await this.db
       .select()
       .from(reception)
@@ -245,13 +252,20 @@ export class MovementService {
 
     if (record.requiresDocument) {
       if (!record.dte) {
-        throw new ConflictException(
-          `Este movimiento requiere ${record.requiredDocumentType ?? 'un documento'} antes de despacharse. Genere el DT-e con POST /movements/${id}/dte.`,
+        throw new DomainRuleException(
+          HttpStatus.BAD_REQUEST,
+          'DTE_REQUERIDO',
+          `Este movimiento requiere ${record.requiredDocumentType ?? 'un DT-e'} antes de despacharse. Genere el DT-e con POST /dte/draft.`,
         );
       }
-      if (!['ISSUED', 'APPROVED'].includes(record.dte.status)) {
-        throw new ConflictException(
-          `El DT-e asociado esta en estado ${record.dte.status}; debe estar ISSUED o APPROVED para despachar.`,
+      const st = record.dte.status;
+      const isAllowed = ['ISSUED', 'APPROVED', 'EMITIDO', 'VIGENTE'].includes(st);
+      if (!isAllowed) {
+        throw new DomainRuleException(
+          HttpStatus.BAD_REQUEST,
+          'TRANSITO_NO_AUTORIZADO',
+          `El DT-e asociado esta en estado ${st}; debe estar EMITIDO o VIGENTE para despachar el transporte por ruta.`,
+          { dteStatus: st },
         );
       }
     }
@@ -311,6 +325,19 @@ export class MovementService {
 
     const expected = toNumber(record.quantity);
     const receivedQuantity = dto.receivedQuantity;
+
+    if (record.dte?.declaredQuantity) {
+      const declared = Number(record.dte.declaredQuantity);
+      if (receivedQuantity > declared) {
+        throw new DomainRuleException(
+          HttpStatus.BAD_REQUEST,
+          'EXCESO_CANTIDAD_DECLARADA',
+          `La cantidad recibida (${receivedQuantity}) supera la declarada en el DT-e (${declared}). La normativa de SENASA no permite recibir alzas o miel en exceso sin un DT-e complementario.`,
+          { declaredQuantity: declared, receivedQuantity },
+        );
+      }
+    }
+
     const hasDiscrepancy = quantitiesDiffer(expected, receivedQuantity);
     const result =
       dto.result ?? (receivedQuantity <= 0 ? 'REJECTED' : hasDiscrepancy ? 'PARTIAL' : 'ACCEPTED');

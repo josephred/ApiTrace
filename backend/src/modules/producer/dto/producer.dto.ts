@@ -156,3 +156,35 @@ export class AssociateRenapaDto {
   @MaxLength(300)
   sourceNote?: string;
 }
+
+export class UpsertSenasaDelegationDto {
+  @ApiProperty({ enum: ['SIGSA_DTE', 'SITA'], example: 'SIGSA_DTE' })
+  @IsEnum(['SIGSA_DTE', 'SITA'])
+  service!: 'SIGSA_DTE' | 'SITA';
+
+  @ApiProperty({
+    enum: ['NO_INICIADA', 'PENDIENTE', 'ACEPTADA', 'REVOCADA', 'RECHAZADA'],
+    example: 'ACEPTADA',
+  })
+  @IsEnum(['NO_INICIADA', 'PENDIENTE', 'ACEPTADA', 'REVOCADA', 'RECHAZADA'])
+  status!: 'NO_INICIADA' | 'PENDIENTE' | 'ACEPTADA' | 'REVOCADA' | 'RECHAZADA';
+
+  @ApiPropertyOptional({ example: '30-71829384-5', description: 'CUIT de la empresa delegada en ARCA' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  delegatedToTaxId?: string;
+
+  @ApiPropertyOptional({ example: 'F3283-99481', description: 'Numero de formulario F3283/E de ARCA' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  formNumber?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(600)
+  notes?: string;
+}
+

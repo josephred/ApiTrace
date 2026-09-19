@@ -79,6 +79,24 @@ export class CreateEstablishmentDto {
   @IsString()
   @MaxLength(60)
   rne?: string;
+
+  @ApiPropertyOptional({ example: 'SEF-B-012' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  senasaCode?: string;
+
+  @ApiPropertyOptional({ example: 'ACTIVE' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  senasaStatus?: string;
+
+  @ApiPropertyOptional({ example: '2027-12-31' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  senasaValidTo?: string;
 }
 
 export class UpdateEstablishmentDto {
@@ -135,6 +153,24 @@ export class UpdateEstablishmentDto {
   @IsOptional()
   @IsEnum(['ACTIVE', 'INACTIVE', 'SUSPENDED'])
   status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+
+  @ApiPropertyOptional({ example: 'SEF-B-012' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  senasaCode?: string;
+
+  @ApiPropertyOptional({ example: 'ACTIVE' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  senasaStatus?: string;
+
+  @ApiPropertyOptional({ example: '2027-12-31' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  senasaValidTo?: string;
 }
 
 /** CU-06: el RENSPA vincula productor, actividad y establecimiento. */
