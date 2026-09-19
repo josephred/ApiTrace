@@ -148,37 +148,30 @@ export const LoginPage = () => {
             </Button>
           </form>
 
-          {/*
-            El acceso rápido existe para probar roles sin recordar seis
-            contrasenas. Queda fuera del paquete de producción: mostrar usuarios
-            y claves reales en la pantalla de acceso arruina la confianza que la
-            aplicación necesita transmitir, además del riesgo obvio.
-          */}
-          {import.meta.env.DEV && (
-            <details className="disclosure" style={{ marginTop: 'var(--sp-5)' }}>
-              <summary>Acceso rápido para pruebas</summary>
-              <div className="disclosure-body" style={{ paddingBottom: 'var(--sp-4)' }}>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                    gap: 'var(--sp-2)',
-                  }}
-                >
-                  {DEMO_USERS.map((demo) => (
-                    <Button
-                      key={demo.email}
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void attempt(demo.email, 'ApiTrace2026!')}
-                    >
-                      {demo.label}
-                    </Button>
-                  ))}
-                </div>
+          {/* Acceso rápido para pruebas de demostración y evaluación de perfiles */}
+          <details className="disclosure" style={{ marginTop: 'var(--sp-5)' }}>
+            <summary>Acceso rápido para pruebas (Cuentas demo)</summary>
+            <div className="disclosure-body" style={{ paddingBottom: 'var(--sp-4)' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                  gap: 'var(--sp-2)',
+                }}
+              >
+                {DEMO_USERS.map((demo) => (
+                  <Button
+                    key={demo.email}
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void attempt(demo.email, 'ApiTrace2026!')}
+                  >
+                    {demo.label}
+                  </Button>
+                ))}
               </div>
-            </details>
-          )}
+            </div>
+          </details>
         </Card>
 
         <div
