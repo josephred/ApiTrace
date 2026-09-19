@@ -53,10 +53,14 @@
         <a href="#trazabilidad">Trazabilidad</a>
         <a href="#caracteristicas">Características</a>
         <a href="#normativa">Normativa SENASA</a>
+        <a href="#manuales">Manuales PDF</a>
         <a href="#faq">Preguntas</a>
       </nav>
 
       <div class="nav-actions">
+        <a href="#manuales" class="btn btn-secondary btn-sm" id="btnManualesNav">
+          <span>Manuales PDF</span>
+        </a>
         <a href="https://apitrace-web.onrender.com/login" target="_blank" rel="noopener noreferrer" class="btn btn-primary" id="btnAccederNav">
           <span>Ingresar a la App</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
@@ -73,7 +77,7 @@
     <div class="container hero-container">
       <div class="hero-badge">
         <span class="badge-dot"></span>
-        <span>Trazabilidad Apícola Digital de Extremo a Extremo</span>
+        <span>Integración SENASA API-SEM DT-e • Plataforma Homologada 2026</span>
       </div>
 
       <h1 class="hero-title">
@@ -82,7 +86,7 @@
       </h1>
 
       <p class="hero-subtitle">
-        Conectamos a <strong>Productores, Salas de Extracción, Acopiadores y Fraccionadores</strong> en una sola plataforma. Control de origen, validación automática de DT-e y funcionamiento 100% offline en el campo.
+        Conectamos a <strong>Productores, Salas de Extracción, Transportistas, Acopiadores y Fraccionadores</strong> en una sola plataforma. Control de origen, validación automática de <strong>DT-e de SENASA con Semáforo de Tránsito</strong>, funcionamiento 100% offline y auditoría inmutable.
       </p>
 
       <div class="hero-cta-group">
@@ -90,8 +94,8 @@
           <span>Probar Demostración en Vivo</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
         </a>
-        <a href="#circuito" class="btn btn-secondary btn-lg">
-          <span>Conocer el Circuito</span>
+        <a href="#manuales" class="btn btn-secondary btn-lg">
+          <span>Descargar Manuales Oficiales (PDF)</span>
         </a>
       </div>
 
@@ -100,22 +104,22 @@
         <div class="metric-card">
           <div class="metric-value">100%</div>
           <div class="metric-label">Trazabilidad Retrospectiva</div>
-          <div class="metric-desc">Desde el tambor hasta las colmenas de origen</div>
+          <div class="metric-desc">Desde el frasco o tambor hasta las colmenas y GPS</div>
         </div>
         <div class="metric-card">
           <div class="metric-value">Offline</div>
-          <div class="metric-label">Modo Campo Sin Señal</div>
-          <div class="metric-desc">PWA instalable con sincronización automática</div>
+          <div class="metric-label">Modo Campo PWA</div>
+          <div class="metric-desc">IndexedDB con sincronización segura e idempotencia UUID v4</div>
         </div>
         <div class="metric-card">
           <div class="metric-value">SENASA</div>
-          <div class="metric-label">Resolución 2026 Lista</div>
-          <div class="metric-desc">Exigencia de DT-e en apiario y cierre en sala</div>
+          <div class="metric-label">API-SEM & Semáforo DT-e</div>
+          <div class="metric-desc">Emisión en apiario, control en ruta y cierre formal en sala</div>
         </div>
         <div class="metric-card">
-          <div class="metric-value">0 Fraude</div>
-          <div class="metric-label">Grafo Dirigido Inmutable</div>
-          <div class="metric-desc">Balance de masa y precintos auditables</div>
+          <div class="metric-value">6 Roles</div>
+          <div class="metric-label">Ecosistema Completo</div>
+          <div class="metric-desc">Paneles especializados para cada actor de la cadena</div>
         </div>
       </div>
     </div>
@@ -127,16 +131,18 @@
       <div class="section-header text-center">
         <span class="pill-label">Roles Especializados</span>
         <h2>Cada actor con su panel y herramientas exactas</h2>
-        <p class="section-lead">Diseñado para la realidad operativa del sector apícola argentino.</p>
+        <p class="section-lead">Diseñado para la realidad operativa del sector apícola argentino y normativas vigentes.</p>
       </div>
 
       <!-- Actor Tabs -->
       <div class="tabs-nav" id="actorTabs">
         <button class="tab-btn active" data-actor="productor">🌿 Productor</button>
         <button class="tab-btn" data-actor="sala">🏭 Sala Extracción</button>
+        <button class="tab-btn" data-actor="transportista">🚛 Transportista</button>
         <button class="tab-btn" data-actor="acopio">📦 Acopiador</button>
         <button class="tab-btn" data-actor="fraccionador">🍯 Fraccionador</button>
         <button class="tab-btn" data-actor="auditor">🔍 Auditor / SENASA</button>
+        <button class="tab-btn" data-actor="admin">👑 Administrador</button>
       </div>
 
       <!-- Actor Content Panels -->
@@ -214,6 +220,46 @@
                   <div class="mockup-item">
                     <div class="m-badge warn">DT-e Recibido</div>
                     <div><strong>DT-e #44921-26</strong> · 90 alzas · Productor Gonzalez</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transportista -->
+        <div class="actor-content" id="content-transportista">
+          <div class="actor-grid">
+            <div class="actor-info">
+              <span class="actor-tag indigo">Logística & Tránsito en Ruta</span>
+              <h3>El Transportista en Ruta</h3>
+              <p class="lead-text">Viaja amparado por el DT-e oficial de SENASA directamente desde su teléfono celular, sin depender de papeles o señal en ruta.</p>
+              <ul class="feature-checklist">
+                <li><strong>Semáforo de Tránsito (Verde / Amarillo / Rojo):</strong> Certeza absoluta antes de arrancar. Solo sale a la ruta con DT-e aprobado y vigente.</li>
+                <li><strong>Operación 100% Offline en Ruta:</strong> En controles de Gendarmería y patrullas de SENASA, exhibe el QR y certificado aún sin señal 4G.</li>
+                <li><strong>Entrega de Código de Verificación:</strong> Entrega el código oficial de 12 caracteres al operario de báscula para el cierre formal del viaje.</li>
+                <li><strong>Control de Precintos Inviolables:</strong> Verificación de precintos plásticos y metálicos en traslados de tambores a puerto.</li>
+              </ul>
+            </div>
+            <div class="actor-mockup">
+              <div class="mockup-window">
+                <div class="mockup-header">
+                  <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                  <span class="mockup-title">App Móvil Chofer · ApiTrace PWA</span>
+                </div>
+                <div class="mockup-body">
+                  <div class="mockup-stat-row">
+                    <div class="m-stat"><span>Viaje</span><strong>#MOV-0089</strong></div>
+                    <div class="m-stat"><span>Melarios</span><strong>90 Alzas</strong></div>
+                    <div class="m-stat"><span>Vigencia</span><strong>4 Días</strong></div>
+                  </div>
+                  <div class="mockup-item">
+                    <div class="m-badge success">🟢 AUTORIZADO (VERDE)</div>
+                    <div><strong>DT-e #26-004-9281740-1</strong> · Apiario El Trébol → Sala Rauch</div>
+                  </div>
+                  <div class="mockup-item">
+                    <div class="m-badge info">Código Cierre SENASA</div>
+                    <div><strong>V4K9-2P8M-7X1Q</strong> · Entregar en báscula receptora</div>
                   </div>
                 </div>
               </div>
@@ -332,6 +378,46 @@
           </div>
         </div>
 
+        <!-- Administrador -->
+        <div class="actor-content" id="content-admin">
+          <div class="actor-grid">
+            <div class="actor-info">
+              <span class="actor-tag rose">Gobernanza & Configuración</span>
+              <h3>Administrador de Plataforma</h3>
+              <p class="lead-text">Controla la infraestructura multi-tenant, gobierna las reglas documentales dinámicas y supervisa las pasarelas con SENASA y AFIP.</p>
+              <ul class="feature-checklist">
+                <li><strong>Reglas Documentales Dinámicas:</strong> Modifica tolerancias de báscula (3%), humedad crítica (18%) y vigencia de DT-e sin tocar código.</li>
+                <li><strong>Pasarela SENASA / SIGSA:</strong> Conmuta ágilmente entre modo Simulado (capacitación), Homologación y Producción real en vivo.</li>
+                <li><strong>Aislamiento Multi-Tenant (RBAC):</strong> Gestión segura de permisos por cooperativa, sala o empresa exportadora.</li>
+                <li><strong>Monitoreo de Sincronización:</strong> Supervisión de colas locales con claves de idempotencia UUID v4 y backups automáticos cifrados.</li>
+              </ul>
+            </div>
+            <div class="actor-mockup">
+              <div class="mockup-window">
+                <div class="mockup-header">
+                  <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                  <span class="mockup-title">Consola de Administración Central</span>
+                </div>
+                <div class="mockup-body">
+                  <div class="mockup-stat-row">
+                    <div class="m-stat"><span>Pasarela</span><strong>SIGSA PROD</strong></div>
+                    <div class="m-stat"><span>Reglas</span><strong>4 Activas</strong></div>
+                    <div class="m-stat"><span>Integridad</span><strong>99.99%</strong></div>
+                  </div>
+                  <div class="mockup-item">
+                    <div class="m-badge ok">Regla Documental</div>
+                    <div><strong>DTE_MAX_DAYS = 5</strong> · Tolerancia báscula: 3.0% · Humedad máx: 18.0%</div>
+                  </div>
+                  <div class="mockup-item">
+                    <div class="m-badge info">Certificado AFIP</div>
+                    <div><strong>Nivel 3 Activo</strong> · Servicio SIGSA Formulario 3283/E verificado</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </section>
@@ -395,44 +481,272 @@
       <div class="section-header text-center">
         <span class="pill-label">Tecnología Robusta</span>
         <h2>Diseñado para el campo y para auditorías globales</h2>
-        <p class="section-lead">Respondiendo a las exigencias reales de productores y exportadores.</p>
+        <p class="section-lead">Respondiendo a las exigencias reales de productores, transportistas y exportadores.</p>
       </div>
 
       <div class="features-grid">
         <div class="feature-card">
           <div class="feature-icon">📡</div>
           <h3>100% Offline-First PWA</h3>
-          <p>La miel se produce en el campo donde no hay 4G. Registra colmenas, apiarios y cosechas sin señal; la app sincroniza sola cuando recuperas cobertura.</p>
+          <p>La miel se produce en el campo donde no hay 4G. Registra colmenas, apiarios y cosechas sin señal; la app sincroniza sola con claves de idempotencia UUID v4 cuando recuperas cobertura.</p>
         </div>
 
         <div class="feature-card">
-          <div class="feature-icon">📜</div>
-          <h3>Motor de Reglas Documentales</h3>
-          <p>Valida automáticamente la normativa SENASA vigente: exige DT-e para movimientos melarios hacia salas y verifica la vigencia de registros sanitarios.</p>
+          <div class="feature-icon">🚦</div>
+          <h3>Semáforo DT-e & API-SEM</h3>
+          <p>Validación sanitaria instantánea: 🟢 Verde para circular amparado, 🟡 Amarillo en trámite, 🔴 Rojo no autorizado. Previene retenciones y multas viales.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">💡</div>
+          <h3>Ayudas Pedagógicas en Pantalla</h3>
+          <p>Más de 35 ventanas emergentes didácticas que explican conceptos técnicos, dan ejemplos reales con números y citan la resolución legal de SENASA.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">⚙️</div>
+          <h3>Módulo de Configuración Integral</h3>
+          <p>Personalización adaptada a cada rol en <code>/settings</code>: selector de tema Claro/Oscuro, tolerancias de pesaje, alertas de vencimiento y preferencias visuales.</p>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon">⚖️</div>
           <h3>Control de Balance de Masa</h3>
-          <p>Previene la adulteración y la mezcla no declarada. Cada kilogramo de miel en tambores debe corresponder a un ingreso de material cosechado.</p>
+          <p>Previene la adulteración y mezclas no declaradas. Cada kilogramo de miel en tambor debe justificarse matemáticamente contra el material cosechado.</p>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon">🔒</div>
-          <h3>Aislamiento Multi-Tenant</h3>
-          <p>Cada productor o cooperativa solo accede a sus propios datos. Los inspectores y auditores cuentan con visibilidad transversal sin capacidad de edición.</p>
+          <h3>Aislamiento Multi-Tenant (RBAC)</h3>
+          <p>Cada productor o cooperativa solo accede a sus propios datos. Los inspectores de SENASA cuentan con visibilidad transversal sin capacidad de edición.</p>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon">🔬</div>
           <h3>Muestreo y Calidad</h3>
-          <p>Asocia protocolos fisicoquímicos (humedad, HMF, color) y análisis de contaminantes a lotes específicos con certificados digitales adjuntos.</p>
+          <p>Asocia protocolos fisicoquímicos (humedad &lt;18%, HMF, color Pfund) y análisis de contaminantes o azúcares C4 a lotes específicos con certificados adjuntos.</p>
         </div>
 
         <div class="feature-card">
-          <div class="feature-icon">🚀</div>
-          <h3>Listo para Exportación</h3>
-          <p>Genera reportes de trazabilidad en segundos para cumplir con los requerimientos de la Unión Europea, Estados Unidos y mercados de alta exigencia.</p>
+          <div class="feature-icon">📜</div>
+          <h3>Libro Inmutable de Auditoría</h3>
+          <p>Registro criptográfico inalterable de cada clic, pesaje y cambio de estado con timestamp ISO 8601, IP y usuario responsable para valor probatorio legal.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Normativa SENASA 2026 -->
+  <section class="section normativa-section" id="normativa">
+    <div class="container">
+      <div class="section-header text-center">
+        <span class="pill-label">Marco Legal Obligatorio</span>
+        <h2>Cumplimiento Estricto de la Normativa SENASA 2026</h2>
+        <p class="section-lead">ApiTrace incorpora de manera nativa las resoluciones y exigencias que rigen la apicultura nacional.</p>
+      </div>
+
+      <div class="normativa-grid">
+        <div class="normativa-card">
+          <div class="normativa-icon">📄</div>
+          <h3>DT-e Obligatorio en Apiario</h3>
+          <p>Todo traslado de material melario desde el colmenar hacia la sala de extracción debe contar con Documento de Tránsito electrónico emitido previo al viaje.</p>
+          <div class="normativa-legal">Resolución SENASA API-SEM</div>
+        </div>
+
+        <div class="normativa-card">
+          <div class="normativa-icon">🔒</div>
+          <h3>Cierre Formal con Código</h3>
+          <p>Al recibir los melarios, la sala habilitada debe ingresar el Código de Verificación de 12 caracteres para cerrar formalmente el DT-e y liberar el transporte en SIGSA.</p>
+          <div class="normativa-legal">Sistema SIGSA / SENASA</div>
+        </div>
+
+        <div class="normativa-card">
+          <div class="normativa-icon">🏛️</div>
+          <h3>Delegación Electrónica ARCA</h3>
+          <p>ApiTrace valida el estado de delegación del servicio SIGSA mediante Formulario 3283/E de Clave Fiscal, permitiendo la emisión automática en nombre del productor.</p>
+          <div class="normativa-legal">ARCA / AFIP Nivel 3</div>
+        </div>
+
+        <div class="normativa-card">
+          <div class="normativa-icon">⚖️</div>
+          <h3>Inocuidad & Balance de Masa</h3>
+          <p>Control estricto de humedad máxima del 18.0%, prohibición total de antibióticos y precintado inviolable de tambores con tara estándar reglamentaria de 18.5 kg.</p>
+          <div class="normativa-legal">Código Alimentario Arg. Art. 782</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Centro de Documentación y Manuales de Usuario -->
+  <section class="section manuals-section" id="manuales">
+    <div class="container">
+      <div class="section-header text-center">
+        <span class="pill-label">Capacitación y Guías Oficiales</span>
+        <h2>Centro de Documentación y Manuales de Usuario</h2>
+        <p class="section-lead">Documentos didácticos paso a paso, ilustrados con diagramas de flujo y capturas reales de pantalla para cada rol.</p>
+      </div>
+
+      <!-- Master Book Consolidated Banner -->
+      <div class="master-book-banner">
+        <div class="master-book-content">
+          <div class="master-book-badge">📘 Edición Oficial Unificada 2026</div>
+          <h3>ApiTrace — Manual Maestro Completo</h3>
+          <p>Los 7 manuales de usuario reunidos en un único libro editorial en alta resolución. Incluye glosario apícola ilustrado, diagramas Mermaid de todos los procesos, capturas de pantalla de la app y cuentas de prueba para capacitación.</p>
+          <div class="master-book-meta">
+            <span>📄 <strong>9 Capítulos</strong></span>
+            <span>💾 <strong>PDF 8.9 MB</strong></span>
+            <span>🏷️ <strong>Todos los Roles</strong></span>
+            <span>✓ <strong>100% Imprimible</strong></span>
+          </div>
+        </div>
+        <div class="master-book-action">
+          <a href="manuales/ApiTrace-Manual-Completo.pdf" download="ApiTrace-Manual-Completo.pdf" class="btn btn-primary btn-lg">
+            <span>Descargar Manual Completo (PDF)</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          </a>
+        </div>
+      </div>
+
+      <!-- Grid de Manuales por Rol -->
+      <div class="manuals-grid">
+        <!-- Manual 00 -->
+        <div class="manual-card">
+          <div class="manual-header">
+            <span class="manual-num">DOC-00</span>
+            <span class="manual-role-badge" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">Todos los Usuarios</span>
+          </div>
+          <h4>Introducción y Conceptos Básicos</h4>
+          <p>¿Qué es la trazabilidad de la miel? Glosario apícola ilustrado, marco regulatorio de SENASA/ARCA, funcionamiento offline en el campo y primeros pasos.</p>
+          <ul class="manual-topics">
+            <li>Glosario: Alzas, tambores, precintos, tara y melarios</li>
+            <li>Marco legal: SENASA, RENAPA, RENSPA y DT-e</li>
+            <li>Cola IndexedDB y sincronización con idempotencia</li>
+          </ul>
+          <div class="manual-actions">
+            <a href="manuales/00-introduccion-y-conceptos-basicos.pdf" download="00-introduccion-y-conceptos-basicos.pdf" class="btn-pdf-dl">
+              <span>Descargar PDF</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Manual 01 -->
+        <div class="manual-card">
+          <div class="manual-header">
+            <span class="manual-num">DOC-01</span>
+            <span class="manual-role-badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">Productor</span>
+          </div>
+          <h4>Manual del Productor Apícola</h4>
+          <p>Gestión de apiarios con coordenadas GPS, vinculación del RENAPA oficial, delegación en AFIP (Formulario 3283/E) y despacho de melarios en 3 pasos.</p>
+          <ul class="manual-topics">
+            <li>Alta y geolocalización de apiarios en el mapa</li>
+            <li>Asociación de RENAPA y comprobación de delegación</li>
+            <li>Emisión de movimiento con Semáforo VERDE DT-e</li>
+          </ul>
+          <div class="manual-actions">
+            <a href="manuales/01-manual-productor.pdf" download="01-manual-productor.pdf" class="btn-pdf-dl">
+              <span>Descargar PDF</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Manual 02 -->
+        <div class="manual-card">
+          <div class="manual-header">
+            <span class="manual-num">DOC-02</span>
+            <span class="manual-role-badge" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">Sala Extracción</span>
+          </div>
+          <h4>Manual de Sala de Extracción</h4>
+          <p>Recepción física en rampa, cierre formal de DT-e con Código de Verificación SENASA, centrifugado, cálculo de rendimiento (kg/alza) y tambores con precinto.</p>
+          <ul class="manual-topics">
+            <li>Pesaje en báscula y tolerancia de merma</li>
+            <li>Cierre obligatorio de DT-e con código de 12 caracteres</li>
+            <li>Loteado, control de humedad y precintos inviolables</li>
+          </ul>
+          <div class="manual-actions">
+            <a href="manuales/02-manual-sala-extraccion.pdf" download="02-manual-sala-extraccion.pdf" class="btn-pdf-dl">
+              <span>Descargar PDF</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Manual 03 -->
+        <div class="manual-card">
+          <div class="manual-header">
+            <span class="manual-num">DOC-03</span>
+            <span class="manual-role-badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa;">Acopiador / Fraccionador</span>
+          </div>
+          <h4>Manual de Acopiador y Fraccionador</h4>
+          <p>Recepción de tambores a granel, control de humedad (&lt;18.0%), escala de color Pfund, mezclas secundarias (blending) y preparación de fletes a puerto.</p>
+          <ul class="manual-topics">
+            <li>Control de refractómetro y color Pfund</li>
+            <li>Creación de lotes secundarios sin romper el árbol</li>
+            <li>Gestión de inventario de tambores en depósito</li>
+          </ul>
+          <div class="manual-actions">
+            <a href="manuales/03-manual-acopiador-fraccionador.pdf" download="03-manual-acopiador-fraccionador.pdf" class="btn-pdf-dl">
+              <span>Descargar PDF</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Manual 04 -->
+        <div class="manual-card">
+          <div class="manual-header">
+            <span class="manual-num">DOC-04</span>
+            <span class="manual-role-badge" style="background: rgba(99, 102, 241, 0.15); color: #818cf8;">Transportista</span>
+          </div>
+          <h4>Manual del Transportista en Ruta</h4>
+          <p>Uso de la aplicación en celulares (PWA), consulta del semáforo sanitario antes de salir, exhibición en controles viales sin señal y cierre en destino.</p>
+          <ul class="manual-topics">
+            <li>Semáforo de Tránsito: Verde, Amarillo y Rojo</li>
+            <li>Exhibición en controles de Gendarmería y SENASA</li>
+            <li>Entrega del Código de Verificación en báscula</li>
+          </ul>
+          <div class="manual-actions">
+            <a href="manuales/04-manual-transportista.pdf" download="04-manual-transportista.pdf" class="btn-pdf-dl">
+              <span>Descargar PDF</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Manual 05 -->
+        <div class="manual-card">
+          <div class="manual-header">
+            <span class="manual-num">DOC-05</span>
+            <span class="manual-role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc;">Auditor / Laboratorio</span>
+          </div>
+          <h4>Manual de Auditor y Laboratorio</h4>
+          <p>Inspección del grafo interactivo (rastreo hacia atrás y recall), detección de huecos de trazabilidad, libro inmutable de auditoría y análisis químicos.</p>
+          <ul class="manual-topics">
+            <li>Rastreo aguas arriba (origen) y recall en segundos</li>
+            <li>Identificación de mermas y fraudes con azúcar</li>
+            <li>Registro inmutable de auditoría (Audit Log)</li>
+          </ul>
+          <div class="manual-actions">
+            <a href="manuales/05-manual-auditor-laboratorio.pdf" download="05-manual-auditor-laboratorio.pdf" class="btn-pdf-dl">
+              <span>Descargar PDF</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Manual 06 -->
+        <div class="manual-card">
+          <div class="manual-header">
+            <span class="manual-num">DOC-06</span>
+            <span class="manual-role-badge" style="background: rgba(244, 63, 94, 0.15); color: #fb7185;">Administrador</span>
+          </div>
+          <h4>Manual del Administrador</h4>
+          <p>Gestión multi-tenant (RBAC), configuración de reglas documentales dinámicas (tolerancias y plazos), pasarelas SENASA/SIGSA y contingencias.</p>
+          <ul class="manual-topics">
+            <li>Reglas documentales dinámicas sin tocar código</li>
+            <li>Modos de pasarela: Simulado, Homologación y Producción</li>
+            <li>Monitoreo de colas offline y backups PostgreSQL</li>
+          </ul>
+          <div class="manual-actions">
+            <a href="manuales/06-manual-administrador.pdf" download="06-manual-administrador.pdf" class="btn-pdf-dl">
+              <span>Descargar PDF</span>
+            </a>
+          </div>
         </div>
       </div>
     </div>
@@ -453,37 +767,89 @@
             <span class="accordion-icon">+</span>
           </button>
           <div class="accordion-body">
-            <p><strong>Sí.</strong> ApiTrace está construida como una PWA (Progressive Web App) con arquitectura Offline-First. Puedes registrar colmenas, apiarios, movimientos y lecturas en el campo sin conexión. Al regresar a una zona con señal Wi-Fi o datos móviles, la app sincroniza todas las operaciones pendientes de forma transparente.</p>
+            <p><strong>Sí, totalmente.</strong> ApiTrace está construida como una PWA (Progressive Web App) con arquitectura Offline-First. Puedes registrar colmenas, apiarios, movimientos y pesajes en el campo sin conexión. Las operaciones se almacenan en la base local (IndexedDB) con claves de idempotencia UUID v4 y se sincronizan solas cuando el teléfono o tablet recupera cobertura 4G o Wi-Fi.</p>
           </div>
         </div>
 
         <div class="accordion-item">
           <button class="accordion-header">
-            <span>¿Quién puede registrar nuevos productores y establecimientos?</span>
+            <span>¿Cómo funciona el Semáforo de Tránsito en la ruta y los controles de Gendarmería?</span>
             <span class="accordion-icon">+</span>
           </button>
           <div class="accordion-body">
-            <p>Los productores se registran al darse de alta en la plataforma o a través de un Administrador. Una vez dentro, cada productor administra sus propios predios (asociando su RENSPA) y sus apiarios. Las salas de extracción y centros de acopio dan de alta sus propios establecimientos industriales habilitados.</p>
+            <p>Antes de salir a la ruta, la app muestra un indicador visual inmediato: 🟢 <strong>VERDE (Autorizado)</strong> significa que el DT-e fue aprobado por SENASA y el transportista puede circular legalmente. En caso de control caminero (Gendarmería o Patrulla Sanitaria), el chofer abre la app en su celular y muestra el código QR y la constancia oficial, la cual se visualiza incluso sin señal de internet.</p>
           </div>
         </div>
 
         <div class="accordion-item">
           <button class="accordion-header">
-            <span>¿Cómo se adapta a la normativa SENASA vigente?</span>
+            <span>¿Cómo se cierra formalmente el DT-e en la sala de extracción?</span>
             <span class="accordion-icon">+</span>
           </button>
           <div class="accordion-body">
-            <p>El sistema cuenta con un motor de reglas documentales dinámico que exige el Documento de Tránsito electrónico (DT-e) en el traslado de material melario desde apiarios a salas de extracción, contemplando el esquema de gestión en SIGSA y el cierre formal en la sala receptora.</p>
+            <p>Al llegar el camión a la sala receptora, el transportista entrega al encargado de báscula el <strong>Código de Verificación SENASA</strong> (12 caracteres alfanuméricos impresos en el DT-e). El encargado ingresa ese código en ApiTrace para dar cierre oficial al documento sanitario en SIGSA y liberar el vehículo.</p>
           </div>
         </div>
 
         <div class="accordion-item">
           <button class="accordion-header">
-            <span>¿Se puede probar una versión de demostración?</span>
+            <span>¿Dónde puedo descargar los manuales de usuario para capacitar a mi equipo?</span>
             <span class="accordion-icon">+</span>
           </button>
           <div class="accordion-body">
-            <p>Sí, la plataforma cuenta con usuarios de demostración precargados para todos los perfiles (Productor, Sala de Extracción, Acopiador, Auditor SENASA y Administrador) para recorrer todo el circuito de punta a punta.</p>
+            <p>En la sección <a href="#manuales" style="color: var(--accent); font-weight: bold;">Manuales PDF</a> dispones de 7 manuales especializados por rol y un <strong>Manual Maestro Consolidado de 8.9 MB</strong> listo para descargar o imprimir. Están redactados en lenguaje sencillo para personas sin experiencia en sistemas informáticos o en el negocio apícola.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-header">
+            <span>¿Se puede probar una versión de demostración en vivo?</span>
+            <span class="accordion-icon">+</span>
+          </button>
+          <div class="accordion-body">
+            <p>Sí, la plataforma cuenta con un entorno de demostración activo con usuarios precargados para todos los perfiles de la cadena. Puedes ingresar libremente con cualquiera de las cuentas indicadas debajo.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Demo Accounts Credentials Box -->
+      <div class="demo-accounts-box">
+        <div class="demo-title">
+          <span>🔑 Cuentas de Acceso para Demostración y Ensayos</span>
+        </div>
+        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+          Contraseña universal para todas las cuentas de prueba: <strong style="color: #fbbf24; font-family: monospace; background: rgba(245, 158, 11, 0.15); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.3);">ApiTrace2026!</strong>
+        </p>
+        <div class="demo-grid">
+          <div class="demo-card">
+            <div class="demo-role">Productor Apícola</div>
+            <div class="demo-email">productor.rodriguez@apitrace.ar</div>
+            <div class="demo-pass">Colmenas, apiarios y despacho</div>
+          </div>
+          <div class="demo-card">
+            <div class="demo-role">Sala de Extracción</div>
+            <div class="demo-email">sala.tandil@apitrace.ar</div>
+            <div class="demo-pass">Báscula, cierre DT-e y tambores</div>
+          </div>
+          <div class="demo-card">
+            <div class="demo-role">Transportista en Ruta</div>
+            <div class="demo-email">chofer.gomez@apitrace.ar</div>
+            <div class="demo-pass">PWA móvil y semáforo DT-e</div>
+          </div>
+          <div class="demo-card">
+            <div class="demo-role">Acopiador / Fraccionador</div>
+            <div class="demo-email">acopio.pampa@apitrace.ar</div>
+            <div class="demo-pass">Stock tambores, humedad y mezcla</div>
+          </div>
+          <div class="demo-card">
+            <div class="demo-role">Auditor / SENASA</div>
+            <div class="demo-email">auditor.senasa@apitrace.ar</div>
+            <div class="demo-pass">Grafo de trazabilidad y huecos</div>
+          </div>
+          <div class="demo-card">
+            <div class="demo-role">Administrador Sistema</div>
+            <div class="demo-email">admin@apitrace.ar</div>
+            <div class="demo-pass">Control global y reglas dinámicas</div>
           </div>
         </div>
       </div>
@@ -496,11 +862,14 @@
       <div class="cta-banner">
         <div class="cta-content">
           <h2>Comienza a digitalizar la trazabilidad de tu miel</h2>
-          <p>Pruébalo gratis hoy mismo con nuestra demo interactiva o integra tu cooperativa.</p>
-          <div class="cta-btns">
+          <p>Pruébalo gratis hoy mismo con nuestra demo interactiva o capacita a tu equipo con los manuales oficiales.</p>
+          <div class="cta-btns" style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;">
             <a href="https://apitrace-web.onrender.com/login" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-lg" id="btnCtaFinal">
               <span>Ingresar a la Plataforma</span>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </a>
+            <a href="#manuales" class="btn btn-secondary btn-lg">
+              <span>Ver Manuales de Usuario</span>
             </a>
           </div>
         </div>
@@ -524,25 +893,27 @@
           </svg>
           <span class="brand-text">ApiTrace</span>
         </div>
-        <p class="footer-desc">Plataforma integral de trazabilidad apícola para la República Argentina. Conectando la producción sustentable con los mercados del mundo.</p>
+        <p class="footer-desc">Plataforma integral de trazabilidad apícola para la República Argentina. Integración oficial con SENASA API-SEM y cumplimiento de estándares internacionales de exportación.</p>
       </div>
 
       <div class="footer-links-group">
-        <h4>Plataforma</h4>
+        <h4>Plataforma & Circuito</h4>
         <ul>
-          <li><a href="https://apitrace-web.onrender.com/login" target="_blank" rel="noopener noreferrer">Iniciar Sesión</a></li>
-          <li><a href="#circuito">La Cadena</a></li>
+          <li><a href="https://apitrace-web.onrender.com/login" target="_blank" rel="noopener noreferrer">Iniciar Sesión en Vivo</a></li>
+          <li><a href="#circuito">Roles de la Cadena</a></li>
           <li><a href="#trazabilidad">Grafo de Trazabilidad</a></li>
-          <li><a href="#normativa">SENASA 2026</a></li>
+          <li><a href="#normativa">Normativa SENASA 2026</a></li>
+          <li><a href="#manuales">Manuales Oficiales PDF</a></li>
         </ul>
       </div>
 
       <div class="footer-links-group">
-        <h4>Contacto & Proyecto</h4>
+        <h4>Documentación & Contacto</h4>
         <ul>
+          <li><a href="manuales/ApiTrace-Manual-Completo.pdf" download="ApiTrace-Manual-Completo.pdf">Manual Completo (PDF 8.9 MB)</a></li>
           <li><a href="mailto:contacto@apitrace.ar">contacto@apitrace.ar</a></li>
-          <li><span>Desarrollado para apicultores y exportadores</span></li>
-          <li><span class="badge-tag">Versión 0.1.0 MVP</span></li>
+          <li><span>Soporte técnico y cooperativas</span></li>
+          <li><span class="badge-tag" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">Versión 2.0 • SENASA API-SEM</span></li>
         </ul>
       </div>
     </div>
@@ -550,7 +921,7 @@
     <div class="footer-bottom">
       <div class="container footer-bottom-container">
         <p>© 2026 ApiTrace. Todos los derechos reservados.</p>
-        <p class="faint">Construido con estándares abiertos para la trazabilidad apícola nacional.</p>
+        <p class="faint">Construido con estándares abiertos para la trazabilidad apícola de la República Argentina.</p>
       </div>
     </div>
   </footer>

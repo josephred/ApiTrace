@@ -468,6 +468,8 @@ h1, h2, h3, h4, h5 {
 .actor-tag.amber { background: rgba(245, 158, 11, 0.15); color: var(--accent); border: 1px solid rgba(245, 158, 11, 0.3); }
 .actor-tag.blue { background: rgba(59, 130, 246, 0.15); color: var(--blue); border: 1px solid rgba(59, 130, 246, 0.3); }
 .actor-tag.purple { background: rgba(168, 85, 247, 0.15); color: var(--purple); border: 1px solid rgba(168, 85, 247, 0.3); }
+.actor-tag.indigo { background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
+.actor-tag.rose { background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
 .actor-tag.gray { background: rgba(120, 113, 108, 0.2); color: #d6d3d1; border: 1px solid rgba(120, 113, 108, 0.35); }
 
 .actor-info h3 {
@@ -601,6 +603,8 @@ h1, h2, h3, h4, h5 {
 .m-badge.ok { background: rgba(16, 185, 129, 0.15); color: var(--green); }
 .m-badge.info { background: rgba(59, 130, 246, 0.15); color: var(--blue); }
 .m-badge.warn { background: rgba(245, 158, 11, 0.15); color: var(--accent); }
+.m-badge.danger { background: rgba(239, 68, 68, 0.18); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); }
+.m-badge.success { background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); }
 
 /* ------------------------------------------------ Traceability Section */
 .trace-demo-box {
@@ -798,6 +802,323 @@ h1, h2, h3, h4, h5 {
 
 .accordion-item.active .accordion-body {
   display: block;
+}
+
+/* ------------------------------------------------ Normativa SENASA 2026 */
+.normativa-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+  margin-top: 3rem;
+}
+
+.normativa-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 2.25rem 1.85rem;
+  display: flex;
+  flex-direction: column;
+  transition: all var(--transition-normal);
+  position: relative;
+  overflow: hidden;
+}
+
+.normativa-card:hover {
+  border-color: rgba(245, 158, 11, 0.4);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.35);
+}
+
+.normativa-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  margin-bottom: 1.25rem;
+}
+
+.normativa-card h3 {
+  font-size: 1.28rem;
+  margin-bottom: 0.75rem;
+}
+
+.normativa-card p {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  margin-bottom: 1.5rem;
+  flex-grow: 1;
+}
+
+.normativa-legal {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 4px;
+  padding: 3px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* ------------------------------------------------ Centro de Manuales de Usuario */
+.master-book-banner {
+  background: linear-gradient(135deg, rgba(28, 25, 23, 0.95) 0%, rgba(41, 37, 36, 0.85) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: var(--radius-lg);
+  padding: 2.75rem 3rem;
+  margin-bottom: 3.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2.5rem;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.45);
+  position: relative;
+  overflow: hidden;
+}
+
+.master-book-content {
+  max-width: 680px;
+}
+
+.master-book-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  margin-bottom: 1rem;
+}
+
+.master-book-banner h3 {
+  font-size: 1.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.master-book-banner p {
+  color: var(--text-secondary);
+  font-size: 1.02rem;
+  line-height: 1.6;
+  margin-bottom: 1.25rem;
+}
+
+.master-book-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.master-book-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.manuals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.75rem;
+}
+
+.manual-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.85rem;
+  display: flex;
+  flex-direction: column;
+  transition: all var(--transition-normal);
+}
+
+.manual-card:hover {
+  border-color: rgba(245, 158, 11, 0.35);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.3);
+}
+
+.manual-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.2rem;
+}
+
+.manual-num {
+  font-family: monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(245, 158, 11, 0.12);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.manual-role-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+}
+
+.manual-card h4 {
+  font-size: 1.25rem;
+  margin-bottom: 0.6rem;
+}
+
+.manual-card p {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  margin-bottom: 1.25rem;
+  flex-grow: 1;
+}
+
+.manual-topics {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.manual-topics li {
+  position: relative;
+  padding-left: 1.2rem;
+}
+
+.manual-topics li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: bold;
+}
+
+.manual-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: auto;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 1.25rem;
+}
+
+.btn-pdf-dl {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all var(--transition-fast);
+}
+
+.btn-pdf-dl:hover {
+  background: var(--accent);
+  color: #0c0a09;
+}
+
+.btn-web-view {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all var(--transition-fast);
+}
+
+.btn-web-view:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* ------------------------------------------------ Demo Accounts Bar */
+.demo-accounts-box {
+  background: rgba(28, 25, 23, 0.6);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 1.75rem;
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.demo-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #fbbf24;
+}
+
+.demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+}
+
+.demo-card {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+}
+
+.demo-role {
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+.demo-email {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+.demo-pass {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
 }
 
 /* ------------------------------------------------ CTA Banner */
