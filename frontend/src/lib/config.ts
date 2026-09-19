@@ -20,7 +20,16 @@ export const apiBaseUrl = ((): string => {
   }
   // En despliegue en Render, si VITE_API_URL no llego al build:
   if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
-    const apiHost = window.location.hostname.replace('-web.', '-api.');
+    let apiHost = window.location.hostname;
+    if (apiHost.includes('-web.')) {
+      apiHost = apiHost.replace('-web.', '-api.');
+    } else if (apiHost.startsWith('apitrace.')) {
+      apiHost = apiHost.replace('apitrace.', 'apitrace-api.');
+    } else if (apiHost.startsWith('beetrace.')) {
+      apiHost = apiHost.replace('beetrace.', 'beetrace-api.');
+    } else {
+      apiHost = `${apiHost.split('.')[0]}-api.onrender.com`;
+    }
     return `https://${apiHost}${API_PREFIX}`;
   }
   return API_PREFIX; // desarrollo local: proxy de Vite hacia localhost:3000
