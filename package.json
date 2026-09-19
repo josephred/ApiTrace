@@ -1,0 +1,11 @@
+{
+  "name": "apitrace",
+  "private": true,
+  "scripts": {
+    "docs:pdf": "node scripts/generate-manual-pdfs.js"
+  },
+  "devDependencies": {
+    "marked": "^18.0.13",
+    "puppeteer-core": "^25.11.0"
+  }
+}

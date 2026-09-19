@@ -13,6 +13,7 @@ import {
 import { Link } from 'react-router-dom';
 import { Icon, type IconName } from './Icon';
 import { HELP, statusInfo, type HelpEntry, type Tone } from '../lib/vocabulary';
+import { useHelpSettings } from '../lib/helpContext';
 
 /* =========================================================================
    Botones
@@ -115,13 +116,22 @@ export const ButtonLink = ({
  * cuando alguien la pide.
  */
 export const HelpTip = ({ topic, entry }: { topic?: keyof typeof HELP; entry?: HelpEntry }) => {
+  const { helpEnabled, setHelpEnabled } = useHelpSettings();
   const content = entry ?? (topic ? HELP[topic] : undefined);
   const [open, setOpen] = useState(false);
+  const [alignRight, setAlignRight] = useState(false);
   const wrapRef = useRef<HTMLSpanElement>(null);
   const id = useId();
 
   useEffect(() => {
     if (!open) return;
+
+    if (wrapRef.current) {
+      const rect = wrapRef.current.getBoundingClientRect();
+      // Si el botón está a menos de 360px del borde derecho de la ventana, alinear hacia la izquierda
+      setAlignRight(window.innerWidth - rect.left < 360);
+    }
+
     const onDown = (event: MouseEvent) => {
       if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
     };
@@ -136,10 +146,18 @@ export const HelpTip = ({ topic, entry }: { topic?: keyof typeof HELP; entry?: H
     };
   }, [open]);
 
-  if (!content) return null;
+  // Si la ayuda contextual está deshabilitada globalmente o no hay contenido, no se renderiza nada
+  if (!helpEnabled || !content) return null;
 
   return (
-    <span ref={wrapRef} style={{ position: 'relative', display: 'inline-flex' }}>
+    <span
+      ref={wrapRef}
+      style={{
+        position: 'relative',
+        display: 'inline-flex',
+        zIndex: open ? 500 : undefined,
+      }}
+    >
       <button
         type="button"
         className="help-btn"
@@ -151,10 +169,65 @@ export const HelpTip = ({ topic, entry }: { topic?: keyof typeof HELP; entry?: H
         ?
       </button>
       {open && (
-        <span id={id} role="note" className="help-pop" style={{ top: 'calc(100% + 8px)', left: 0 }}>
-          <span className="help-pop-title">{content.title}</span>
-          {content.body}
-        </span>
+        <div
+          id={id}
+          role="note"
+          className="help-pop"
+          style={{
+            top: 'calc(100% + 8px)',
+            ...(alignRight ? { right: 0, left: 'auto' } : { left: 0, right: 'auto' }),
+          }}
+        >
+          <div className="help-pop-top">
+            {content.category ? (
+              <span className="help-pop-badge">{content.category}</span>
+            ) : (
+              <span />
+            )}
+            <button
+              type="button"
+              className="help-pop-close"
+              aria-label="Cerrar ayuda"
+              onClick={() => setOpen(false)}
+            >
+              <Icon name="close" size={13} />
+            </button>
+          </div>
+
+          <div className="help-pop-title">{content.title}</div>
+          <div className="help-pop-body">{content.body}</div>
+
+          {content.example && (
+            <div className="help-pop-example">
+              <span className="help-pop-example-tag">
+                <Icon name="sparkles" size={12} />
+                <span>Ejemplo de uso</span>
+              </span>
+              <p className="help-pop-example-text">{content.example}</p>
+            </div>
+          )}
+
+          {content.regulation && (
+            <div className="help-pop-regulation">
+              <span className="help-pop-regulation-icon" aria-hidden="true">📜</span>
+              <span>{content.regulation}</span>
+            </div>
+          )}
+
+          <div className="help-pop-footer">
+            <button
+              type="button"
+              className="help-pop-disable-btn"
+              onClick={() => {
+                setHelpEnabled(false);
+                setOpen(false);
+              }}
+              title="Ocultar todos los botones de ayuda contextual (?)"
+            >
+              Desactivar ayudas contextuales
+            </button>
+          </div>
+        </div>
       )}
     </span>
   );
@@ -419,12 +492,14 @@ const FOCUSABLE =
 export const Sheet = ({
   title,
   subtitle,
+  help,
   onClose,
   children,
   narrow,
 }: {
   title: string;
   subtitle?: ReactNode;
+  help?: keyof typeof HELP;
   onClose: () => void;
   children: ReactNode;
   narrow?: boolean;
@@ -497,7 +572,10 @@ export const Sheet = ({
         <div className="sheet-grip" />
         <header className="sheet-head">
           <div className="grow">
-            <h2 id={titleId}>{title}</h2>
+            <div className="row row-tight" style={{ alignItems: 'center' }}>
+              <h2 id={titleId}>{title}</h2>
+              {help && <HelpTip topic={help} />}
+            </div>
             {subtitle && <div className="sheet-sub">{subtitle}</div>}
           </div>
           <Button variant="ghost" className="btn-icon" onClick={onClose} aria-label="Cerrar">

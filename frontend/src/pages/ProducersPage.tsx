@@ -370,7 +370,7 @@ const RenapaSheet = ({
   };
 
   return (
-    <Sheet title="Asociar RENAPA" subtitle={producer.businessName} onClose={onClose}>
+    <Sheet title="Asociar RENAPA" subtitle={producer.businessName} help="renapa" onClose={onClose}>
       <Form
         onSubmit={submit}
         error={failure && <FormError title={failure.title} detail={failure.detail} />}
@@ -455,6 +455,7 @@ const SenasaDelegationSheet = ({
     <Sheet
       title="Delegaciones SENASA / ARCA"
       subtitle={`Gestión de clave fiscal F3283/E para ${producer.businessName}`}
+      help="senasaDelegation"
       onClose={onClose}
     >
       <div className="stack" style={{ gap: 'var(--sp-4)' }}>

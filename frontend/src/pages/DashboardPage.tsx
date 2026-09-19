@@ -258,31 +258,32 @@ export const DashboardPage = () => {
 
       {/* --------------------------------------------------------- cifras */}
       <div className="grid c4">
-        <Stat label="Movimientos" value={movements.data?.meta.total ?? '—'} hint="en tu ámbito" />
+        <Stat label="Movimientos" value={movements.data?.meta.total ?? '—'} hint="en tu ámbito" help="movements" />
 
         {isProducer ? (
           <>
-            <Stat label="Apiarios" value={apiaries.data?.meta.total ?? '—'} hint="unidades productivas" />
+            <Stat label="Apiarios" value={apiaries.data?.meta.total ?? '—'} hint="unidades productivas" help="apiaries" />
             <Stat
               label="Establecimientos"
               value={establishments.data?.meta.total ?? '—'}
               hint="predios registrados"
+              help="establishments"
             />
           </>
         ) : isSala ? (
           <>
-            <Stat label="Extracciones" value={extractions.data?.meta.total ?? '—'} hint="procesos" />
-            <Stat label="Lotes" value={lots.data?.meta.total ?? '—'} hint="unidades de trazabilidad" />
+            <Stat label="Extracciones" value={extractions.data?.meta.total ?? '—'} hint="procesos" help="extractions" />
+            <Stat label="Lotes" value={lots.data?.meta.total ?? '—'} hint="unidades de trazabilidad" help="lots" />
           </>
         ) : isStock ? (
           <>
-            <Stat label="Lotes" value={lots.data?.meta.total ?? '—'} hint="en acopio" />
-            <Stat label="Tambores" value={drums.data?.meta.total ?? '—'} hint="en inventario" />
+            <Stat label="Lotes" value={lots.data?.meta.total ?? '—'} hint="en acopio" help="lots" />
+            <Stat label="Tambores" value={drums.data?.meta.total ?? '—'} hint="en inventario" help="drums" />
           </>
         ) : (
           <>
-            <Stat label="Lotes" value={lots.data?.meta.total ?? '—'} hint="unidades de trazabilidad" />
-            <Stat label="Apiarios" value={apiaries.data?.meta.total ?? '—'} hint="unidades productivas" />
+            <Stat label="Lotes" value={lots.data?.meta.total ?? '—'} hint="unidades de trazabilidad" help="lots" />
+            <Stat label="Apiarios" value={apiaries.data?.meta.total ?? '—'} hint="unidades productivas" help="apiaries" />
           </>
         )}
 

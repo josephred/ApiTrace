@@ -36,6 +36,7 @@ const TracePage = page(() => import('./pages/TracePage'), 'TracePage');
 const AuditPage = page(() => import('./pages/AuditPage'), 'AuditPage');
 const RulesPage = page(() => import('./pages/RulesPage'), 'RulesPage');
 const PendingPage = page(() => import('./pages/PendingPage'), 'PendingPage');
+const SettingsPage = page(() => import('./pages/SettingsPage'), 'SettingsPage');
 
 const OPERATION_ROLES: UserRole[] = [
   'ADMIN',
@@ -229,6 +230,14 @@ export const App = () => {
             element={
               <Suspense fallback={<SkeletonList />}>
                 <PendingPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <Suspense fallback={<SkeletonList rows={4} />}>
+                <SettingsPage />
               </Suspense>
             }
           />

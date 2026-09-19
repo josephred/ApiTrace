@@ -265,6 +265,7 @@ export const MovementDetailPage = () => {
         code={data.code}
         status={<StatusPill status={data.status} />}
         sub={`${data.origin?.name ?? '—'} → ${data.destination?.name ?? '—'}`}
+        help="movements"
         back={{ to: '/movements', label: 'Movimientos' }}
         actions={
           <ButtonLink to={`/trace/forward/movement/${data.id}`} icon="trace">
@@ -325,7 +326,7 @@ export const MovementDetailPage = () => {
       )}
 
       <div className="grid c2">
-        <Card title="Datos del traslado">
+        <Card title="Datos del traslado" help="scheduledAt">
           <SummaryList
             rows={[
               { key: 'Tipo', value: MOVEMENT_TYPES.label(data.movementType) },
@@ -459,7 +460,7 @@ export const MovementDetailPage = () => {
         </Card>
       </div>
 
-      <Card title="Historial">
+      <Card title="Historial" help="audit">
         {timeline.data && timeline.data.events.length > 0 ? (
           <ul className="timeline">
             {timeline.data.events.map((event) => (

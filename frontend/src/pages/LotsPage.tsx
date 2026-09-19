@@ -241,7 +241,7 @@ const CreateLotSheet = ({
   ];
 
   const quality: FieldSpec[] = [
-    { name: 'honeyType', label: 'Tipo de miel', placeholder: 'Multifloral' },
+    { name: 'honeyType', label: 'Tipo de miel', placeholder: 'Multifloral', help: 'honeyType' },
     {
       name: 'moisturePercent',
       label: 'Humedad (%)',
@@ -250,6 +250,7 @@ const CreateLotSheet = ({
       min: '0',
       max: '100',
       inputMode: 'decimal',
+      help: 'moisture',
     },
     { name: 'color', label: 'Color', placeholder: 'Ámbar claro' },
   ];

@@ -302,7 +302,7 @@ export const DteDetailPage = () => {
       </div>
 
       <div className="grid-details">
-        <Card title="Validez y Plazos">
+        <Card title="Validez y Plazos" help="scheduledAt">
           <SummaryList
             rows={[
               { key: 'Fecha de carga autorizada', value: formatDay(dte.loadDate) },
@@ -314,7 +314,7 @@ export const DteDetailPage = () => {
           />
         </Card>
 
-        <Card title="Transporte y Código de Verificación">
+        <Card title="Transporte y Código de Verificación" help="dteVerificationCode">
           <div className="stack" style={{ gap: 'var(--sp-3)' }}>
             <SummaryList
               rows={[

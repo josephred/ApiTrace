@@ -97,8 +97,11 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
-    group: 'Dispositivo',
-    items: [{ to: '/pending', label: 'Pendientes', icon: 'sync' }],
+    group: 'Sistema',
+    items: [
+      { to: '/settings', label: 'Configuración', icon: 'settings' },
+      { to: '/pending', label: 'Pendientes', icon: 'sync' },
+    ],
   },
 ];
 

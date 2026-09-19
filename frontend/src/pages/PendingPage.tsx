@@ -121,9 +121,9 @@ export const PendingPage = () => {
       )}
 
       <div className="grid c3">
-        <Stat label="En espera" value={pendingCount} hint={online ? 'se envían solas' : 'esperando señal'} />
+        <Stat label="En espera" value={pendingCount} hint={online ? 'se envían solas' : 'esperando señal'} help="pending" />
         <Stat label="Rechazadas" value={failedCount} hint="necesitan tu revisión" />
-        <Stat label="Último envío" value={formatRelative(lastSyncAt)} />
+        <Stat label="Último envío" value={formatRelative(lastSyncAt)} help="offline" />
       </div>
 
       <Card flush>

@@ -166,21 +166,25 @@ export const DtePage = () => {
             label="Total DT-e"
             value={summary.total}
             hint="En el sistema"
+            help="dte"
           />
           <Stat
             label="En tránsito"
             value={<span style={{ color: '#16a34a' }}>{summary.vigentes}</span>}
             hint="Amparados por DT-e"
+            help="dteTransit"
           />
           <Stat
             label="Vencidos / Caducados"
             value={<span style={{ color: '#dc2626' }}>{summary.vencidos + summary.caducados}</span>}
             hint="Requieren regularización"
+            help="movementRule"
           />
           <Stat
             label="Cerrados en sala"
             value={<span style={{ color: '#2563eb' }}>{summary.cerrados}</span>}
             hint="Recepción completa"
+            help="reception"
           />
         </div>
       )}

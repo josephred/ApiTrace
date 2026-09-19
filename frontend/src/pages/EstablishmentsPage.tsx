@@ -386,7 +386,7 @@ const RenspaSheet = ({
   };
 
   return (
-    <Sheet title="Asociar RENSPA" subtitle={establishment.name} onClose={onClose}>
+    <Sheet title="Asociar RENSPA" subtitle={establishment.name} help="renspa" onClose={onClose}>
       <Form
         onSubmit={submit}
         error={failure && <FormError title={failure.title} detail={failure.detail} />}
