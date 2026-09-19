@@ -3,8 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#211b14" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" />
     <meta
       name="description"
       content="ApiTrace: trazabilidad apícola argentina. Funciona sin conexión y sincroniza al recuperar señal."
@@ -12,6 +11,24 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <title>ApiTrace | Trazabilidad Apícola</title>
+    <script>
+      /*
+        El tema se aplica antes de que React monte. Sin esto, la aplicación se
+        pinta en claro y salta a oscuro medio segundo después: un destello
+        molesto y, en una PWA que abre muchas veces al día, evidente.
+      */
+      (function () {
+        try {
+          var guardado = localStorage.getItem('apitrace.theme');
+          var tema = guardado === 'dark' ? 'dark' : 'light';
+          document.documentElement.dataset.theme = tema;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', tema === 'dark' ? '#1a1410' : '#ffffff');
+        } catch (e) {
+          document.documentElement.dataset.theme = 'light';
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

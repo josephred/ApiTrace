@@ -70,7 +70,8 @@ sea reproducible y siempre muestre los mismos estados del circuito.
 | Viewport escritorio | 1440 × 940 px, `deviceScaleFactor` 2 |
 | Viewport móvil | 390 × 844 px, `deviceScaleFactor` 3, emulación táctil |
 | Idioma / zona | `es-AR`, `America/Argentina/Buenos_Aires` |
-| Total de capturas | 73 (36 escritorio + 37 móvil) |
+| Tema | Claro para el catálogo completo; 7 pantallas representativas también en oscuro |
+| Total de capturas | 80 (36 escritorio + 37 móvil + 7 oscuro) |
 
 ### Regenerar el catálogo
 
@@ -78,7 +79,7 @@ sea reproducible y siempre muestre los mismos estados del circuito.
 cd frontend
 npm run build
 npx vite preview --port 4173 &
-node capturas.mjs          # escribe en ../docs/capturas/{escritorio,movil}
+node capturas.mjs          # escribe en ../docs/capturas/{escritorio,movil,oscuro}
 ```
 
 El guion es la fuente de verdad del catálogo: agregar una pantalla al documento implica
@@ -269,7 +270,35 @@ solo cuando alguien las pide. Hay 28 textos de ayuda, todos de dos o tres frases
 | Estado de envío | El botón cambia de texto: *Guardar* → *Guardando…* |
 | Formularios largos | Se convierten en asistentes por pasos (ver 6.6 y 6.8) |
 
-### 4.6 Reglas transversales
+### 4.6 Tema claro y tema oscuro
+
+La aplicación arranca siempre en **tema claro**, sin importar cómo esté configurado el sistema
+operativo. La razón es el lugar de uso: se registra en el campo, a pleno sol, donde un fondo
+oscuro se lee peor. Antes la app seguía a `prefers-color-scheme`, de modo que un teléfono con
+el modo oscuro automático activado quedaba difícil de leer en el apiario sin que su dueño
+entendiera por qué.
+
+El tema oscuro sigue disponible para el trabajo de escritorio y para quien lo prefiera, y es
+más profundo que la versión anterior: el fondo bajó de 0,0068 a 0,0039 de luminancia relativa,
+poco menos de la mitad, lo que hace que las tarjetas se despeguen más del fondo.
+
+| | Claro (predeterminado) | Oscuro |
+|---|---|---|
+| Fondo | `#faf8f3` | `#100c08` |
+| Superficie | `#ffffff` | `#1a1410` |
+| Texto principal | `#241d15` — 16,7:1 | `#f5efe5` — 16,0:1 |
+| Acción primaria | Ámbar oscuro sobre blanco — 5,9:1 | Ámbar claro sobre marrón muy oscuro — 10,0:1 |
+
+**Dónde se cambia.** En la barra lateral (escritorio), en la hoja «Más» (teléfono) y en la
+pantalla de acceso. La elección se guarda en el dispositivo y se aplica **antes del primer
+pintado**, mediante un script en `index.html`: sin eso la aplicación se pinta en claro y salta
+a oscuro medio segundo después, un destello evidente en una PWA que se abre muchas veces al día.
+
+| Tema claro | Tema oscuro |
+|---|---|
+| ![Tema claro](docs/capturas/escritorio/50-movimientos-listado.png) | ![Tema oscuro](docs/capturas/oscuro/50-movimientos-listado.png) |
+
+### 4.7 Reglas transversales
 
 | Regla | Valor |
 |---|---|
@@ -277,7 +306,7 @@ solo cuando alguien las pide. Hay 28 textos de ayuda, todos de dos o tres frases
 | Contraste | Ningún par texto/fondo por debajo de 4,5:1; ningún borde de control por debajo de 3:1, verificado en tema claro y oscuro |
 | Color | Nunca es el único portador de significado: todo estado lleva además texto y, cuando corresponde, icono |
 | Movimiento | Se respeta `prefers-reduced-motion` |
-| Tema | Claro y oscuro automáticos según el sistema operativo |
+| Tema | **Claro por defecto**, oscuro disponible. Es una elección del usuario, no del sistema operativo |
 
 ---
 
@@ -832,6 +861,7 @@ permanentemente «¿dónde estoy?».
 | Formularios | Una sola columna; la acción principal ocupa el ancho completo |
 | Campos numéricos | Abren teclado numérico; el tamaño de fuente evita el zoom automático de iOS |
 | Área de seguridad | Respetada arriba y abajo, para uso instalado con notch |
+| Tema | Se elige en la hoja «Más»; arranca en claro, que es lo legible al sol |
 | Geolocalización | *Usar mi ubicación actual* cobra sentido pleno estando en el apiario |
 
 **Instalación.** El manifiesto declara nombre, tema, orientación vertical, íconos
@@ -980,7 +1010,12 @@ ninguna ruta, verbo ni cuerpo de petición**. Los puntos sensibles siguen siendo
 
 ## 12. Inventario de capturas
 
-73 capturas: 36 de escritorio y 37 de móvil. Se generan con `frontend/capturas.mjs`.
+80 capturas: 36 de escritorio, 37 de móvil y 7 en tema oscuro. Se generan con
+`frontend/capturas.mjs`.
+
+En tema oscuro: `01-acceso-login`, `10-panel-sala`, `50-movimientos-listado`,
+`54-movimiento-detalle`, `72-lote-detalle`, `91-trazabilidad-resultado` y
+`113-pendientes-con-operaciones`.
 
 | Número | Nombre | Escritorio | Móvil |
 |---|---|:--:|:--:|

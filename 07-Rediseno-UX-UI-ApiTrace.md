@@ -468,7 +468,13 @@ Tres cosas se resolvieron distinto de lo planeado, al ver el resultado real:
 
 1. **Se eliminó la barra superior.** En el teléfono repetía el título que ya daba el encabezado de la pantalla; en escritorio quedaba vacía. Quitarla devuelve 56 px de alto en cada pantalla móvil. La invitación a instalar pasó a la barra lateral y a la hoja «Más».
 2. **El botón «Entrar» ya no se deshabilita con los campos vacíos.** Un control apagado no explica qué falta. Ahora valida al enviar y el mensaje aparece junto al campo. Se agregó además un botón para ver la contraseña: escribir a ciegas en el campo es la causa más común de un intento fallido.
-3. **Se hizo una corrección ortográfica completa.** El código escrito durante la implementación había perdido las tildes en los textos visibles. Se corrigieron unas 200 apariciones en los 37 archivos, manteniendo el voseo rioplatense de forma consistente. Los comentarios del código conservan el estilo sin tildes que ya tenía el proyecto.
+3. **El tema dejó de seguir al sistema operativo.** La versión inicial usaba
+   `prefers-color-scheme`, con lo cual un teléfono en modo oscuro automático abría la app en
+   oscuro — justo lo que peor se lee a pleno sol en el apiario. Ahora el tema es una elección
+   explícita del usuario, guardada en el dispositivo, con **claro por defecto**; el tema oscuro
+   se profundizó (el fondo bajó a poco menos de la mitad de luminancia) y se aplica antes del
+   primer pintado para que no haya destello.
+4. **Se hizo una corrección ortográfica completa.** El código escrito durante la implementación había perdido las tildes en los textos visibles. Se corrigieron unas 200 apariciones en los 37 archivos, manteniendo el voseo rioplatense de forma consistente. Los comentarios del código conservan el estilo sin tildes que ya tenía el proyecto.
 
 ### 7.4 Verificación
 

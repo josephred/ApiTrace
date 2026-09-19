@@ -9,6 +9,7 @@ import { Icon, Logo } from './Icon';
 import { Button, HelpTip, Sheet } from './ui';
 import { InstallPrompt } from './InstallPrompt';
 import { UpdatePrompt } from './UpdatePrompt';
+import { ThemeToggle } from './ThemeToggle';
 
 /* =========================================================================
    Estado de los datos — un solo lugar
@@ -175,7 +176,16 @@ export const Layout = () => {
               {group.items.map(renderNavLink)}
             </div>
           ))}
-          <div style={{ padding: 'var(--sp-3) var(--sp-3) 0' }}>
+          <div
+            style={{
+              padding: 'var(--sp-4) var(--sp-3) 0',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--sp-3)',
+              alignItems: 'flex-start',
+            }}
+          >
+            <ThemeToggle />
             <InstallPrompt />
           </div>
         </nav>
@@ -244,6 +254,12 @@ export const Layout = () => {
               paddingTop: 'var(--sp-4)',
             }}
           >
+            <div className="row-between" style={{ marginBottom: 'var(--sp-4)' }}>
+              <span className="small muted" style={{ fontWeight: 650 }}>
+                Tema
+              </span>
+              <ThemeToggle />
+            </div>
             <div className="row-between">
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 650 }} className="truncate">

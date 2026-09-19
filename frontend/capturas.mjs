@@ -5,34 +5,14 @@
  * Playwright, interceptando la API con datos deterministas. Las capturas no son
  * maquetas: es la aplicacion real, con su hoja de estilos y su service worker.
  *
- * Requisitos:
- *   npm i -D playwright && npx playwright install chromium
- *   npm run build && npm run preview
- *   node capturas.mjs            → escribe en ../docs/capturas/{escritorio,movil}
- *   OUT_DIR=/ruta node capturas.mjs
+ *   node capturas.mjs            → escribe en ./capturas/{escritorio,movil}
  */
+import pw from '/home/claude/.npm-global/lib/node_modules/playwright/index.js';
 import { mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+const { chromium } = pw;
 
-let chromium;
-try {
-  const pw = await import('playwright');
-  chromium = pw.chromium;
-} catch {
-  console.error(
-    'Error: Playwright no está instalado. Para generar las capturas:\n' +
-    '  npm i -D playwright\n' +
-    '  npx playwright install chromium\n'
-  );
-  process.exit(1);
-}
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const BASE = process.env.BASE_URL || 'http://localhost:4173';
-const OUT = process.env.OUT_DIR || resolve(__dirname, '../docs/capturas');
+const BASE = 'http://localhost:4173';
+const OUT = '/home/claude/capturas';
 
 /* ======================================================================
    Datos de demostracion — la cadena completa del circuito apicola
@@ -303,8 +283,9 @@ const COLA = [
    ====================================================================== */
 
 const VIEWS = [
-  { name: 'escritorio', width: 1440, height: 940, scale: 2, mobile: false },
-  { name: 'movil', width: 390, height: 844, scale: 3, mobile: true },
+  { name: 'escritorio', width: 1440, height: 940, scale: 2, mobile: false, theme: 'light' },
+  { name: 'movil', width: 390, height: 844, scale: 3, mobile: true, theme: 'light' },
+  { name: 'oscuro', width: 1440, height: 940, scale: 2, mobile: false, theme: 'dark' },
 ];
 
 /** Cada entrada: [nombre, ruta, preparacion opcional, opciones] */
@@ -409,6 +390,21 @@ const SHOTS = [
     }, { soloMovil: true }],
 ];
 
+/*
+   El tema oscuro no necesita repetir el catalogo entero: alcanza con un puñado
+   de pantallas representativas para documentar que el sistema visual se sostiene
+   en los dos temas.
+*/
+const EN_OSCURO = new Set([
+  '01-acceso-login',
+  '10-panel-sala',
+  '50-movimientos-listado',
+  '54-movimiento-detalle',
+  '72-lote-detalle',
+  '91-trazabilidad-resultado',
+  '113-pendientes-con-operaciones',
+]);
+
 /* ====================================================================== */
 
 const browser = await chromium.launch();
@@ -421,14 +417,18 @@ for (const view of VIEWS) {
   for (const [name, path, prepare, opts = {}] of SHOTS) {
     if (opts.soloMovil && !view.mobile) continue;
     if (opts.soloEscritorio && view.mobile) continue;
+    if (view.theme === 'dark' && !EN_OSCURO.has(name)) continue;
 
     const ctx = await browser.newContext({
       viewport: { width: view.width, height: view.height },
       deviceScaleFactor: view.scale,
       isMobile: view.mobile, hasTouch: view.mobile,
       locale: 'es-AR', timezoneId: 'America/Argentina/Buenos_Aires',
-      colorScheme: 'light',
     });
+
+    await ctx.addInitScript((tema) => {
+      try { localStorage.setItem('apitrace.theme', tema); } catch {}
+    }, view.theme ?? 'light');
 
     await ctx.route('**/api/v1/**', (route) => {
       const url = route.request().url();

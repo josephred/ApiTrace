@@ -11,8 +11,15 @@
    4. Espaciado sobre una base de 4px. Nada de valores sueltos en rem.
    ========================================================================== */
 
-:root {
-  color-scheme: light dark;
+/*
+   El tema es una eleccion del usuario, no del sistema operativo.
+   `:root` lleva siempre data-theme="light" o "dark" (lo fija un script en
+   index.html antes del primer pintado, para que no haya destello). Claro es el
+   valor por defecto: la aplicacion se usa en el campo, a pleno sol.
+*/
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
 
   /* ---------------------------------------------------------- rampa marca */
   --brand-50:  #fdf6e7;
@@ -84,37 +91,40 @@
   --content-max: 1120px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --brand:            var(--brand-400);
-    --primary:          var(--brand-300);
-    --primary-hover:    var(--brand-200);
-    --primary-fg:       #241a05;
-    --primary-soft:     #3a2c14;
-    --primary-soft-fg:  var(--brand-200);
-    --primary-soft-br:  #55411d;
+:root[data-theme='dark'] {
+  color-scheme: dark;
 
-    --bg:        #17130e;
-    --surface:   #211b14;
-    --surface-2: #2b2318;
-    --surface-3: #372d20;
+  --brand:            var(--brand-400);
+  --primary:          var(--brand-300);
+  --primary-hover:    var(--brand-200);
+  --primary-fg:       #1f1603;
+  --primary-soft:     #33260f;
+  --primary-soft-fg:  var(--brand-200);
+  --primary-soft-br:  #4d3a15;
 
-    --text-1: #f4eee4;
-    --text-2: #bcb09c;
-    --text-3: #9a8d78;
+  /* Mas profundo que la version anterior: el fondo baja de 0,0068 a 0,0039 de
+     luminancia, poco menos de la mitad. Gana contraste la superficie elevada,
+     que es lo que separa una tarjeta del fondo. */
+  --bg:        #100c08;
+  --surface:   #1a1410;
+  --surface-2: #241d17;
+  --surface-3: #302720;
 
-    --border:         #372e22;
-    --border-control: #847a6a;
+  --text-1: #f5efe5;   /* 16,0:1 sobre superficie */
+  --text-2: #c2b6a2;   /*  9,1:1 */
+  --text-3: #9c8f7a;   /*  5,8:1 */
 
-    --success-fg: #7ed3a4;  --success-bg: #16301f;  --success-br: #2c5b3e;
-    --warning-fg: #e8bb5c;  --warning-bg: #332712;  --warning-br: #5c4718;
-    --danger-fg:  #f49a90;  --danger-bg:  #361b18;  --danger-br:  #6b312a;
-    --info-fg:    #8fbde8;  --info-bg:    #16283a;  --info-br:    #2c4d6e;
+  --border:         #332b22;
+  --border-control: #8a8070;   /* 4,7:1 */
 
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
-    --shadow-md: 0 1px 3px rgb(0 0 0 / 0.45), 0 4px 12px rgb(0 0 0 / 0.3);
-    --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.4);
-  }
+  --success-fg: #7fd6a6;  --success-bg: #0f2417;  --success-br: #275437;
+  --warning-fg: #ebbe5e;  --warning-bg: #2a2010;  --warning-br: #574216;
+  --danger-fg:  #f59c92;  --danger-bg:  #2d1512;  --danger-br:  #642c26;
+  --info-fg:    #92c0ea;  --info-bg:    #111f2d;  --info-br:    #284768;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 1px 3px rgb(0 0 0 / 0.55), 0 4px 12px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 14px 36px rgb(0 0 0 / 0.65), 0 2px 8px rgb(0 0 0 / 0.5);
 }
 
 /* ========================================================================
@@ -232,6 +242,46 @@ a:hover { text-decoration: underline; }
   align-items: center;
   gap: var(--sp-3);
 }
+.theme-toggle {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+}
+.theme-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  min-height: 30px;
+  padding: 0 var(--sp-3);
+  border: none;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  cursor: pointer;
+  position: relative;
+}
+/* Compacto a la vista, pero con area tactil completa. */
+.theme-option::after {
+  content: '';
+  position: absolute;
+  inset: 50% 0 auto 0;
+  height: var(--tap);
+  transform: translateY(-50%);
+}
+.theme-option:hover { color: var(--text-1); }
+.theme-option[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--text-1);
+  box-shadow: var(--shadow-sm);
+}
+
 .avatar {
   width: 34px; height: 34px;
   border-radius: var(--r-full);
@@ -622,10 +672,8 @@ select {
   background-position: right var(--sp-3) center;
   padding-right: var(--sp-10);
 }
-@media (prefers-color-scheme: dark) {
-  select {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239a8d78' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  }
+:root[data-theme='dark'] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239c8f7a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 .form-grid { display: grid; gap: 0 var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
@@ -710,9 +758,11 @@ details.disclosure > .disclosure-body { padding: 0 var(--sp-4) var(--sp-2); }
   border-color: var(--primary); background: var(--primary); color: var(--primary-fg);
 }
 .choice-mark.square { border-radius: 6px; }
-.choice-text { flex: 1; min-width: 0; }
-.choice-title { font-weight: 650; font-size: var(--fs-md); }
-.choice-desc { font-size: var(--fs-sm); color: var(--text-2); margin-top: 2px; }
+.choice-text { flex: 1; min-width: 0; display: block; }
+/* Son `span` dentro de un boton: sin `display: block` el titulo y la
+   descripcion se imprimian en la misma linea, pegados. */
+.choice-title { display: block; font-weight: 650; font-size: var(--fs-md); }
+.choice-desc { display: block; font-size: var(--fs-sm); color: var(--text-2); margin-top: 2px; }
 
 /* ========================================================================
    Pasos
