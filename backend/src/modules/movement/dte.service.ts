@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, HttpStatus, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../database/database.module';
 import {
@@ -28,6 +28,7 @@ import {
 import {
   addDaysIso,
   daysBetweenIso,
+  DEFAULT_VALIDITY_DAYS,
   DteStatuses,
   isValidPlate,
   MAX_VALIDITY_DAYS,
@@ -253,7 +254,7 @@ export class DteService {
       suggestedDeclaredQuantity: suggestDeclaredQuantity(movQty),
       defaultDates: {
         loadDate: todayAr,
-        expiryDate: addDaysIso(todayAr, 3),
+        expiryDate: addDaysIso(todayAr, DEFAULT_VALIDITY_DAYS),
       },
     };
   }
@@ -321,6 +322,23 @@ export class DteService {
     const [originRenspa] = await this.db.select().from(renspaRegistration).where(eq(renspaRegistration.establishmentId, mov.originEstablishmentId)).limit(1);
     const [destRenspa] = await this.db.select().from(renspaRegistration).where(eq(renspaRegistration.establishmentId, mov.destinationEstablishmentId)).limit(1);
 
+    // Aislamiento: solo el emisor de origen (o ADMIN) puede crear el borrador
+    if (user.role !== 'ADMIN' && originEst?.organizationId && originEst.organizationId !== user.organizationId) {
+      throw new ForbiddenException('No tiene permisos para crear un DT-e para un establecimiento de otra organización.');
+    }
+
+    let originCode = originRenspa?.number ?? originEst?.name ?? null;
+    if (mov.originApiaryId) {
+      const [apiaryRecord] = await this.db.select().from(apiary).where(eq(apiary.id, mov.originApiaryId)).limit(1);
+      if (apiaryRecord?.renapaCode) {
+        originCode = apiaryRecord.renapaCode;
+      }
+    }
+
+    const isHoney = mov.materialType === 'MIEL' || (mov.movementType as string) === 'MATERIAL_MELARIO';
+    const productCode = isHoney ? '24.45' : mov.materialType;
+    const productName = mov.movementType === 'MATERIAL_MELARIO' ? 'Alzas con miel' : 'Miel a granel';
+
     const [created] = await this.db
       .insert(dte)
       .values({
@@ -333,14 +351,14 @@ export class DteService {
         unit: mov.unit,
         movementTypeCode: mov.movementType,
         transitReason: dto.transitReason ?? 'EXTRACCION',
-        productCode: mov.materialType,
-        productName: mov.materialType === 'MATERIAL_MELARIO' ? 'Alzas con miel' : 'Miel a granel',
+        productCode,
+        productName,
         issuerOrganizationId: user.organizationId,
         destinationOrganizationId: destEst?.organizationId ?? null,
         holderProducerId: dto.holderProducerId ?? originEst?.producerId ?? null,
         originRenspa: originRenspa?.number ?? null,
         destinationRenspa: destRenspa?.number ?? null,
-        originCode: originEst?.name ?? null,
+        originCode,
         destinationCode: destEst?.senasaCode ?? null,
         transportType: dto.transportType ?? 'PROPIO',
         transportPlate: normalizePlate(dto.transportPlate),
@@ -376,6 +394,11 @@ export class DteService {
   async issueManual(id: string, dto: IssueManualDteDto, user: CurrentUserContext) {
     const item = await findDteById(this.db, id);
     if (!item) throw new NotFoundException('DT-e no encontrado.');
+
+    // Aislamiento: solo la organizacion emisora (o ADMIN) puede registrar la emision
+    if (user.role !== 'ADMIN' && item.issuerOrganizationId && item.issuerOrganizationId !== user.organizationId) {
+      throw new ForbiddenException('No tiene permisos para emitir un DT-e de otra organización.');
+    }
 
     if (item.status !== DteStatuses.BORRADOR && item.status !== DteStatuses.SOLICITADO) {
       throw new DomainRuleException(
@@ -438,6 +461,11 @@ export class DteService {
   async requestSigsa(id: string, user: CurrentUserContext, correlationId?: string) {
     const item = await findDteById(this.db, id);
     if (!item) throw new NotFoundException('DT-e no encontrado.');
+
+    // Aislamiento: solo la organizacion emisora (o ADMIN) puede solicitar la emision
+    if (user.role !== 'ADMIN' && item.issuerOrganizationId && item.issuerOrganizationId !== user.organizationId) {
+      throw new ForbiddenException('No tiene permisos para solicitar la emisión de un DT-e de otra organización.');
+    }
 
     if (item.status !== DteStatuses.BORRADOR && item.status !== DteStatuses.RECHAZADO) {
       throw new DomainRuleException(
@@ -564,6 +592,11 @@ export class DteService {
     const item = await findDteById(this.db, id);
     if (!item) throw new NotFoundException('DT-e no encontrado.');
 
+    // Aislamiento: solo la organizacion emisora (o ADMIN) puede anular
+    if (user.role !== 'ADMIN' && item.issuerOrganizationId && item.issuerOrganizationId !== user.organizationId) {
+      throw new ForbiddenException('No tiene permisos para anular un DT-e emitido por otra organización.');
+    }
+
     if (item.status !== DteStatuses.EMITIDO && item.status !== DteStatuses.VIGENTE) {
       throw new DomainRuleException(
         HttpStatus.BAD_REQUEST,
@@ -621,6 +654,11 @@ export class DteService {
   async closeDte(id: string, dto: CloseDteDto, user: CurrentUserContext, correlationId?: string) {
     const item = await findDteById(this.db, id);
     if (!item) throw new NotFoundException('DT-e no encontrado.');
+
+    // Aislamiento: solo la organizacion de destino (o ADMIN) puede cerrar el DT-e
+    if (user.role !== 'ADMIN' && item.destinationOrganizationId && item.destinationOrganizationId !== user.organizationId) {
+      throw new ForbiddenException('No tiene permisos para cerrar un DT-e destinado a otra organización.');
+    }
 
     if (![DteStatuses.VIGENTE, DteStatuses.VENCIDO, DteStatuses.CADUCADO].includes(item.status as any)) {
       throw new DomainRuleException(
@@ -978,20 +1016,21 @@ export class DteService {
         {
           movementId,
           loadDate: todayAr,
-          expiryDate: addDaysIso(todayAr, 3),
+          expiryDate: addDaysIso(todayAr, DEFAULT_VALIDITY_DAYS),
           declaredQuantity: Number(mov.quantity),
-          transportPlate: 'AAA000',
+          transportPlate: dto.transportPlate ? normalizePlate(dto.transportPlate) : 'AF123AA',
         },
         actor,
       )) as any;
     }
 
     if (dto.number) {
+      const verificationCode = dto.verificationCode?.trim() || `VER-${Math.floor(1000 + Math.random() * 9000)}`;
       return this.issueManual(
         item.id,
         {
           number: dto.number,
-          verificationCode: 'VER-0000',
+          verificationCode,
           issuedAt: dto.issuedAt,
         },
         actor,
@@ -1029,12 +1068,21 @@ export class DteService {
     const item = await findDteByMovementId(this.db, movementId);
     if (!item) throw new NotFoundException('DT-e no encontrado.');
 
+    if (!dto?.verificationCode?.trim()) {
+      throw new DomainRuleException(
+        HttpStatus.BAD_REQUEST,
+        'CODIGO_VERIFICACION_REQUERIDO',
+        'Se requiere ingresar el código de verificación oficial impreso en el DT-e físico.',
+      );
+    }
+
     return this.closeDte(
       item.id,
       {
-        verificationCode: item.verificationCode ?? 'VER-0000',
-        confirmedQuantity: Number(item.declaredQuantity ?? 100),
+        verificationCode: dto.verificationCode.trim(),
+        confirmedQuantity: Number(dto.confirmedQuantity ?? item.declaredQuantity ?? 0),
         notes: dto.notes,
+        arrivalAt: dto.arrivalAt,
       },
       actor,
       correlationId,

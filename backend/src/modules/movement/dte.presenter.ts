@@ -5,6 +5,17 @@ export interface DtePresenterOptions {
   userOrgId?: string | null;
 }
 
+function cleanDate(val: unknown): string | null {
+  if (!val) return null;
+  if (val instanceof Date) {
+    return val.toISOString().split('T')[0];
+  }
+  if (typeof val === 'string') {
+    return val.split(/[T\s]/)[0];
+  }
+  return null;
+}
+
 export function presentDte(dte: any, options: DtePresenterOptions = {}) {
   if (!dte) return null;
 
@@ -15,14 +26,19 @@ export function presentDte(dte: any, options: DtePresenterOptions = {}) {
   const canSeeVerificationCode = isAdmin || isIssuer || isClosed;
   const verificationCode = canSeeVerificationCode ? dte.verificationCode : null;
 
+  const loadDate = cleanDate(dte.loadDate);
+  const expiryDate = cleanDate(dte.expiryDate);
+
   const semaphoreInfo = getTransitSemaphore({
     status: dte.status,
-    loadDate: dte.loadDate,
-    expiryDate: dte.expiryDate,
+    loadDate,
+    expiryDate,
   });
 
   return {
     ...dte,
+    loadDate,
+    expiryDate,
     verificationCode,
     canSeeVerificationCode,
     transitSemaphore: semaphoreInfo.semaphore,

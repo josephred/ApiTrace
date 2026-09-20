@@ -33,8 +33,9 @@ export function toArgentinaDateString(date: Date = new Date()): string {
  */
 export function formatDay(iso?: string | null): string {
   if (!iso) return '-';
-  const clean = iso.includes('T') ? iso.split('T')[0] : iso;
-  const parts = clean.split('-');
+  // Soporta ISO (con T), PostgreSQL (con espacio) o YYYY-MM-DD
+  const datePart = iso.split(/[T\s]/)[0];
+  const parts = datePart.split('-');
   if (parts.length !== 3) return iso;
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }

@@ -8,8 +8,8 @@
 
 export const MIN_VALIDITY_DAYS = 2;
 export const MAX_VALIDITY_DAYS = 4;
-export const DEFAULT_VALIDITY_DAYS = 3;
-export const LAPSE_GRACE_DAYS = 5;
+export const DEFAULT_VALIDITY_DAYS = 2;
+export const LAPSE_GRACE_DAYS = 4;
 
 /** Estados oficiales del DT-e (11 estados segun API-SEM SENASA). */
 export const DteStatuses = {
@@ -171,8 +171,16 @@ export function getTransitSemaphore(dte: {
     };
   }
 
-  const loadTime = dte.loadDate ? new Date(dte.loadDate).getTime() : 0;
-  const expiryTime = dte.expiryDate ? new Date(dte.expiryDate).getTime() : 0;
+  const loadTime = dte.loadDate
+    ? typeof dte.loadDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dte.loadDate)
+      ? startOfDayAr(dte.loadDate.slice(0, 10)).getTime()
+      : new Date(dte.loadDate).getTime()
+    : 0;
+  const expiryTime = dte.expiryDate
+    ? typeof dte.expiryDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dte.expiryDate)
+      ? endOfDayAr(dte.expiryDate.slice(0, 10)).getTime()
+      : new Date(dte.expiryDate).getTime()
+    : 0;
   const nowTime = now.getTime();
 
   if (status === DteStatuses.CADUCADO || (expiryTime > 0 && nowTime > expiryTime + LAPSE_GRACE_DAYS * 86400000)) {

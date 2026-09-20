@@ -69,6 +69,8 @@ services:
         value: "60000"
       - key: THROTTLE_LIMIT
         value: "240"
+      - key: SENASA_MODE
+        value: SIMULADO
 
   # ------------------------------------------------- Aplicacion web (PWA)
   - type: web

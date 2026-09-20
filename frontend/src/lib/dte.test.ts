@@ -20,6 +20,7 @@ describe('DTE Business Rules & Utilities', () => {
   it('formats dates for Argentine display DD/MM/YYYY', () => {
     expect(formatDay('2026-03-20')).toBe('20/03/2026');
     expect(formatDay('2026-11-12T09:00:00Z')).toBe('12/11/2026');
+    expect(formatDay('2026-09-19 00:00:00+00')).toBe('19/09/2026');
   });
 
   it('normalizes and validates Argentine license plates', () => {

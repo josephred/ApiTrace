@@ -18,7 +18,7 @@ export class SimulatedSenasaGateway implements SenasaGateway {
   async requestDte(input: RequestDteInput): Promise<RequestDteResult> {
     const randomSuffix = Math.floor(100000 + Math.random() * 900000);
     const verifSuffix = Math.floor(1000 + Math.random() * 9000);
-    const number = `DTE-2026-${randomSuffix}`;
+    const number = `DTE-SIM-2026-${randomSuffix}`;
     const verificationCode = `VER-${verifSuffix}`;
     const externalId = `SIGSA-SIM-${Date.now()}-${randomSuffix}`;
     const issuedAt = new Date();

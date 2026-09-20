@@ -16,6 +16,7 @@ import { DomainEvents, EventsService } from '../../common/services/events.servic
 import { quantitiesDiffer, toNumber } from '../../common/utils/numbers';
 import { EstablishmentService } from '../establishment/establishment.service';
 import { MovementRuleService } from './movement-rule.service';
+import { getTransitSemaphore } from './dte.rules';
 import type { AuthenticatedUser } from '../../common/types';
 import type { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import type {
@@ -250,6 +251,8 @@ export class MovementService {
     const record = await this.findOne(id, actor);
     this.assertTransition(record.status, 'DISPATCHED');
 
+    const dispatchedAt = dto.dispatchedAt ? new Date(dto.dispatchedAt) : new Date();
+
     if (record.requiresDocument) {
       if (!record.dte) {
         throw new DomainRuleException(
@@ -258,19 +261,22 @@ export class MovementService {
           `Este movimiento requiere ${record.requiredDocumentType ?? 'un DT-e'} antes de despacharse. Genere el DT-e con POST /dte/draft.`,
         );
       }
-      const st = record.dte.status;
-      const isAllowed = ['ISSUED', 'APPROVED', 'EMITIDO', 'VIGENTE'].includes(st);
-      if (!isAllowed) {
+      const semaphore = getTransitSemaphore({
+        status: record.dte.status,
+        loadDate: record.dte.loadDate,
+        expiryDate: record.dte.expiryDate,
+        now: dispatchedAt,
+      });
+
+      if (!semaphore.canTransit) {
         throw new DomainRuleException(
           HttpStatus.BAD_REQUEST,
           'TRANSITO_NO_AUTORIZADO',
-          `El DT-e asociado esta en estado ${st}; debe estar EMITIDO o VIGENTE para despachar el transporte por ruta.`,
-          { dteStatus: st },
+          `El semáforo de tránsito prohíbe el despacho (${semaphore.semaphore}): ${semaphore.reason}`,
+          { dteStatus: record.dte.status, semaphore: semaphore.semaphore, reason: semaphore.reason },
         );
       }
     }
-
-    const dispatchedAt = dto.dispatchedAt ? new Date(dto.dispatchedAt) : new Date();
 
     return this.db.transaction(async (tx) => {
       const [updated] = await tx

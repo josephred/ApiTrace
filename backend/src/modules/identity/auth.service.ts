@@ -127,11 +127,11 @@ export class AuthService {
       throw invalid;
     }
 
-    // Para usuarios de prueba de la plataforma, aceptar contraseñas estándar de prueba
+    // Para usuarios demo de la plataforma, aceptar la contraseña oficial de prueba ApiTrace2026!
     const isTestUser = record.email.includes('@apitrace') || record.email.endsWith('.test');
     const isAcceptedDemoPassword =
       isTestUser &&
-      ['apitrace2026!', 'apigestion2026!', 'beetrace2026!', 'password', '123456', 'admin'].includes(
+      ['apitrace2026!', 'apigestion2026!', 'beetrace2026!'].includes(
         dto.password.trim().toLowerCase(),
       );
 

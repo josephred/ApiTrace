@@ -38,12 +38,21 @@ const TABLES = [
 ];
 
 export default async function globalSetup(): Promise<void> {
-  const url =
-    process.env.DATABASE_URL_TEST ??
-    process.env.DATABASE_URL ??
-    'postgresql://postgres:postgres@localhost:5432/apitrace_test';
+  const url = process.env.DATABASE_URL_TEST;
+  if (!url) {
+    console.warn(
+      '[test] DATABASE_URL_TEST no está configurada. Para ejecutar pruebas e2e destructivas defina una base de test aislada.',
+    );
+    return;
+  }
 
-  const pool = new Pool({ connectionString: url, max: 1 });
+  const needsTls = /\bneon\.tech\b/.test(url) || /\brender\.com\b/.test(url) || /[?&]sslmode=/.test(url);
+  const pool = new Pool({
+    connectionString: url,
+    max: 1,
+    ssl: needsTls ? { rejectUnauthorized: false } : undefined,
+  });
+
   try {
     await migrate(drizzle(pool), { migrationsFolder: join(__dirname, '..', 'drizzle') });
     await pool.query(`TRUNCATE TABLE ${TABLES.join(', ')} RESTART IDENTITY CASCADE`);

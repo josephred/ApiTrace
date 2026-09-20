@@ -157,7 +157,7 @@ export class MovementController {
 
   @Post(':id/dte/close')
   @HttpCode(HttpStatus.OK)
-  @Roles('ADMIN', 'SALA', 'ACOPIADOR')
+  @Roles('ADMIN', 'SALA')
   @Audit('DTE_CLOSED', 'dte')
   @ApiOperation({
     summary: 'CU-12 Cerrar el DT-e',
