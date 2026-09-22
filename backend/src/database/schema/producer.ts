@@ -1,9 +1,11 @@
-import { index, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { index, pgTable, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
 import {
   entityStatusEnum,
   externalSystemEnum,
   personTypeEnum,
   registrationStatusEnum,
+  senasaDelegationStatusEnum,
+  senasaServiceEnum,
   syncStatusEnum,
 } from './enums';
 import { organization } from './identity';
@@ -62,7 +64,12 @@ export const renapaRegistration = pgTable(
 );
 
 /**
- * Delegacion de servicios de SENASA en ApiTrace ante ARCA (F3283/E).
+ * Delegacion de un servicio de SENASA en ApiTrace (especificacion DT-e, 3.3).
+ *
+ * Para emitir o cerrar DT-e en nombre del titular, este debe delegar el servicio
+ * (SIGSA para emitir, SITA para cerrar en sala) a la CUIT de ApiTrace desde el
+ * Administrador de Relaciones de ARCA (formulario F3283/E). La plataforma solo
+ * registra el estado: la delegacion ocurre en ARCA y no se puede crear desde aca.
  */
 export const senasaDelegation = pgTable(
   'senasa_delegation',
@@ -71,9 +78,11 @@ export const senasaDelegation = pgTable(
     producerId: uuid('producer_id')
       .notNull()
       .references(() => producer.id, { onDelete: 'cascade' }),
-    service: varchar('service', { length: 40 }).notNull(), // 'SIGSA_DTE' | 'SITA'
-    status: varchar('status', { length: 40 }).notNull().default('NO_INICIADA'),
+    service: senasaServiceEnum('service').notNull(),
+    status: senasaDelegationStatusEnum('status').notNull().default('NO_INICIADA'),
+    /** CUIT del representante (la de ApiTrace) a la que se delego. */
     delegatedToTaxId: varchar('delegated_to_tax_id', { length: 20 }),
+    /** Numero de la constancia F3283/E. */
     formNumber: varchar('form_number', { length: 60 }),
     requestedAt: timestamp('requested_at', { withTimezone: true }),
     acceptedAt: timestamp('accepted_at', { withTimezone: true }),
@@ -83,9 +92,5 @@ export const senasaDelegation = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    index('senasa_delegation_producer_idx').on(t.producerId),
-    index('senasa_delegation_status_idx').on(t.status),
-  ],
+  (t) => [unique('senasa_delegation_producer_service_uq').on(t.producerId, t.service)],
 );
-

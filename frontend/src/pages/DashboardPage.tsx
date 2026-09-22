@@ -15,7 +15,16 @@ import {
   StatusPill,
 } from '../components/ui';
 import { DataList, type Column } from '../components/DataList';
-import type { Apiary, Drum, Establishment, Extraction, Lot, Movement, Paginated } from '../lib/types';
+import type {
+  Apiary,
+  Drum,
+  DteSummary,
+  Establishment,
+  Extraction,
+  Lot,
+  Movement,
+  Paginated,
+} from '../lib/types';
 
 /* =========================================================================
    Tarjeta de tarea
@@ -85,6 +94,105 @@ const TaskCard = ({
 );
 
 /* =========================================================================
+   Tareas del DT-e
+   ========================================================================= */
+
+interface TaskSpec {
+  key: string;
+  icon: IconName;
+  tone: 'warning' | 'danger' | 'info';
+  title: string;
+  detail: string;
+  to: string;
+  cta: string;
+}
+
+const count = (n: number, one: string, many: string) => (n === 1 ? one : `${n} ${many}`);
+
+/**
+ * Lo que el DT-e exige hacer hoy. Quien emite ve caducados, vencidos y
+ * borradores; la sala, lo que tiene que cerrar. El orden es el de la urgencia:
+ * un DT-e caducado bloquea al productor, uno vencido todavia puede cerrarse.
+ */
+const dteTasks = (
+  tasks: DteSummary['tasks'],
+  issuer: boolean,
+  receiver: boolean,
+): TaskSpec[] => {
+  const list: TaskSpec[] = [];
+  if (issuer && tasks.lapsed > 0) {
+    list.push({
+      key: 'lapsed',
+      icon: 'danger',
+      tone: 'danger',
+      title: count(tasks.lapsed, 'Un DT-e caducado', 'DT-e caducados'),
+      detail: 'SIGSA no deja emitir nuevos DT-e al titular hasta regularizar ante SENASA.',
+      to: '/dte?perspective=emitidos&status=CADUCADO',
+      cta: 'Ver caducados',
+    });
+  }
+  if (issuer && tasks.requestErrors > 0) {
+    list.push({
+      key: 'requestErrors',
+      icon: 'danger',
+      tone: 'danger',
+      title: count(tasks.requestErrors, 'Una solicitud a SIGSA falló', 'solicitudes a SIGSA fallaron'),
+      detail: 'Se reintentan solas; si el error persiste, revisá los datos del DT-e.',
+      to: '/dte?perspective=emitidos&status=SOLICITADO',
+      cta: 'Ver solicitudes',
+    });
+  }
+  if (receiver && tasks.pendingClosure > 0) {
+    list.push({
+      key: 'pendingClosure',
+      icon: 'inbox',
+      tone: tasks.receivedExpired > 0 ? 'danger' : 'warning',
+      title: count(tasks.pendingClosure, 'Un DT-e por cerrar en sala', 'DT-e por cerrar en sala'),
+      detail:
+        tasks.receivedExpired > 0
+          ? `${count(tasks.receivedExpired, 'Uno ya venció', 'ya vencieron')}: cerralos antes de que caduquen.`
+          : 'Al descargar, confirmá las alzas con el código de cierre impreso.',
+      to: '/dte?perspective=recibidos',
+      cta: 'Cerrar DT-e',
+    });
+  }
+  if (issuer && tasks.expired > 0) {
+    list.push({
+      key: 'expired',
+      icon: 'warning',
+      tone: 'warning',
+      title: count(tasks.expired, 'Un DT-e vencido sin cierre', 'DT-e vencidos sin cierre'),
+      detail: 'La sala tiene 4 días para cerrarlos; después caducan y bloquean nuevas emisiones.',
+      to: '/dte?perspective=emitidos&status=VENCIDO',
+      cta: 'Ver vencidos',
+    });
+  }
+  if (issuer && tasks.expiringToday > 0) {
+    list.push({
+      key: 'expiringToday',
+      icon: 'warning',
+      tone: 'warning',
+      title: count(tasks.expiringToday, 'Un DT-e vence hoy', 'DT-e vencen hoy'),
+      detail: 'Transitan hasta las 23:59. Si la carga no sale hoy, emití uno nuevo.',
+      to: '/dte?perspective=emitidos&status=VIGENTE',
+      cta: 'Ver vigentes',
+    });
+  }
+  if (issuer && tasks.draftsToIssue > 0) {
+    list.push({
+      key: 'drafts',
+      icon: 'document',
+      tone: 'info',
+      title: count(tasks.draftsToIssue, 'Un DT-e en borrador', 'DT-e en borrador'),
+      detail: 'Todavía no tienen número: no amparan ningún traslado.',
+      to: '/dte?perspective=emitidos&status=BORRADOR',
+      cta: 'Emitir',
+    });
+  }
+  return list;
+};
+
+/* =========================================================================
    Panel
    ========================================================================= */
 
@@ -100,7 +208,6 @@ export const DashboardPage = () => {
   const movements = useResource<Paginated<Movement>>('/movements?pageSize=5');
   const awaiting = useResource<Paginated<Movement>>('/movements?status=DISPATCHED&pageSize=1');
   const drafts = useResource<Paginated<Movement>>('/movements?status=DRAFT&pageSize=1');
-  const dteSummary = useResource<{ vigentes: number; vencidos: number; total: number }>('/dte/summary');
 
   const lots = useResource<Paginated<Lot>>(!isProducer ? '/lots?pageSize=5' : null);
   const apiaries = useResource<Paginated<Apiary>>(
@@ -112,14 +219,19 @@ export const DashboardPage = () => {
   const extractions = useResource<Paginated<Extraction>>(isSala ? '/extractions?pageSize=1' : null);
   const drums = useResource<Paginated<Drum>>(isStock ? '/drums?pageSize=1' : null);
 
+  const dteIssuer = role === 'ADMIN' || role === 'PRODUCTOR';
+  const dteReceiver = role === 'ADMIN' || role === 'SALA' || role === 'ACOPIADOR';
+  const dteSummary = useResource<DteSummary>(dteIssuer || dteReceiver ? '/dte/summary' : null);
+  const dteCards = dteSummary.data
+    ? dteTasks(dteSummary.data.tasks, dteIssuer, dteReceiver)
+    : [];
+
   const stale = movements.fromCache || lots.fromCache || apiaries.fromCache;
   const firstName = user?.fullName.split(' ')[0] ?? '';
 
   const awaitingTotal = awaiting.data?.meta.total ?? 0;
   const draftTotal = drafts.data?.meta.total ?? 0;
-  const dteVencidos = dteSummary.data?.vencidos ?? 0;
-  const dteVigentes = dteSummary.data?.vigentes ?? 0;
-  const hasTasks = failedCount > 0 || awaitingTotal > 0 || draftTotal > 0 || dteVencidos > 0 || dteVigentes > 0;
+  const hasTasks = failedCount > 0 || awaitingTotal > 0 || draftTotal > 0 || dteCards.length > 0;
 
   const movementColumns: Column<Movement>[] = [
     {
@@ -199,6 +311,9 @@ export const DashboardPage = () => {
               cta="Revisar la cola"
             />
           )}
+          {dteCards.map(({ key, ...card }) => (
+            <TaskCard key={key} {...card} />
+          ))}
           {awaitingTotal > 0 && (
             <TaskCard
               icon="movements"
@@ -223,34 +338,6 @@ export const DashboardPage = () => {
               detail="Están creados pero todavía no salieron del establecimiento."
               to="/movements?status=DRAFT"
               cta="Ver borradores"
-            />
-          )}
-          {dteVencidos > 0 && (
-            <TaskCard
-              icon="warning"
-              tone="danger"
-              title={
-                dteVencidos === 1
-                  ? 'Un DT-e vencido sin regularizar'
-                  : `${dteVencidos} DT-e vencidos sin regularizar`
-              }
-              detail="Expiró el plazo de tránsito y requiere justificación técnica para el ingreso."
-              to="/dte?status=VENCIDO"
-              cta="Ver DT-e vencidos"
-            />
-          )}
-          {dteVigentes > 0 && (
-            <TaskCard
-              icon="document"
-              tone="info"
-              title={
-                dteVigentes === 1
-                  ? 'Un DT-e vigente en ruta'
-                  : `${dteVigentes} DT-e vigentes en ruta`
-              }
-              detail="Cargas amparadas por DT-e oficial que se dirigen a destino."
-              to="/dte?status=VIGENTE"
-              cta="Ver en tránsito"
             />
           )}
         </div>

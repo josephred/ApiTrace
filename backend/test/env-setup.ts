@@ -12,3 +12,7 @@ process.env.SWAGGER_ENABLED = 'false';
 // El outbox se drena manualmente en los tests para no depender del reloj.
 process.env.OUTBOX_ENABLED = 'false';
 process.env.THROTTLE_LIMIT = '100000';
+// Los tests e2e recorren la emision asincrona completa contra el simulador.
+process.env.SENASA_MODE = 'simulado';
+// El barrido de vigencia se invoca a mano con un reloj controlado.
+process.env.DTE_LIFECYCLE_ENABLED = 'false';

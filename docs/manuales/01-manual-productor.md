@@ -49,7 +49,7 @@ El apiario es el conjunto de colmenas ubicado en un punto geográfico concreto. 
 
 ## 4. Tu RENAPA y la Delegación ante SENASA / ARCA
 
-Para que el sistema pueda tramitar automáticamente los permisos de tránsito (DT-e) en tu nombre, necesitás tener cargado tu RENAPA y haber realizado la delegación digital en la página de AFIP/ARCA.
+Para emitir el DT-e hace falta tu RENAPA cargado y, cuando el trámite se haga desde ApiTrace en tu nombre, la delegación digital en la página de AFIP/ARCA. Hoy el DT-e se emite en SIGSA y en ApiTrace se registra su número: la delegación queda anotada para el día en que SENASA habilite la emisión por API.
 
 ### A. Asociar tu número de RENAPA
 1. En el menú lateral hacé clic en **Mis datos** (o **Productores**).
@@ -59,7 +59,7 @@ Para que el sistema pueda tramitar automáticamente los permisos de tránsito (D
 ![Asociar RENAPA al Productor](../capturas/escritorio/21-productores-alta.png)
 
 ### B. Delegación Fiscal (Formulario 3283/E)
-El DT-e se emite ante SENASA con tu CUIT apícola. Para que ApiTrace pueda conectarse en tu nombre, debés ingresar a la página web de ARCA/AFIP con tu Clave Fiscal y delegar el servicio **"SIGSA - Trámites en Línea"** a la CUIT de la cooperativa o proveedor tecnológico.
+El DT-e se emite ante SENASA con tu CUIT apícola. El día en que ApiTrace pueda conectarse en tu nombre, vas a tener que ingresar a la página web de ARCA/AFIP con tu Clave Fiscal y delegar el servicio de SIGSA a la CUIT de la cooperativa o del proveedor tecnológico. El nombre exacto del servicio y el circuito de delegación están a confirmar con SENASA; en ApiTrace se registra en qué estado está ese trámite.
 * En ApiTrace podés consultar el estado de tu delegación haciendo clic en **"Delegación SENASA"** en tu ficha de productor.
 
 ---
@@ -116,7 +116,7 @@ Una vez creado el movimiento, la pantalla te muestra el **Detalle del Movimiento
 
 ![Detalle del movimiento y DT-e](../capturas/escritorio/54-movimiento-detalle.png)
 
-* Si la normativa exige DT-e oficial, el sistema lo emite automáticamente o te permite cargarlo.
+* Si la normativa exige DT-e, ApiTrace te guía para prepararlo y registrar el número que devuelve SIGSA.
 * Verás el **Semáforo de Tránsito**:
   * 🟢 **Verde**: El vehículo tiene autorización plena para circular. Podés imprimir la constancia o mostrarla en la pantalla del celular si te detiene un control caminero.
   * 🟡 **Amarillo**: El documento vence pronto. Avisale al chofer que debe ingresar a la sala antes del horario límite.

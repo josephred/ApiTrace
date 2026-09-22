@@ -1,0 +1,38 @@
+/**
+ * Tablas de dominio que los tests vacian. Una sola lista para el setup global y
+ * para las suites que necesitan partir de una base limpia.
+ */
+export const TABLES = [
+  'idempotency_key',
+  'integration_event',
+  'outbox_event',
+  'audit_event',
+  'traceability_event',
+  'document',
+  'sample',
+  'inventory_event',
+  'movement_item',
+  'drum',
+  'lot_input',
+  'lot',
+  'extraction_input',
+  'extraction',
+  'reception',
+  'dte_status_history',
+  'dte',
+  'movement',
+  'vehicle',
+  'carrier',
+  'hive',
+  'apiary',
+  'renspa_registration',
+  'establishment',
+  'renapa_registration',
+  'senasa_delegation',
+  'producer',
+  'refresh_token',
+  'app_user',
+  'organization',
+  'movement_rule',
+  'code_sequence',
+];

@@ -1,6 +1,6 @@
 # 📚 Centro de Documentación y Manuales de Usuario — ApiTrace
 
-Bienvenido al centro oficial de manuales de usuario de **ApiTrace**, la plataforma integral de trazabilidad apícola diseñada para conectar el trabajo del campo con las exigencias sanitarias de SENASA y los mercados internacionales de exportación de miel.
+Bienvenido al centro de manuales de usuario de **ApiTrace**, la plataforma integral de trazabilidad apícola diseñada para conectar el trabajo del campo con las exigencias sanitarias de SENASA y los mercados internacionales de exportación de miel.
 
 Estos manuales han sido redactados de manera **didáctica y paso a paso**, pensando especialmente en **personas que se inician en la actividad apícola o que no tienen experiencia previa en sistemas informáticos**.
 
@@ -18,7 +18,7 @@ flowchart TD
     Intro --> P2["⚙️ 02. Manual de Sala de Extracción\n(Recepción de melarios, Centrifugado, Lotes y Tambores)"]
     Intro --> P3["🏭 03. Manual de Acopiador y Fraccionador\n(Recepción de tambores, Homogeneizado / Blending, Envasado)"]
     Intro --> P4["🚛 04. Manual del Transportista en Ruta\n(Uso de la App Móvil, Semáforo DT-e y Controles Sanitarios)"]
-    Intro --> P5["🔬 05. Manual de Auditor, Inspector y Laboratorio\n(Grafo de Trazabilidad, Huecos, Registro Inmutable y Análisis)"]
+    Intro --> P5["🔬 05. Manual de Auditor, Inspector y Laboratorio\n(Grafo de Trazabilidad, Huecos, Libro de Auditoría y Análisis)"]
     Intro --> P6["👑 06. Manual del Administrador del Sistema\n(Usuarios, RBAC, Reglas Documentales y Pasarela SENASA)"]
 ```
 
@@ -33,12 +33,12 @@ flowchart TD
 | N° | Manual de Usuario | Versión Web (MD) | Versión Imprimible (PDF) | Destinatarios principales | Contenidos clave |
 | :---: | :--- | :---: | :---: | :--- | :--- |
 | **00** | **Introducción y Conceptos Básicos** | [Ver Markdown](00-introduccion-y-conceptos-basicos.md) | [📥 Descargar PDF](pdf/00-introduccion-y-conceptos-basicos.pdf) | **Todos los usuarios** | ¿Qué es la trazabilidad de la miel? Glosario apícola ilustrado (alzas, tambores, precintos, tara, melarios), marco legal SENASA/ARCA, cómo ingresar al sistema, uso sin internet (offline) y ayudas contextuales. |
-| **01** | **Manual del Productor Apícola** | [Ver Markdown](01-manual-productor.md) | [📥 Descargar PDF](pdf/01-manual-productor.pdf) | Apicultores, chacareros, dueños de colmenares | Alta de apiarios con coordenadas GPS, vinculación de RENAPA oficial, delegación en AFIP (Formulario 3283/E), asistente de despacho de melarios en 3 pasos, semáforo DT-e verde y consejos de campo. |
-| **02** | **Manual de Sala de Extracción** | [Ver Markdown](02-manual-sala-extraccion.md) | [📥 Descargar PDF](pdf/02-manual-sala-extraccion.pdf) | Jefes de planta, operarios de extracción y báscula | Recepción física en rampa, pesaje y merma, cierre de DT-e con Código de Verificación SENASA, centrifugado, cálculo automático de rendimiento (kg/alza), loteado y precintado de tambores. |
+| **01** | **Manual del Productor Apícola** | [Ver Markdown](01-manual-productor.md) | [📥 Descargar PDF](pdf/01-manual-productor.pdf) | Apicultores, chacareros, dueños de colmenares | Alta de apiarios con coordenadas GPS, vinculación de RENAPA oficial, delegación del servicio de SIGSA en AFIP/ARCA, asistente de despacho de melarios en 3 pasos, semáforo del DT-e y consejos de campo. |
+| **02** | **Manual de Sala de Extracción** | [Ver Markdown](02-manual-sala-extraccion.md) | [📥 Descargar PDF](pdf/02-manual-sala-extraccion.pdf) | Jefes de planta, operarios de extracción y báscula | Recepción física en rampa, pesaje y merma, cierre del DT-e con el código impreso, centrifugado, cálculo de rendimiento (kg/alza), loteado y precintado de tambores. |
 | **03** | **Manual de Acopiador y Fraccionador** | [Ver Markdown](03-manual-acopiador-fraccionador.md) | [📥 Descargar PDF](pdf/03-manual-acopiador-fraccionador.pdf) | Encargados de galpón de acopio, envasadores | Recepción de tambores a granel, control de humedad (<18%) y escala de color Pfund, creación de lotes secundarios (blending/homogeneizado) sin perder el origen, y despacho a puerto. |
 | **04** | **Manual del Transportista en Ruta** | [Ver Markdown](04-manual-transportista.md) | [📥 Descargar PDF](pdf/04-manual-transportista.pdf) | Fleteros, choferes de camión y camioneta | Instalación de la app en el celular (PWA), consulta del semáforo antes de arrancar, qué mostrar en controles de Gendarmería/SENASA, funcionamiento sin señal en ruta y cierre de viaje. |
-| **05** | **Manual de Auditor y Laboratorio** | [Ver Markdown](05-manual-auditor-laboratorio.md) | [📥 Descargar PDF](pdf/05-manual-auditor-laboratorio.pdf) | Inspectores de SENASA, auditores de calidad y bioquímicos | Búsqueda en el grafo interactivo de trazabilidad (hacia atrás y hacia adelante), detección de "huecos de trazabilidad", libro de auditoría inmutable, parámetros químicos y exportación de expedientes. |
-| **06** | **Manual del Administrador del Sistema** | [Ver Markdown](06-manual-administrador.md) | [📥 Descargar PDF](pdf/06-manual-administrador.pdf) | Administradores de TI, gerentes de cooperativa | Gestión de usuarios y permisos (RBAC multi-tenant), parametrización de reglas documentales dinámicas (tolerancias, humedades, plazos), modos de pasarela SENASA/SIGSA y contingencias. |
+| **05** | **Manual de Auditor y Laboratorio** | [Ver Markdown](05-manual-auditor-laboratorio.md) | [📥 Descargar PDF](pdf/05-manual-auditor-laboratorio.pdf) | Inspectores de SENASA, auditores de calidad y bioquímicos | Búsqueda en el grafo interactivo de trazabilidad (hacia atrás y hacia adelante), detección de "huecos de trazabilidad", libro de auditoría, parámetros químicos y exportación de expedientes. |
+| **06** | **Manual del Administrador del Sistema** | [Ver Markdown](06-manual-administrador.md) | [📥 Descargar PDF](pdf/06-manual-administrador.pdf) | Administradores de TI, gerentes de cooperativa | Gestión de usuarios y permisos (RBAC multi-tenant), reglas documentales, canal de emisión del DT-e (manual, simulado o API) y contingencias. |
 
 ---
 

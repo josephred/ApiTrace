@@ -91,14 +91,52 @@ export const movementStatusEnum = pgEnum('movement_status', [
 
 export const receptionResultEnum = pgEnum('reception_result', ['ACCEPTED', 'PARTIAL', 'REJECTED']);
 
-/** Estado interno del DT-e dentro de la plataforma. */
+/**
+ * Estado del DT-e (ADR-012). Usa el vocabulario oficial de SENASA porque el
+ * ciclo de vida lo define la norma, no la plataforma:
+ *
+ *   EMITIDO -> VIGENTE -> CERRADO           (circuito normal)
+ *   VIGENTE -> VENCIDO -> CADUCADO          (sin cierre: bloquea al productor)
+ *   VIGENTE / VENCIDO -> SIN_ARRIBO         (la sala declara que no llego)
+ *   EMITIDO / VIGENTE -> ANULADO|ELIMINADO  (con o sin arancel abonado)
+ *
+ * BORRADOR, SOLICITADO y RECHAZADO son propios de ApiTrace: describen la
+ * solicitud antes de que SIGSA asigne numero (o la rechace).
+ */
 export const dteStatusEnum = pgEnum('dte_status', [
-  'DRAFT',
-  'ISSUED',
-  'APPROVED',
-  'CLOSED',
-  'REJECTED',
-  'CANCELLED',
+  'BORRADOR',
+  'SOLICITADO',
+  'EMITIDO',
+  'VIGENTE',
+  'CERRADO',
+  'VENCIDO',
+  'CADUCADO',
+  'SIN_ARRIBO',
+  'RECHAZADO',
+  'ANULADO',
+  'ELIMINADO',
+]);
+
+/**
+ * Canal por el que se obtuvo el numero del DT-e:
+ *   MANUAL   numero emitido en SIGSA (web u oficina local) y transcripto aca.
+ *   SIMULADO emision de prueba sin validez oficial (demos y homologacion interna).
+ *   SIGSA    emision via API oficial de SENASA.
+ */
+export const dteIssueModeEnum = pgEnum('dte_issue_mode', ['MANUAL', 'SIMULADO', 'SIGSA']);
+
+/** Quien provoco un cambio de estado del DT-e (historial sanitario). */
+export const dteHistorySourceEnum = pgEnum('dte_history_source', ['USUARIO', 'SISTEMA', 'SENASA']);
+
+/** Servicios de SENASA que el titular delega en ApiTrace via ARCA (ADMINREL). */
+export const senasaServiceEnum = pgEnum('senasa_service', ['SIGSA_DTE', 'SITA']);
+
+export const senasaDelegationStatusEnum = pgEnum('senasa_delegation_status', [
+  'NO_INICIADA',
+  'PENDIENTE',
+  'ACEPTADA',
+  'REVOCADA',
+  'RECHAZADA',
 ]);
 
 /** Estado de sincronizacion con el organismo externo (arquitectura, seccion 39). */

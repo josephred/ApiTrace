@@ -1,236 +1,300 @@
-import { useState, useMemo, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { apiSend, NetworkError } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { usePreferences } from '../lib/settingsContext';
 import { useResource } from '../lib/useResource';
-import { apiSend } from '../lib/api';
-import { toUserMessage } from '../lib/errors';
+import { fieldErrors, toUserMessage } from '../lib/errors';
 import {
-  addDaysIso,
   DEFAULT_VALIDITY_DAYS,
+  DTE_STATUS_FILTERS,
+  MAX_VALIDITY_DAYS,
+  addDaysIso,
+  daysBetweenIso,
   formatDay,
-  isValidPlate,
-  normalizePlate,
-  suggestDeclaredQuantity,
+  suggestDeclared,
   todayAr,
 } from '../lib/dte';
-import { DTE_STATUSES } from '../lib/vocabulary';
+import { INTEGRATION_MODES, TRANSPORT_TYPES, statusInfo } from '../lib/vocabulary';
 import {
   Button,
   Card,
   EmptyState,
-  ErrorNotice,
+  Notice,
   PageHeader,
+  Pill,
   Sheet,
   Stat,
   StatusPill,
+  SummaryList,
   useWriteFeedback,
 } from '../components/ui';
 import { DataList, type Column } from '../components/DataList';
-import { TransitSemaphoreBadge } from '../components/TransitSemaphoreBadge';
+import { ResourceNotices } from '../components/ResourceNotices';
+import {
+  Disclosure,
+  Field,
+  Fields,
+  FormError,
+  Steps,
+  WizardActions,
+  useForm,
+  type FieldSpec,
+} from '../components/Form';
 import { DteChecks } from '../components/DteChecks';
-import type { Dte, Movement, Paginated, DtePreflightResult } from '../lib/types';
+import type {
+  Apiary,
+  Dte,
+  DteListItem,
+  DtePreflight,
+  DteSummary,
+  Paginated,
+  Receiver,
+} from '../lib/types';
 
-interface DteSummary {
-  borradores: number;
-  solicitados: number;
-  emitidos: number;
-  vigentes: number;
-  vencidos: number;
-  caducados: number;
-  cerrados: number;
-  total: number;
-}
+type Perspective = 'emitidos' | 'recibidos' | 'todos';
 
+const PERSPECTIVES: { value: Perspective; label: string }[] = [
+  { value: 'emitidos', label: 'Los que emito' },
+  { value: 'recibidos', label: 'Los que recibo' },
+  { value: 'todos', label: 'Todos' },
+];
+
+/* =========================================================================
+   Listado por usuario
+   ========================================================================= */
+
+/**
+ * Los DT-e de la persona: los que emite su organizacion y los que llegan a sus
+ * salas. El productor ve primero lo que emite; la sala, lo que tiene que cerrar.
+ * El estado ya viene calculado con la fecha: un DT-e emitido pasa solo a
+ * vigente el dia de la carga, y a vencido si nadie lo cierra.
+ */
 export const DtePage = () => {
-  const { canWrite } = useAuth();
+  const { user, canWrite, hasRole } = useAuth();
   const [params, setParams] = useSearchParams();
-
-  const perspective = (params.get('perspective') as 'EMITIDOS' | 'RECIBIDOS') || 'EMITIDOS';
-  const status = params.get('status') || '';
   const [pageSize, setPageSize] = useState(25);
-  const [isCreating, setIsCreating] = useState(false);
+  const [creating, setCreating] = useState(false);
 
-  const queryUrl = useMemo(() => {
-    const q = new URLSearchParams();
-    q.set('pageSize', String(pageSize));
-    if (perspective) q.set('perspective', perspective);
-    if (status) q.set('status', status);
-    return `/dte?${q.toString()}`;
-  }, [pageSize, perspective, status]);
+  const receiverRole = user?.role === 'SALA' || user?.role === 'ACOPIADOR';
+  const defaultPerspective: Perspective = receiverRole
+    ? 'recibidos'
+    : user?.role === 'PRODUCTOR'
+      ? 'emitidos'
+      : 'todos';
+  const perspective = (params.get('perspective') as Perspective | null) ?? defaultPerspective;
+  const status = params.get('status') ?? '';
+  const mine = params.get('mine') === 'true';
 
-  const list = useResource<Paginated<Dte>>(queryUrl);
-  const summaryRes = useResource<DteSummary>('/dte/summary');
+  const query = new URLSearchParams({ pageSize: String(pageSize), perspective });
+  if (status) query.set('status', status);
+  if (mine) query.set('mine', 'true');
 
-  const setPerspective = (p: 'EMITIDOS' | 'RECIBIDOS') => {
-    params.set('perspective', p);
-    setParams(params);
+  const list = useResource<Paginated<DteListItem>>(`/dte?${query.toString()}`);
+  const summary = useResource<DteSummary>('/dte/summary');
+  const canIssue = canWrite && hasRole('PRODUCTOR');
+
+  const update = (changes: Record<string, string | null>) => {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    setParams(next);
   };
 
-  const setStatus = (s: string) => {
-    if (s) params.set('status', s);
-    else params.delete('status');
-    setParams(params);
-  };
+  const data = summary.data;
+  const integration = data?.integration;
 
-  const columns: Column<Dte>[] = [
+  const columns: Column<DteListItem>[] = [
     {
       key: 'number',
-      header: 'Número Oficial',
+      header: 'DT-e',
       role: 'title',
-      cell: (item) => (
-        <div className="stack" style={{ gap: 2 }}>
-          <strong className="mono">{item.number ?? 'S/N (Borrador)'}</strong>
-          {item.issueMode && (
-            <span className="small muted">
-              {item.issueMode === 'SIGSA' ? 'SENASA / SIGSA' : item.issueMode === 'MANUAL' ? 'Carga manual' : 'Simulado'}
-            </span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'transit',
-      header: 'Semáforo Tránsito',
-      role: 'status',
-      cell: (item) => (
-        <TransitSemaphoreBadge
-          semaphore={item.transitSemaphore}
-          reason={item.transitReasonText}
-          size="sm"
-        />
-      ),
+      cell: (item) =>
+        item.number ? (
+          <strong className="mono">{item.number}</strong>
+        ) : (
+          <span className="faint">Sin número</span>
+        ),
     },
     {
       key: 'status',
       header: 'Estado',
+      role: 'status',
       cell: (item) => <StatusPill status={item.status} />,
     },
     {
-      key: 'renspa',
-      header: 'Origen → Destino',
+      key: 'transit',
+      header: 'Tránsito',
+      cell: (item) =>
+        item.aptForTransit ? (
+          <Pill tone="success" icon="check">
+            Apto
+          </Pill>
+        ) : item.status === 'EMITIDO' ? (
+          <Pill tone="warning">Desde {formatDay(item.loadDate)}</Pill>
+        ) : (
+          <span className="faint small">—</span>
+        ),
+    },
+    {
+      key: 'origin',
+      header: 'Origen',
       cell: (item) => (
-        <div className="stack small" style={{ gap: 2 }}>
-          <span>
-            <strong className="muted">De:</strong> {item.originRenspa ?? '—'}
-          </span>
-          <span>
-            <strong className="muted">A:</strong> {item.destinationRenspa ?? '—'}
-          </span>
-        </div>
+        <>
+          {item.apiaryCode ?? item.originName}
+          <div className="xs faint mono">{item.originCode ?? 'sin RENAPA'}</div>
+        </>
       ),
     },
     {
-      key: 'dates',
-      header: 'Carga y Vencimiento',
+      key: 'destination',
+      header: 'Destino',
       cell: (item) => (
-        <div className="stack small" style={{ gap: 2 }}>
-          <span>Carga: {formatDay(item.loadDate)}</span>
-          <span className={item.status === 'VENCIDO' ? 'font-medium' : 'muted'} style={{ color: item.status === 'VENCIDO' ? 'var(--danger)' : undefined }}>
-            Vence: {formatDay(item.expiryDate)}
-          </span>
-        </div>
+        <>
+          {item.destinationName}
+          <div className="xs faint mono">{item.destinationCode ?? 'sin código'}</div>
+        </>
       ),
     },
     {
       key: 'quantity',
-      header: 'Cant. Declarada',
+      header: 'Alzas',
       align: 'right',
+      cell: (item) =>
+        item.confirmedQuantity !== null && item.confirmedQuantity !== undefined
+          ? `${item.confirmedQuantity} de ${item.declaredQuantity ?? '—'}`
+          : (item.declaredQuantity ?? '—'),
+    },
+    {
+      key: 'dates',
+      header: 'Carga → vence',
       cell: (item) => (
-        <span className="nowrap font-medium">
-          {item.declaredQuantity ?? 0} {item.unit ?? 'ALZA'}
+        <span className="nowrap">
+          {formatDay(item.loadDate)} → {formatDay(item.expiryDate)}
         </span>
       ),
     },
+    {
+      key: 'mode',
+      header: 'Canal',
+      role: 'hidden',
+      cell: (item) =>
+        item.issueMode === 'SIMULADO' ? (
+          <Pill tone="warning">Simulado</Pill>
+        ) : (
+          <span className="small muted">{item.movementCode}</span>
+        ),
+    },
   ];
-
-  const summary = summaryRes.data;
 
   return (
     <div className="stack">
       <PageHeader
-        title="Documentos de Tránsito Electrónicos (DT-e)"
-        sub="Gestión oficial del traslado apícola ante SENASA / ARCA según normativa vigente."
-        help="dte"
+        title={receiverRole ? 'DT-e recibidos' : 'DT-e'}
+        help="dteList"
         actions={
-          canWrite && (
-            <Button variant="primary" icon="plus" onClick={() => setIsCreating(true)}>
+          canIssue && (
+            <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
               Nuevo DT-e
             </Button>
           )
         }
       />
 
-      {summary && (
-        <div className="grid-stats">
-          <Stat
-            label="Total DT-e"
-            value={summary.total}
-            hint="En el sistema"
-            help="dte"
-          />
-          <Stat
-            label="En tránsito"
-            value={<span style={{ color: '#16a34a' }}>{summary.vigentes}</span>}
-            hint="Amparados por DT-e"
-            help="dteTransit"
-          />
-          <Stat
-            label="Vencidos / Caducados"
-            value={<span style={{ color: '#dc2626' }}>{summary.vencidos + summary.caducados}</span>}
-            hint="Requieren regularización"
-            help="movementRule"
-          />
-          <Stat
-            label="Cerrados en sala"
-            value={<span style={{ color: '#2563eb' }}>{summary.cerrados}</span>}
-            hint="Recepción completa"
-            help="reception"
-          />
+      <ResourceNotices resource={list} />
+
+      {integration && (
+        <Notice
+          tone={integration.mode === 'simulado' ? 'warning' : 'info'}
+          title={`Canal de emisión: ${INTEGRATION_MODES.label(integration.mode)}`}
+        >
+          {integration.description}
+        </Notice>
+      )}
+
+      {data && data.blockedHolders.length > 0 && (
+        <Notice tone="danger" title="Emisión bloqueada por DT-e caducados">
+          {data.blockedHolders.map((holder) => holder.businessName).join(', ')}: SIGSA no permite
+          emitir nuevos DT-e hasta regularizar ante SENASA.
+        </Notice>
+      )}
+
+      {data && (
+        <div className="grid c4">
+          {perspective === 'recibidos' ? (
+            <>
+              <Stat
+                label="Por cerrar"
+                value={data.tasks.pendingClosure}
+                hint="vigentes o vencidos"
+              />
+              <Stat
+                label="Vencidos"
+                value={data.received.VENCIDO ?? 0}
+                hint="cerralos antes de que caduquen"
+              />
+              <Stat label="Cerrados" value={data.received.CERRADO ?? 0} hint="arribo confirmado" />
+              <Stat label="Sin arribo" value={data.received.SIN_ARRIBO ?? 0} hint="declarados" />
+            </>
+          ) : (
+            <>
+              <Stat label="Borradores" value={data.issued.BORRADOR ?? 0} hint="falta emitir" />
+              <Stat
+                label="Vigentes"
+                value={data.issued.VIGENTE ?? 0}
+                hint="aptos para transitar"
+                help="dteValidity"
+              />
+              <Stat
+                label="Vencidos"
+                value={data.issued.VENCIDO ?? 0}
+                hint="sin cierre de la sala"
+              />
+              <Stat label="Caducados" value={data.tasks.lapsed} hint="bloquean nuevas emisiones" />
+            </>
+          )}
         </div>
       )}
 
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
-        <div className="row row-tight">
-          <Button
-            size="sm"
-            variant={perspective === 'EMITIDOS' ? 'primary' : 'secondary'}
-            onClick={() => setPerspective('EMITIDOS')}
-          >
-            Emitidos por mi organización
+      <div className="filters">
+        <select
+          value={perspective}
+          onChange={(event) => update({ perspective: event.target.value })}
+          aria-label="Qué DT-e ver"
+        >
+          {PERSPECTIVES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={status}
+          onChange={(event) => update({ status: event.target.value || null })}
+          aria-label="Filtrar por estado"
+        >
+          <option value="">Todos los estados</option>
+          {DTE_STATUS_FILTERS.map((option) => (
+            <option key={option} value={option}>
+              {statusInfo(option).label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={mine ? 'true' : ''}
+          onChange={(event) => update({ mine: event.target.value || null })}
+          aria-label="De quién"
+        >
+          <option value="">De mi organización</option>
+          <option value="true">Solo los que pedí yo</option>
+        </select>
+        {(status || mine) && (
+          <Button size="sm" icon="close" onClick={() => update({ status: null, mine: null })}>
+            Quitar filtros
           </Button>
-          <Button
-            size="sm"
-            variant={perspective === 'RECIBIDOS' ? 'primary' : 'secondary'}
-            onClick={() => setPerspective('RECIBIDOS')}
-          >
-            Destinados a mi organización
-          </Button>
-        </div>
-
-        <div className="row row-tight">
-          <label htmlFor="filter-status" className="small muted">
-            Filtrar:
-          </label>
-          <select
-            id="filter-status"
-            className="field-input"
-            style={{ width: 'auto', minWidth: '180px' }}
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="">Todos los estados</option>
-            {DTE_STATUSES.options.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          {status && (
-            <Button size="sm" icon="close" onClick={() => setStatus('')}>
-              Quitar filtro
-            </Button>
-          )}
-        </div>
+        )}
       </div>
 
       <Card flush>
@@ -241,42 +305,37 @@ export const DtePage = () => {
           rowHref={(item) => `/dte/${item.id}`}
           loading={list.loading}
           total={list.data?.meta.total}
-          onLoadMore={() => setPageSize((s) => s + 25)}
+          onLoadMore={() => setPageSize((size) => size + 25)}
           loadingMore={list.loading}
           empty={
             <EmptyState
               icon="document"
-              title={status ? 'No hay DT-e en ese estado' : 'No se encontraron documentos'}
+              title={status ? 'No hay DT-e en ese estado' : 'Todavía no hay DT-e'}
               description={
-                status
-                  ? 'Probá ajustando el filtro de estado o la perspectiva.'
-                  : 'Los DT-e amparan el traslado sanitario desde el apiario hacia la sala de extracción o acopio.'
+                perspective === 'recibidos'
+                  ? 'Cuando un productor emita un DT-e hacia tu sala, va a aparecer acá para cerrarlo.'
+                  : 'El DT-e ampara el traslado de alzas melarias del apiario a la sala de extracción.'
               }
               action={
-                status ? (
-                  <Button onClick={() => setStatus('')} icon="close">
-                    Ver todos
+                canIssue && !status ? (
+                  <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
+                    Preparar un DT-e
                   </Button>
-                ) : (
-                  canWrite && (
-                    <Button variant="primary" icon="plus" onClick={() => setIsCreating(true)}>
-                      Preparar DT-e
-                    </Button>
-                  )
-                )
+                ) : undefined
               }
             />
           }
         />
       </Card>
 
-      {isCreating && (
-        <CreateDteWizard
-          onClose={() => setIsCreating(false)}
+      {creating && (
+        <NewDteWizard
+          canRequest={Boolean(integration?.capabilities.emit)}
+          onClose={() => setCreating(false)}
           onDone={() => {
-            setIsCreating(false);
+            setCreating(false);
             list.reload();
-            summaryRes.reload();
+            summary.reload();
           }}
         />
       )}
@@ -285,298 +344,499 @@ export const DtePage = () => {
 };
 
 /* =========================================================================
-   Asistente de Preparación y Solicitud de DT-e
+   Asistente: preparar, verificar y emitir
    ========================================================================= */
 
-const CreateDteWizard = ({
+const STEP_NAMES = ['Origen y destino', 'Alzas y fechas', 'Transporte', 'Verificar y emitir'];
+
+/**
+ * El DT-e se arma en cuatro preguntas: de dónde a dónde, cuántas alzas y
+ * cuándo, en qué vehículo, y si SIGSA lo aceptaría. La última etapa corre la
+ * misma verificación que haría SIGSA y ofrece tres salidas: guardar el
+ * borrador, pedirlo por API (si el canal lo permite) o registrar uno ya
+ * emitido en SIGSA.
+ */
+const NewDteWizard = ({
+  canRequest,
   onClose,
   onDone,
 }: {
+  canRequest: boolean;
   onClose: () => void;
   onDone: () => void;
 }) => {
+  const navigate = useNavigate();
   const feedback = useWriteFeedback();
-  const [movementId, setMovementId] = useState('');
-  const [loadDate, setLoadDate] = useState(todayAr());
-  const [expiryDate, setExpiryDate] = useState(addDaysIso(todayAr(), DEFAULT_VALIDITY_DAYS));
-  const [transportType, setTransportType] = useState('PROPIO');
-  const [transportPlate, setTransportPlate] = useState('');
-  const [transportTrailerPlate, setTransportTrailerPlate] = useState('');
-  const [declaredQuantity, setDeclaredQuantity] = useState<number | string>('');
+  // Patentes habituales guardadas en Configuracion: se precargan, siempre editables.
+  const { preferences } = usePreferences();
+  const [step, setStep] = useState(0);
+  const [busy, setBusy] = useState<'draft' | 'request' | 'manual' | null>(null);
+  const [failure, setFailure] = useState<{ title: string; detail?: string } | null>(null);
+  const [preflight, setPreflight] = useState<DtePreflight | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [offline, setOffline] = useState(false);
 
-  const [preflight, setPreflight] = useState<DtePreflightResult | null>(null);
-  const [checkingPreflight, setCheckingPreflight] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown | null>(null);
+  const apiaries = useResource<Paginated<Apiary>>('/apiaries?pageSize=100');
+  const receivers = useResource<Paginated<Receiver>>('/establishments/receivers?pageSize=100');
+  const today = todayAr();
 
-  // Cargar movimientos que requieran DT-e
-  const movementsRes = useResource<Paginated<Movement>>('/movements?pageSize=50');
-  const eligibleMovements = useMemo(() => {
-    return (movementsRes.data?.data ?? []).filter(
-      (m) => m.requiresDocument && ['DRAFT', 'DISPATCHED'].includes(m.status),
-    );
-  }, [movementsRes.data]);
-
-  const handleSelectMovement = async (id: string) => {
-    setMovementId(id);
-    if (!id) {
-      setPreflight(null);
-      return;
-    }
-
-    const selectedMov = eligibleMovements.find((m) => m.id === id);
-    if (selectedMov) {
-      const estQty = Number(selectedMov.quantity) || 0;
-      setDeclaredQuantity(suggestDeclaredQuantity(estQty));
-    }
-
-    setCheckingPreflight(true);
-    setError(null);
-    try {
-      const res = await apiSend<DtePreflightResult>(
-        'POST',
-        '/dte/preflight',
-        { movementId: id },
-        { label: 'Evaluación previa DT-e', entity: '/dte', queueOffline: false },
-      );
-      if (!res.queued) {
-        setPreflight(res.data);
-        if (res.data.defaultDates) {
-          setLoadDate(res.data.defaultDates.loadDate);
-          setExpiryDate(res.data.defaultDates.expiryDate);
-        }
-        if (res.data.suggestedDeclaredQuantity) {
-          setDeclaredQuantity(res.data.suggestedDeclaredQuantity);
-        }
-      }
-    } catch (err) {
-      setError(err);
-    } finally {
-      setCheckingPreflight(false);
-    }
-  };
-
-  const handlePlateChange = (val: string) => {
-    setTransportPlate(normalizePlate(val));
-  };
-
-  const handleTrailerPlateChange = (val: string) => {
-    setTransportTrailerPlate(normalizePlate(val));
-  };
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!movementId) return;
-
-    if (transportPlate && !isValidPlate(transportPlate)) {
-      setError(new Error('La patente del vehículo no tiene un formato válido (ej. AB123CD o ABC123).'));
-      return;
-    }
-
-    if (transportTrailerPlate && !isValidPlate(transportTrailerPlate)) {
-      setError(new Error('La patente del acoplado no tiene un formato válido.'));
-      return;
-    }
-
-    setBusy(true);
-    setError(null);
-
-    try {
-      const res = await apiSend(
-        'POST',
-        '/dte/draft',
-        {
-          movementId,
-          loadDate,
-          expiryDate,
-          declaredQuantity: Number(declaredQuantity) || undefined,
-          transportType,
-          transportPlate: transportPlate || undefined,
-          transportTrailerPlate: transportTrailerPlate || undefined,
+  const fields: FieldSpec[] = useMemo(
+    () => [
+      // ---------------------------------------------------------- paso 1
+      {
+        name: 'apiaryId',
+        label: 'Apiario de origen',
+        type: 'select',
+        required: true,
+        full: true,
+        help: 'renapaApiary',
+        options: (apiaries.data?.data ?? []).map((item) => ({
+          value: item.id,
+          label: `${item.code}${item.name ? ` — ${item.name}` : ''} · ${
+            item.renapaCode ? `RENAPA ${item.renapaCode}` : 'sin RENAPA'
+          }`,
+        })),
+      },
+      {
+        name: 'destinationEstablishmentId',
+        label: 'Sala de extracción',
+        type: 'select',
+        required: true,
+        full: true,
+        help: 'senasaSala',
+        options: (receivers.data?.data ?? []).map((item) => ({
+          value: item.id,
+          label: `${item.name} · ${item.senasaCode ?? 'sin código SENASA'} (${item.organizationName})`,
+        })),
+      },
+      // ---------------------------------------------------------- paso 2
+      {
+        name: 'estimatedQuantity',
+        label: 'Alzas que estimás cosechar',
+        type: 'number',
+        min: '1',
+        step: '1',
+        inputMode: 'numeric',
+      },
+      {
+        name: 'declaredQuantity',
+        label: 'Alzas a declarar',
+        type: 'number',
+        min: '1',
+        step: '1',
+        required: true,
+        inputMode: 'numeric',
+        help: 'dteDeclared',
+        validate: (value, all) =>
+          all.estimatedQuantity && Number(value) < Number(all.estimatedQuantity)
+            ? 'No puede ser menor que lo estimado: la sala no podrá confirmar más de lo declarado.'
+            : null,
+      },
+      {
+        name: 'loadDate',
+        label: 'Fecha de carga',
+        type: 'date',
+        required: true,
+        defaultValue: today,
+        help: 'dteValidity',
+      },
+      {
+        name: 'expiryDate',
+        label: 'Vence',
+        type: 'date',
+        required: true,
+        defaultValue: addDaysIso(today, DEFAULT_VALIDITY_DAYS),
+        validate: (value, all) => {
+          if (!all.loadDate) return null;
+          const days = daysBetweenIso(all.loadDate, value);
+          return days < DEFAULT_VALIDITY_DAYS || days > MAX_VALIDITY_DAYS
+            ? `Tiene que ser entre ${DEFAULT_VALIDITY_DAYS} y ${MAX_VALIDITY_DAYS} días después de la carga.`
+            : null;
         },
-        {
-          label: 'Creación de borrador DT-e',
-          entity: '/dte',
-        },
-      );
+      },
+      // ---------------------------------------------------------- paso 3
+      {
+        name: 'transportType',
+        label: 'Vehículo',
+        type: 'select',
+        required: true,
+        defaultValue: 'CAMIONETA',
+        options: TRANSPORT_TYPES.options,
+      },
+      {
+        name: 'transportPlate',
+        label: 'Patente',
+        required: true,
+        placeholder: 'AA123BC',
+        autoComplete: 'off',
+        defaultValue: preferences.vehiclePlate,
+      },
+      {
+        name: 'transportTrailerPlate',
+        label: 'Patente del acoplado',
+        placeholder: 'Si lleva acoplado',
+        autoComplete: 'off',
+        defaultValue: preferences.trailerPlate,
+      },
+      // ---------------------------------------------------------- manual
+      { name: 'number', label: 'Número de DT-e', placeholder: '022440451-4', full: true },
+      {
+        name: 'verificationCode',
+        label: 'Código de cierre',
+        placeholder: '790112',
+        help: 'dteVerificationCode',
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [apiaries.data, receivers.data, preferences.vehiclePlate, preferences.trailerPlate],
+  );
 
-      if (res.queued) {
-        feedback.queued('El borrador de DT-e');
-      } else {
-        feedback.saved('DT-e creado en borrador', 'Podés solicitarlo a SENASA o cargarlo manualmente.');
+  const { values, set, setValues, blur, errors, setErrors, validateAll } = useForm(fields);
+  const byName = (name: string) => fields.find((field) => field.name === name)!;
+  const pick = (names: string[]) => names.map(byName);
+
+  const stepFields = [
+    ['apiaryId', 'destinationEstablishmentId'],
+    ['estimatedQuantity', 'declaredQuantity', 'loadDate', 'expiryDate'],
+    ['transportType', 'transportPlate', 'transportTrailerPlate'],
+    [],
+  ];
+
+  /** Al estimar, se propone declarar con margen: la sala no puede confirmar de mas. */
+  const onEstimated = (value: string) => {
+    setValues((current) => {
+      const previous = current.estimatedQuantity
+        ? suggestDeclared(Number(current.estimatedQuantity))
+        : null;
+      const untouched = !current.declaredQuantity || Number(current.declaredQuantity) === previous;
+      return {
+        ...current,
+        estimatedQuantity: value,
+        declaredQuantity:
+          untouched && Number(value) > 0
+            ? String(suggestDeclared(Number(value)))
+            : current.declaredQuantity,
+      };
+    });
+  };
+
+  /** La fecha de vencimiento acompana a la de carga mientras nadie la toque. */
+  const onLoadDate = (value: string) => {
+    setValues((current) => {
+      const previousDefault = current.loadDate
+        ? addDaysIso(current.loadDate, DEFAULT_VALIDITY_DAYS)
+        : null;
+      return {
+        ...current,
+        loadDate: value,
+        expiryDate:
+          !current.expiryDate || current.expiryDate === previousDefault
+            ? addDaysIso(value, DEFAULT_VALIDITY_DAYS)
+            : current.expiryDate,
+      };
+    });
+  };
+
+  const body = (extra: Record<string, unknown> = {}) => ({
+    apiaryId: values.apiaryId,
+    destinationEstablishmentId: values.destinationEstablishmentId,
+    ...(values.estimatedQuantity ? { estimatedQuantity: Number(values.estimatedQuantity) } : {}),
+    declaredQuantity: Number(values.declaredQuantity),
+    loadDate: values.loadDate,
+    expiryDate: values.expiryDate,
+    transport: {
+      type: values.transportType,
+      plate: values.transportPlate,
+      ...(values.transportTrailerPlate ? { trailerPlate: values.transportTrailerPlate } : {}),
+    },
+    ...extra,
+  });
+
+  // La verificacion corre al llegar al ultimo paso y cada vez que se vuelve a el.
+  useEffect(() => {
+    if (step !== 3) return;
+    let cancelled = false;
+    setChecking(true);
+    setOffline(false);
+    setPreflight(null);
+    apiSend<DtePreflight>('POST', '/dte/preflight', body(), {
+      label: 'Verificación de DT-e',
+      entity: '/dte',
+      queueOffline: false,
+    })
+      .then((result) => {
+        if (!cancelled && !result.queued) setPreflight(result.data);
+      })
+      .catch((cause: unknown) => {
+        if (cancelled) return;
+        if (cause instanceof NetworkError) setOffline(true);
+        else {
+          const message = toUserMessage(cause, 'read');
+          setFailure({ title: message.title, detail: message.detail });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setChecking(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  const next = () => {
+    if (!validateAll(stepFields[step])) return;
+    setFailure(null);
+    setStep((current) => current + 1);
+  };
+
+  const back = () => {
+    if (step === 0) onClose();
+    else setStep((current) => current - 1);
+  };
+
+  const send = async (kind: 'draft' | 'request' | 'manual') => {
+    if (!validateAll(stepFields.flat())) return;
+    if (kind === 'manual' && !values.number?.trim()) {
+      setErrors((current) => ({ ...current, number: 'Completá el número que figura en el DT-e.' }));
+      return;
+    }
+    setBusy(kind);
+    setFailure(null);
+    try {
+      const extra =
+        kind === 'request'
+          ? { submit: true }
+          : kind === 'manual'
+            ? {
+                number: values.number.trim(),
+                ...(values.verificationCode
+                  ? { verificationCode: values.verificationCode.trim() }
+                  : {}),
+              }
+            : {};
+      const result = await apiSend<Dte>('POST', '/dte', body(extra), {
+        label: `DT-e de ${values.declaredQuantity} alzas (${formatDay(values.loadDate)})`,
+        entity: '/dte',
+      });
+      if (result.queued) {
+        feedback.queued('El DT-e');
+        onDone();
+        return;
       }
+      feedback.saved(
+        kind === 'request'
+          ? 'Emisión solicitada a SIGSA'
+          : kind === 'manual'
+            ? `DT-e ${result.data.number} registrado`
+            : 'Borrador guardado',
+      );
       onDone();
-    } catch (err) {
-      setError(err);
+      navigate(`/dte/${result.data.id}`);
+    } catch (cause) {
+      const perField = fieldErrors(
+        cause,
+        fields.map((field) => field.name),
+      );
+      if (Object.keys(perField).length > 0) {
+        setErrors((current) => ({ ...current, ...perField }));
+        const firstBad = Object.keys(perField)[0];
+        const target = stepFields.findIndex((group) => group.includes(firstBad));
+        if (target >= 0) setStep(target);
+      } else {
+        const message = toUserMessage(cause, 'write');
+        setFailure({ title: message.title, detail: message.detail });
+      }
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
+
+  const label = (name: string) =>
+    byName(name).options?.find((option) => option.value === values[name])?.label ?? '—';
 
   return (
     <Sheet
-      title="Preparar DT-e oficial"
-      subtitle="Generá el borrador oficial con validaciones preflight automáticas de SENASA."
+      title="Nuevo DT-e"
+      subtitle="Traslado de alzas melarias del apiario a la sala (API-SEM)"
       onClose={onClose}
     >
-      <form onSubmit={handleSubmit} className="stack">
-        {error ? <ErrorNotice message={toUserMessage(error, 'write')} /> : null}
+      <Steps names={STEP_NAMES} current={step} />
 
-        <div className="field">
-          <label className="field-label" htmlFor="dte-movement">
-            Movimiento a amparar *
-          </label>
-          <select
-            id="dte-movement"
-            className="field-input"
-            value={movementId}
-            onChange={(e) => handleSelectMovement(e.target.value)}
-            disabled={busy || checkingPreflight}
-            required
-          >
-            <option value="">Seleccioná un traslado...</option>
-            {eligibleMovements.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.code} — {m.materialType} ({m.quantity} {m.unit})
-              </option>
-            ))}
-          </select>
-          <div className="field-hint">
-            Solo traslados que exijan documento sanitario y no cuenten con DT-e emitido.
-          </div>
-        </div>
+      <form
+        onSubmit={(event: FormEvent) => {
+          event.preventDefault();
+          if (step < 3) next();
+        }}
+        noValidate
+      >
+        {failure && <FormError title={failure.title} detail={failure.detail} />}
 
-        {checkingPreflight && (
-          <div className="row row-tight small muted">
-            <span className="spinner" aria-hidden="true" />
-            Verificando condiciones previas con SENASA...
-          </div>
+        {step === 0 && (
+          <>
+            <Fields
+              fields={pick(stepFields[0])}
+              values={values}
+              errors={errors}
+              onChange={set}
+              onBlur={blur}
+            />
+            {apiaries.data && apiaries.data.data.every((item) => !item.renapaCode) && (
+              <Notice tone="warning" title="Tus apiarios no tienen RENAPA cargado">
+                El RENAPA del apiario es el origen oficial del DT-e. Cargalo desde Apiarios →
+                RENAPA.
+              </Notice>
+            )}
+            <WizardActions onBack={back} onNext={next} nextLabel="Continuar" />
+          </>
         )}
 
-        {preflight && (
-          <div style={{ margin: 'var(--sp-2) 0' }}>
-            <DteChecks result={preflight} />
-          </div>
-        )}
-
-        <div className="row" style={{ gap: 'var(--sp-3)' }}>
-          <div className="field grow">
-            <label className="field-label" htmlFor="dte-load-date">
-              Fecha de carga autorizada *
-            </label>
-            <input
-              id="dte-load-date"
-              type="date"
-              className="field-input"
-              value={loadDate}
-              onChange={(e) => setLoadDate(e.target.value)}
-              disabled={busy}
-              required
-            />
-            <div className="field-hint">Día calendario previsto para el despacho.</div>
-          </div>
-
-          <div className="field grow">
-            <label className="field-label" htmlFor="dte-expiry-date">
-              Fecha de vencimiento *
-            </label>
-            <input
-              id="dte-expiry-date"
-              type="date"
-              className="field-input"
-              value={expiryDate}
-              onChange={(e) => setExpiryDate(e.target.value)}
-              disabled={busy}
-              required
-            />
-            <div className="field-hint">Validez oficial de 2 a 4 días (por defecto 3).</div>
-          </div>
-        </div>
-
-        <div className="row" style={{ gap: 'var(--sp-3)' }}>
-          <div className="field grow">
-            <label className="field-label" htmlFor="dte-qty">
-              Cantidad declarada en DT-e *
-            </label>
-            <input
-              id="dte-qty"
-              type="number"
-              className="field-input"
-              value={declaredQuantity}
-              onChange={(e) => setDeclaredQuantity(e.target.value)}
-              min="1"
-              disabled={busy}
-              required
-            />
-            <div className="field-hint">
-              Sugerido +15% de margen: la sala nunca puede recibir más de lo declarado.
+        {step === 1 && (
+          <>
+            <div className="form-grid">
+              <Field
+                spec={byName('estimatedQuantity')}
+                value={values.estimatedQuantity ?? ''}
+                error={errors.estimatedQuantity}
+                onChange={onEstimated}
+                onBlur={() => blur('estimatedQuantity')}
+              />
+              <Field
+                spec={byName('declaredQuantity')}
+                value={values.declaredQuantity ?? ''}
+                error={errors.declaredQuantity}
+                onChange={(value) => set('declaredQuantity', value)}
+                onBlur={() => blur('declaredQuantity')}
+              />
+              <Field
+                spec={byName('loadDate')}
+                value={values.loadDate ?? ''}
+                error={errors.loadDate}
+                onChange={onLoadDate}
+                onBlur={() => blur('loadDate')}
+              />
+              <Field
+                spec={byName('expiryDate')}
+                value={values.expiryDate ?? ''}
+                error={errors.expiryDate}
+                onChange={(value) => set('expiryDate', value)}
+                onBlur={() => blur('expiryDate')}
+              />
             </div>
-          </div>
+            <Notice tone="info" title="Declará de más, nunca de menos">
+              Si a la sala llegan más alzas que las declaradas, el DT-e se anula y hay que emitir
+              otro antes de descargar. Declarar de más no tiene penalidad.
+            </Notice>
+            <WizardActions onBack={back} onNext={next} nextLabel="Continuar" />
+          </>
+        )}
 
-          <div className="field grow">
-            <label className="field-label" htmlFor="dte-trans-type">
-              Tipo de transporte
-            </label>
-            <select
-              id="dte-trans-type"
-              className="field-input"
-              value={transportType}
-              onChange={(e) => setTransportType(e.target.value)}
-              disabled={busy}
-            >
-              <option value="PROPIO">Transporte propio</option>
-              <option value="TERCERO">Transporte de terceros</option>
-              <option value="OTRO">Otro</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="row" style={{ gap: 'var(--sp-3)' }}>
-          <div className="field grow">
-            <label className="field-label" htmlFor="dte-plate">
-              Patente chasis / vehículo
-            </label>
-            <input
-              id="dte-plate"
-              type="text"
-              className="field-input mono"
-              placeholder="Ej. AB123CD o ABC123"
-              value={transportPlate}
-              onChange={(e) => handlePlateChange(e.target.value)}
-              disabled={busy}
+        {step === 2 && (
+          <>
+            <Fields
+              fields={pick(stepFields[2])}
+              values={values}
+              errors={errors}
+              onChange={set}
+              onBlur={blur}
             />
-          </div>
+            <p className="small muted">
+              El movimiento API-SEM no lleva precintos ni requiere transporte habilitado por SENASA.
+            </p>
+            <WizardActions onBack={back} onNext={next} nextLabel="Verificar" />
+          </>
+        )}
 
-          <div className="field grow">
-            <label className="field-label" htmlFor="dte-trailer">
-              Patente acoplado / trailer (opcional)
-            </label>
-            <input
-              id="dte-trailer"
-              type="text"
-              className="field-input mono"
-              placeholder="Ej. 101AA123"
-              value={transportTrailerPlate}
-              onChange={(e) => handleTrailerPlateChange(e.target.value)}
-              disabled={busy}
+        {step === 3 && (
+          <>
+            <SummaryList
+              rows={[
+                { key: 'Origen', value: label('apiaryId') },
+                { key: 'Destino', value: label('destinationEstablishmentId') },
+                {
+                  key: 'Alzas',
+                  value: `${values.declaredQuantity} declaradas${
+                    values.estimatedQuantity ? ` (${values.estimatedQuantity} estimadas)` : ''
+                  }`,
+                },
+                {
+                  key: 'Vigencia',
+                  value: `${formatDay(values.loadDate)} → ${formatDay(values.expiryDate)}`,
+                },
+                {
+                  key: 'Transporte',
+                  value: `${TRANSPORT_TYPES.label(values.transportType)} ${values.transportPlate}${
+                    values.transportTrailerPlate ? ` + ${values.transportTrailerPlate}` : ''
+                  }`,
+                },
+              ]}
             />
-          </div>
-        </div>
 
-        <div className="form-actions">
-          <Button variant="ghost" onClick={onClose} disabled={busy}>
-            Cancelar
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={!movementId || (preflight !== null && !preflight.ready)}
-            busy={busy}
-            busyLabel="Creando borrador…"
-          >
-            Guardar borrador DT-e
-          </Button>
-        </div>
+            <div className="form-section-title" style={{ marginTop: 'var(--sp-5)' }}>
+              Lo que SIGSA va a revisar
+            </div>
+            {checking && <p className="small muted">Verificando…</p>}
+            {offline && (
+              <Notice tone="warning" title="Sin conexión">
+                No se pudo verificar. Podés guardar el borrador: se envía al volver la señal y lo
+                verificás antes de emitir.
+              </Notice>
+            )}
+            {preflight && <DteChecks checks={preflight.checks} />}
+
+            <Disclosure label="Ya lo emití en SIGSA: registrar número y código de cierre">
+              <Field
+                spec={byName('number')}
+                value={values.number ?? ''}
+                error={errors.number}
+                onChange={(value) => set('number', value)}
+              />
+              <Field
+                spec={byName('verificationCode')}
+                value={values.verificationCode ?? ''}
+                error={errors.verificationCode}
+                onChange={(value) => set('verificationCode', value)}
+              />
+              <Button
+                variant="secondary"
+                icon="check"
+                busy={busy === 'manual'}
+                busyLabel="Registrando…"
+                disabled={Boolean(busy)}
+                onClick={() => void send('manual')}
+              >
+                Registrar DT-e emitido
+              </Button>
+            </Disclosure>
+
+            <div className="form-actions">
+              <Button variant="ghost" icon="back" onClick={back} disabled={Boolean(busy)}>
+                Volver
+              </Button>
+              <Button
+                variant={canRequest && preflight?.ok ? 'secondary' : 'primary'}
+                busy={busy === 'draft'}
+                busyLabel="Guardando…"
+                disabled={Boolean(busy)}
+                onClick={() => void send('draft')}
+              >
+                Guardar borrador
+              </Button>
+              {canRequest && (
+                <Button
+                  variant="primary"
+                  icon="send"
+                  busy={busy === 'request'}
+                  busyLabel="Enviando…"
+                  disabled={Boolean(busy) || !preflight?.ok}
+                  onClick={() => void send('request')}
+                >
+                  Pedir a SIGSA
+                </Button>
+              )}
+            </div>
+          </>
+        )}
       </form>
     </Sheet>
   );

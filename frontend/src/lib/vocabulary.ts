@@ -43,30 +43,51 @@ const STATUS: Record<string, StatusInfo> = {
   REJECTED: { label: 'Rechazado', tone: 'danger', hint: 'El destino no aceptó la mercadería.' },
   CANCELLED: { label: 'Cancelado', tone: 'danger' },
 
-  // --- documento sanitario oficial API-SEM (11 estados) --------------------
-  BORRADOR: { label: 'Borrador', tone: 'neutral', hint: 'Borrador local antes de solicitar a SENASA.' },
-  SOLICITADO: { label: 'Solicitado', tone: 'info', hint: 'Enviado a SENASA, esperando número oficial.' },
-  EMITIDO: { label: 'Emitido', tone: 'info', hint: 'Emitido con número oficial; carga pendiente.' },
-  VIGENTE: { label: 'Vigente', tone: 'success', hint: 'En tránsito amparado por el DT-e.' },
-  VENCIDO: { label: 'Vencido', tone: 'warning', hint: 'Superó la fecha de vencimiento sin cierre en sala.' },
-  CADUCADO: { label: 'Caducado', tone: 'danger', hint: 'Caducado por SENASA sin completarse el traslado.' },
-  CERRADO: { label: 'Cerrado', tone: 'success', hint: 'El destino confirmó la recepción y cerró el documento.' },
-  SIN_ARRIBO: { label: 'Sin arribo', tone: 'danger', hint: 'El destino confirmó que la carga nunca llegó.' },
-  ANULADO: { label: 'Anulado', tone: 'danger', hint: 'Anulado por el emisor antes de la carga.' },
-  ELIMINADO: { label: 'Eliminado', tone: 'neutral', hint: 'Borrador descartado.' },
-  RECHAZADO: { label: 'Rechazado', tone: 'danger', hint: 'Rechazado por SENASA o por el receptor.' },
-
   // --- documento sanitario (compatibilidad) --------------------------------
   ISSUED: { label: 'Emitido', tone: 'info' },
   APPROVED: { label: 'Aprobado', tone: 'success' },
   CLOSED: { label: 'Cerrado', tone: 'success', hint: 'El destino cerró el documento tras recibir.' },
   PENDING_SYNC: {
-    label: 'Falta enviar a SIGSA',
+    label: 'Sin verificar en SIGSA',
     tone: 'warning',
-    hint: 'Registrado acá. Se enviará cuando exista la integración con SIGSA.',
+    hint: 'Registrado acá. Todavía no se confirmó contra SIGSA.',
   },
-  SYNCHRONIZED: { label: 'Enviado a SIGSA', tone: 'success' },
+  SYNCHRONIZED: { label: 'Sincronizado con SIGSA', tone: 'success' },
   SYNC_ERROR: { label: 'Error al enviar', tone: 'danger' },
+  ERROR: { label: 'Error al enviar', tone: 'danger', hint: 'SIGSA no respondió; se reintenta solo.' },
+
+  // --- DT-e: estados oficiales de SENASA -----------------------------------
+  BORRADOR: { label: 'Borrador', tone: 'neutral', hint: 'Preparado en ApiTrace, todavía sin número.' },
+  SOLICITADO: { label: 'Solicitado', tone: 'info', hint: 'Enviado a SIGSA, esperando el número.' },
+  EMITIDO: {
+    label: 'Emitido',
+    tone: 'warning',
+    hint: 'Tiene número, pero todavía no transita: se habilita a las 00:00 de la fecha de carga.',
+  },
+  VIGENTE: { label: 'Vigente', tone: 'success', hint: 'Único estado que permite transitar.' },
+  CERRADO: { label: 'Cerrado', tone: 'success', hint: 'La sala confirmó el arribo en SITA.' },
+  VENCIDO: {
+    label: 'Vencido',
+    tone: 'danger',
+    hint: 'Pasó la fecha de vencimiento sin cierre. La sala todavía puede cerrarlo durante 4 días.',
+  },
+  CADUCADO: {
+    label: 'Caducado',
+    tone: 'danger',
+    hint: 'Sin cierre tras la gracia: SIGSA bloquea al productor para emitir nuevos DT-e.',
+  },
+  SIN_ARRIBO: { label: 'Sin arribo', tone: 'danger', hint: 'La sala declaró que la carga no llegó.' },
+  RECHAZADO: { label: 'Rechazado', tone: 'danger', hint: 'SIGSA rechazó la solicitud.' },
+  ANULADO: { label: 'Anulado', tone: 'neutral', hint: 'Dado de baja con el arancel abonado.' },
+  ELIMINADO: { label: 'Eliminado', tone: 'neutral', hint: 'Dado de baja sin arancel abonado.' },
+
+  // --- registros oficiales y delegaciones ----------------------------------
+  EXPIRED: { label: 'Vencido', tone: 'danger' },
+  NO_INICIADA: { label: 'No iniciada', tone: 'neutral' },
+  PENDIENTE: { label: 'Pendiente', tone: 'warning', hint: 'Iniciada en ARCA, falta aceptarla.' },
+  ACEPTADA: { label: 'Aceptada', tone: 'success' },
+  REVOCADA: { label: 'Revocada', tone: 'danger' },
+  RECHAZADA: { label: 'Rechazada', tone: 'danger' },
 
   // --- lotes ---------------------------------------------------------------
   OPEN: { label: 'Abierto', tone: 'info', hint: 'Todavía se le puede sacar cantidad.' },
@@ -175,44 +196,54 @@ export const UNITS = dict({
   UNIDAD: 'Unidades',
 });
 
-export const DTE_STATUSES = dict({
-  BORRADOR: 'Borrador',
-  SOLICITADO: 'Solicitado',
-  EMITIDO: 'Emitido',
-  VIGENTE: 'Vigente',
-  VENCIDO: 'Vencido',
-  CADUCADO: 'Caducado',
-  CERRADO: 'Cerrado',
-  SIN_ARRIBO: 'Sin arribo',
-  ANULADO: 'Anulado',
-  ELIMINADO: 'Eliminado',
-  RECHAZADO: 'Rechazado',
+export const TRANSPORT_TYPES = dict({
+  CAMION: 'Camión',
+  CAMIONETA: 'Camioneta',
+  FURGON: 'Furgón',
+  UTILITARIO: 'Utilitario',
+  OTRO: 'Otro',
 });
 
-export const DELEGATION_STATUSES = dict({
-  PENDING: 'Pendiente',
-  ACTIVE: 'Activa',
-  EXPIRED: 'Vencida',
-  REVOKED: 'Revocada',
+/** Canal por el que se obtuvo el número del DT-e. */
+export const ISSUE_MODES = dict({
+  MANUAL: 'Emitido en SIGSA y registrado a mano',
+  SIMULADO: 'Simulación (sin validez oficial)',
+  SIGSA: 'Emitido por API de SIGSA',
+});
+
+export const INTEGRATION_MODES = dict({
+  manual: 'Manual: se emite en SIGSA y se registra acá',
+  simulado: 'Simulado: sin validez oficial',
+  sigsa: 'SIGSA por API',
+});
+
+export const REGISTRATION_STATUSES = dict({
+  ACTIVE: 'Habilitado',
+  PENDING_VERIFICATION: 'Sin verificar',
+  SUSPENDED: 'Suspendido',
+  EXPIRED: 'Vencido',
+  CANCELLED: 'Dado de baja',
 });
 
 export const SENASA_SERVICES = dict({
-  DTE_APICOLA: 'DT-e Apícola (API-SEM)',
-  SIGSA_GENERAL: 'SIGSA General',
-  RENSPA: 'Consulta RENSPA',
+  SIGSA_DTE: 'SIGSA — emitir DT-e',
+  SITA: 'SITA — cerrar DT-e en sala',
 });
 
-export const ISSUE_MODES = dict({
-  MANUAL: 'Carga manual (contingencia)',
-  SIMULADO: 'Simulado (entorno de pruebas)',
-  SIGSA: 'Web Service SIGSA (oficial)',
+export const DELEGATION_STATUSES = dict({
+  NO_INICIADA: 'No iniciada',
+  PENDIENTE: 'Pendiente de aceptar',
+  ACEPTADA: 'Aceptada',
+  REVOCADA: 'Revocada',
+  RECHAZADA: 'Rechazada',
 });
 
-export const TRANSPORT_TYPES = dict({
-  PROPIO: 'Transporte propio',
-  TERCERO: 'Transporte de terceros',
-  OTRO: 'Otro',
-});
+/** Quién provocó un cambio de estado del DT-e. */
+export const HISTORY_SOURCES: Record<string, string> = {
+  USUARIO: 'Usuario',
+  SISTEMA: 'Vigencia (automático)',
+  SENASA: 'SENASA',
+};
 
 export const ROLES: Record<string, string> = {
   ADMIN: 'Administrador',
@@ -248,20 +279,28 @@ const EVENTS: Record<string, string> = {
   MOVEMENT_PARTIALLY_RECEIVED: 'Recibido con diferencia',
   MOVEMENT_REJECTED: 'Rechazado en destino',
   MOVEMENT_CANCELLED: 'Cancelado',
-  DTE_CREATED: 'DT-e borrador creado',
-  DTE_REQUESTED: 'DT-e solicitado a SENASA',
+  DTE_CREATED: 'DT-e registrado',
+  DTE_REQUESTED: 'Emisión solicitada a SIGSA',
   DTE_ISSUED: 'DT-e emitido',
-  DTE_BECOMES_ACTIVE: 'DT-e entró en vigencia',
-  DTE_EXPIRED: 'DT-e vencido',
-  DTE_CLOSED: 'DT-e cerrado en destino',
-  DTE_NO_ARRIVAL: 'DT-e declarado sin arribo',
-  DTE_VOIDED: 'DT-e anulado',
-  DTE_REGULARIZED: 'DT-e regularizado',
-  DTE_REJECTED: 'DT-e rechazado por SENASA',
+  DTE_CLOSED: 'DT-e cerrado',
   DTE_APPROVED: 'DT-e aprobado',
-  DTE_SYNC_OUTBOX_ENQUEUED: 'Sincronización encolada',
-  DTE_SYNC_OUTBOX_SUCCESS: 'Sincronización enviada',
-  DTE_SYNC_OUTBOX_FAILED: 'Fallo al sincronizar',
+  DTE_VOIDED: 'DT-e anulado',
+  DTE_REJECTED: 'Solicitud de DT-e rechazada',
+  DTE_NO_ARRIVAL: 'Declarado sin arribo',
+  DTE_REGULARIZED: 'Caducidad regularizada',
+  EXTRACTION_REGISTERED: 'Extracción registrada',
+  PRODUCER_REGISTERED: 'Productor registrado',
+  RENAPA_ASSOCIATED: 'RENAPA asociado',
+  RENSPA_ASSOCIATED: 'RENSPA asociado',
+  ESTABLISHMENT_REGISTERED: 'Establecimiento registrado',
+  APIARY_REGISTERED: 'Apiario registrado',
+  HIVE_REGISTERED: 'Colmena registrada',
+  LOT_INPUT_ADDED: 'Entrada agregada al lote',
+  LOT_TRANSFORMED: 'Lote transformado',
+  DRUM_CREATED: 'Tambor envasado',
+  DRUM_MOVED: 'Tambor trasladado',
+  SAMPLE_CREATED: 'Muestra tomada',
+  INVENTORY_MOVED: 'Inventario movido',
   EXTRACTION_STARTED: 'Extracción iniciada',
   EXTRACTION_COMPLETED: 'Extracción terminada',
   LOT_CREATED: 'Lote creado',
@@ -279,8 +318,18 @@ const EVENTS: Record<string, string> = {
   USER_LOGGED_IN: 'Inicio de sesión',
 };
 
+/**
+ * El backend nombra los eventos en PascalCase (MovementCreated) y el
+ * diccionario los tiene en MAYUSCULAS_CON_GUION (MOVEMENT_CREATED): se
+ * normaliza antes de buscar, para que el historial no muestre «Movementcreated».
+ */
+const eventKey = (eventType: string): string =>
+  eventType.includes('_')
+    ? eventType
+    : eventType.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
+
 export const eventLabel = (eventType: string | null | undefined): string =>
-  eventType ? (EVENTS[eventType] ?? humanizeCode(eventType)) : '—';
+  eventType ? (EVENTS[eventKey(eventType)] ?? humanizeCode(eventType)) : '—';
 
 const ENTITIES: Record<string, string> = {
   movement: 'Movimiento',
@@ -303,7 +352,15 @@ export const entityLabel = (entity: string | null | undefined): string =>
 // ---------------------------------------------------------------------------
 
 const GAPS: Record<string, string> = {
-  DTE_PENDING_SYNC: 'El DT-e existe pero todavía no se envío a SIGSA.',
+  DTE_PENDING_SYNC: 'El DT-e está registrado pero todavía no se verificó contra SIGSA.',
+  DTE_SIMULADO: 'El DT-e es una simulación: no tiene validez oficial.',
+  DTE_VENCIDO_SIN_CIERRE: 'El DT-e venció sin que la sala lo cerrara.',
+  DTE_CADUCADO: 'El DT-e caducó sin cierre: el traslado no quedó amparado.',
+  DTE_SIN_ARRIBO: 'La sala declaró que la carga nunca llegó.',
+  MISSING_REQUIRED_DOCUMENT: 'Un traslado que exigía documento no lo tiene.',
+  RECEPTION_DISCREPANCY: 'La cantidad recibida difiere de la declarada en origen.',
+  ESTABLISHMENT_WITHOUT_RENSPA: 'El establecimiento no tiene RENSPA registrado.',
+  PRODUCER_WITHOUT_RENAPA: 'El productor no tiene RENAPA registrado.',
   MISSING_DTE: 'Un traslado que exigia documento no lo tiene.',
   LOT_WITHOUT_INPUTS: 'Un lote no declara de qué se compone: la cadena se corta ahí.',
   MISSING_RENAPA: 'El productor no tiene RENAPA vigente registrado.',
@@ -339,28 +396,25 @@ export const HELP: Record<string, HelpEntry> = {
     category: 'Actores y Registro',
     body: 'Es la persona física o jurídica responsable de la explotación apícola y del cuidado sanitario de las colmenas. Su CUIT o CUIL identifica al titular ante ARCA/AFIP y SENASA.',
     example: 'Juan Gómez (CUIT 20-30456789-4) declara 150 colmenas distribuidas en tres apiarios de la cuenca del Salado.',
-    regulation: 'Ley 27.233 / Res. SENASA 81/2019',
+    regulation: 'Ley 27.233',
   },
   renapa: {
     title: '¿Qué es el RENAPA?',
     category: 'SENASA / Normativa',
     body: 'Registro Nacional de Productores Apícolas. Es una credencial obligatoria y gratuita emitida por la Secretaría de Bioeconomía/SENASA que certifica la actividad apícola con vigencia bianual.',
     example: 'El apicultor presenta RENAPA N° "BA-12049" con vencimiento en octubre de 2027 para habilitar el traslado de alzas cosechadas.',
-    regulation: 'Res. SAGyP 85/2006 y modif. Res. 283/2001',
   },
   establishments: {
     title: '¿Qué es un establecimiento?',
     category: 'Infraestructura',
     body: 'Es el predio o inmueble físico donde se asientan las colmenas o donde se procesan los productos: campos, salas de extracción, acopios o plantas de fraccionamiento.',
     example: 'Establecimiento rural "La Herradura" (campo arrendado para colmenas) vs Sala de Extracción comunitaria "San Ambrosio".',
-    regulation: 'Res. SENASA 581/2014',
   },
   renspa: {
     title: '¿Qué es el RENSPA?',
     category: 'SENASA / Sanidad',
     body: 'Registro Nacional Sanitario de Productores Agropecuarios. Código alfanumérico único que georreferencia e individualiza al predio rural y a su titular de explotación.',
     example: 'Formato oficial: 01.002.0.00123/00 (Provincia 01, Departamento 002, Establecimiento 0, Predio 00123, Explotación 00).',
-    regulation: 'Res. SENASA 423/2014',
   },
   rne: {
     title: '¿Qué es el RNE?',
@@ -374,84 +428,86 @@ export const HELP: Record<string, HelpEntry> = {
     category: 'Unidad Productiva',
     body: 'Conjunto geolocalizado de colmenas bajo un mismo manejo técnico dentro de un establecimiento. Es el nodo inicial indispensable de la cadena de trazabilidad apícola.',
     example: 'Apiario "El Bajo" compuesto por 45 colmenas activas situado en latitud -36.7821, longitud -59.1234.',
-    regulation: 'Protocolo de Trazabilidad Apícola SENASA',
   },
   movements: {
     title: '¿Qué es un movimiento de carga?',
     category: 'Trazabilidad Operativa',
     body: 'Registro del transporte físico de productos o insumos (alzas melarias, miel a granel, tambores, material vivo) desde un establecimiento emisor hacia un destino receptor.',
     example: 'Traslado de 60 melarios llenos desde el apiario hacia la sala de extracción habilitada para su desoperculado.',
-    regulation: 'Res. SENASA 58/2020 (Régimen de Tránsito de Mercancías Apícolas)',
   },
   movementRule: {
     title: '¿Por qué se exige documentación sanitaria?',
     category: 'Reglas de Tránsito',
     body: 'El motor de reglas evalúa el producto, establecimiento de origen, destino y fecha programada para determinar automáticamente si requiere DT-e oficial o remito interno.',
-    example: 'El traslado de alzas cosechadas desde campo propio a sala de extracción del mismo titular requiere remito interno o DT-e según la zonificación sanitaria.',
-    regulation: 'Matriz dinámica de resoluciones SENASA',
+    example: 'Un traslado de alzas melarias de un apiario a una sala de extracción con fecha desde el 01/08/2026 exige DT-e (API-SEM); el mismo traslado con fecha anterior no lo exigía.',
   },
   scheduledAt: {
     title: 'Fecha de traslado vs Fecha de carga',
     category: 'Cronología Legal',
     body: 'Es el día y hora efectivos en que la mercadería emprende viaje por la ruta, no el momento en que se completó el formulario en el teléfono. Determina la vigencia legal del amparo.',
     example: 'Cargás la solicitud el viernes a la tarde para un traslado programado el lunes a las 06:00 hs: la vigencia del amparo comenzará el lunes.',
-    regulation: 'Art. 4 Res. SENASA 81/2019',
   },
   originApiary: {
     title: 'Apiario de origen',
     category: 'Trazabilidad Fina',
     body: 'Permite individualizar exactamente de qué grupo de colmenas provino la miel extraída. Si no se declara, la trazabilidad solo llega hasta el predio general.',
     example: 'Declarar "Apiario Los Robles" permite demostrar al comprador internacional la pureza floral de una miel monofloral de pradera.',
-    regulation: 'Directiva UE 2001/110/CE / Norma SENASA',
+    regulation: 'Directiva UE 2001/110/CE',
   },
   dte: {
-    title: '¿Qué es el DT-e (Documento de Tránsito)?',
-    category: 'SENASA / Fiscal',
-    body: 'Documento electrónico oficial que ampara el tránsito de animales y productos o subproductos de origen animal por el territorio argentino, certificando sanidad y origen.',
-    example: 'DT-e N° 26-00128491-01 amparando 4.500 kg de miel a granel transportados por camión chasis patente AF-123-CD.',
-    regulation: 'Res. SENASA 81/2019 / AFIP RG 3283',
+    title: 'Qué es el DT-e',
+    body: 'Documento de Tránsito Electrónico de SENASA. Para llevar alzas melarias del apiario a la sala es obligatorio desde el 01/08/2026 (movimiento API-SEM).',
   },
-  dteTransit: {
-    title: 'Semáforo de tránsito DT-e',
-    category: 'Control en Ruta',
-    body: 'Indica en tiempo real la validez del documento ante controles de Gendarmería, Policía de Tránsito o inspectores de SENASA en ruta.',
-    example: 'VERDE: habilitado con vencimiento vigente. AMARILLO: vencimiento inminente en menos de 24 hs. ROJO: caduco, cerrado o sin arribo (no apto para circular).',
-    regulation: 'Res. SENASA 81/2019 Anexo II',
+  dteList: {
+    title: 'Tus DT-e',
+    body: 'Acá ves los DT-e que emite tu organización y los que llegan a tus salas. El estado ya tiene en cuenta la fecha: un DT-e emitido pasa solo a vigente el día de la carga.',
   },
-  dtePreflight: {
-    title: 'Verificación previa (Preflight)',
-    category: 'Validación Automática',
-    body: 'Comprobación cruzada de seguridad antes de solicitar el DT-e oficial: valida que los RENSPA estén activos, las patentes no tengan bloqueos y la delegación fiscal esté vigente.',
-    example: 'Si el camión ingresado tiene la VTV vencida o el RENSPA destino está suspendido, el preflight lo detecta y frena la emisión antes de incurrir en sanciones.',
-    regulation: 'Validación Webhook API-SEM SENASA',
+  dteDeclared: {
+    title: 'Por qué declarar de más',
+    body: 'La sala no puede confirmar más alzas que las declaradas. Si llegan más, el DT-e se anula en la sala y hay que emitir otro. Declarar de más no tiene penalidad.',
   },
-  senasaDelegation: {
-    title: 'Delegación de servicios SENASA / ARCA',
-    category: 'Autorización Fiscal',
-    body: 'Trámite digital mediante Clave Fiscal (Administrador de Relaciones de AFIP/ARCA) que apodera a ApiTrace para emitir y consultar DT-e en representación del CUIT del productor.',
-    example: 'El apicultor delega el servicio "SIGSA - Trámites en Línea" a la CUIT de la cooperativa o proveedor tecnológico.',
-    regulation: 'RG AFIP 3283/2012 Formulario 3283/E',
+  dteValidity: {
+    title: 'Vigencia del DT-e',
+    body: 'Transita desde las 00:00 de la fecha de carga hasta las 23:59 del vencimiento (2 a 4 días después). Sin cierre, vence; 4 días después caduca y bloquea al productor.',
+  },
+  dteVerificationCode: {
+    title: 'Código de cierre',
+    body: 'Va impreso en el DT-e. La sala lo copia del papel para cerrarlo en SITA; por eso no se le muestra en pantalla.',
+  },
+  dteModes: {
+    title: 'Canal de emisión',
+    body: 'Mientras SENASA no habilite su API, el DT-e se emite en SIGSA y acá se registra el número. El modo simulado sirve para practicar: sus números no tienen validez.',
+  },
+  renapaApiary: {
+    title: 'RENAPA del apiario',
+    body: 'Identificación oficial del apiario: letra de la provincia, número de RENAPA y número de apiario (ej. B53999-2). Es el origen que figura en el DT-e.',
+  },
+  senasaSala: {
+    title: 'Código SENASA de la sala',
+    body: 'Identifica a la sala de extracción habilitada (ej. SEF-B-20010). Es el destino que figura en el DT-e.',
+  },
+  delegation: {
+    title: 'Delegación en ApiTrace',
+    body: 'Para que ApiTrace emita o cierre DT-e en tu nombre, delegá el servicio en ARCA (Administrador de Relaciones, formulario F3283/E). Acá solo se registra el estado.',
   },
   extractions: {
     title: '¿Qué es una extracción de miel?',
     category: 'Procesamiento en Sala',
     body: 'Operación en sala habilitada donde los cuadros desoperculados se centrifugan para obtener miel líquida, decantada y filtrada, separando la cera del néctar procesado.',
     example: 'Extracción #EX-2026-004: ingresaron 120 alzas cosechadas y se obtuvieron 2.150 kg de miel líquida lista para homogeneizar.',
-    regulation: 'Res. SENASA 581/2014 Buenas Prácticas de Manufactura (BPM)',
   },
   yield: {
     title: 'Rendimiento de extracción',
     category: 'Métrica Productiva',
     body: 'Cálculo porcentual automático que compara los kilos netos de miel extraída respecto del peso o cantidad de alzas ingresadas al proceso.',
     example: 'Un rendimiento típico oscila entre 18 kg y 24 kg de miel por alza estándar tipo Langstroth bien operculada.',
-    regulation: 'Estándar técnico INTA / SENASA',
   },
   lots: {
     title: '¿Qué es un lote de producción?',
     category: 'Trazabilidad Lógica',
     body: 'Unidad homogénea de miel procesada en una misma tirada o ciclo bajo condiciones uniformes. Es el objeto principal de auditoría, análisis de laboratorio y certificación.',
     example: 'Lote LOT-2026-A12: reúne 4.200 kg de miel multifloral de pradera extraída entre el 10 y el 12 de marzo en la sala central.',
-    regulation: 'Capítulo X del CAA / Res. SAGyP 220/1995',
+    regulation: 'Capítulo X del Código Alimentario Argentino',
   },
   lotOrigin: {
     title: 'Composición y origen del lote',
@@ -472,56 +528,50 @@ export const HELP: Record<string, HelpEntry> = {
     category: 'Envase y Acopio',
     body: 'Contenedor metálico estándar de 200 litros (aprox. 300-330 kg netos) con recubrimiento epoxi sanitario apto para alimentos, identificado con código único y precinto inviolable.',
     example: 'Tambor TAM-0492: Peso bruto 352 kg, tara del envase 19 kg, peso neto de miel 333 kg.',
-    regulation: 'Norma IRAM 2054 / Res. SENASA 121/1998',
   },
   trace: {
     title: 'Navegación de trazabilidad integral',
     category: 'Cadena de Valor',
     body: 'Permite explorar la historia completa del producto: hacia atrás (backward) rastrea desde el tambor exportado hasta las colmenas; hacia adelante (forward) evalúa el destino final.',
     example: 'Ante una consulta de un importador alemán, ingresar el número de precinto permite aislar en segundos los apiarios de origen y las fechas de extracción.',
-    regulation: 'Reglamento (CE) 178/2002 Unión Europea / Res. SENASA 81/2019',
+    regulation: 'Reglamento (CE) 178/2002',
   },
   gaps: {
     title: 'Huecos de trazabilidad',
     category: 'Alerta de Conformidad',
     body: 'Inconsistencias, saltos o faltantes de datos en la cadena que impiden reconstruir el ciclo completo. El sistema los señala antes de que el lote sea bloqueado por un auditor.',
     example: 'Un lote cuyos tambores no tienen registrado el movimiento de ingreso de alzas quedará señalado como "Hueco: falta origen".',
-    regulation: 'Auditoría de Inocuidad y Calidad Agroalimentaria',
   },
   rules: {
     title: 'Reglas documentales dinámicas',
     category: 'Configuración Normativa',
     body: 'Parámetros configurables que definen qué combinaciones de origen, destino y producto exigen DT-e, remito o certificado sanitario según las resoluciones vigentes.',
-    example: 'Regla "Miel a granel interprovincial": exige obligatoriamente DT-e con vigencia máxima de 72 horas.',
-    regulation: 'Resoluciones de Sanidad Animal SENASA',
+    example: 'Regla «DT-e obligatorio: material melario de apiario a sala de extracción», vigente desde el 01/08/2026. Un cambio normativo se carga como una regla nueva con su vigencia.',
   },
   rulePriority: {
     title: 'Jerarquía y prioridad de reglas',
     category: 'Resolución de Conflictos',
     body: 'Cuando dos o más reglas coinciden para un mismo traslado, prevalece la de menor número de prioridad (regla más específica). A igual prioridad, rige la fecha de vigencia más reciente.',
     example: 'Una regla específica para "Traslado a Terminal Portuaria" (Prioridad 10) prevalece sobre la regla genérica "Traslado de miel a granel" (Prioridad 50).',
-    regulation: 'Criterio Lex Specialis Derogat Legi Generali',
   },
   audit: {
     title: 'Registro inmutable de auditoría',
     category: 'Seguridad y Compliance',
-    body: 'Bitácora protegida donde el sistema estampa fecha, hora, usuario responsable, dirección IP, acción ejecutada y valores anteriores y nuevos de cada operación crítica.',
-    example: 'Si un operario rectifica el peso neto de un tambor, el sistema conserva el valor original y el motivo documentado de la rectificación.',
-    regulation: 'Estándar 21 CFR Part 11 / Ley 25.326 Protección de Datos',
+    body: 'Bitácora donde el sistema registra fecha, hora, usuario, dirección IP y acción de cada operación relevante.',
+    example: 'Si alguien anula un DT-e, queda registrado quién lo hizo, cuándo y con qué motivo.',
+    regulation: 'Ley 25.326 de Protección de Datos Personales',
   },
   pending: {
     title: 'Cola de operaciones fuera de línea',
     category: 'Dispositivo y Conectividad',
-    body: 'Las operaciones registradas en el campo sin señal móvil (4G/3G) se resguardan de forma segura en la base de datos local del teléfono y se sincronizan solas en cuanto hay cobertura.',
+    body: 'Las operaciones registradas sin señal se guardan en la base de datos local del navegador del teléfono y se envían solas cuando vuelve la cobertura.',
     example: 'Pesás 30 tambores en el apiario en medio del monte; al regresar al pueblo con WiFi la app envía la cola automáticamente sin duplicar registros.',
-    regulation: 'Almacenamiento W3C IndexedDB con cifrado local',
   },
   offline: {
     title: 'Operación autónoma offline',
     category: 'Resiliencia Operativa',
-    body: 'ApiTrace está diseñada como Progressive Web App (PWA). Permite crear movimientos, consultar apiarios precargados y emitir comprobantes en campo sin internet.',
-    example: 'Podés trabajar normalmente durante toda la jornada rural sin conectividad; ninguna acción se pierde por cortes o caídas de red.',
-    regulation: 'Arquitectura Offline-First con Service Workers',
+    body: 'ApiTrace es una aplicación web instalable (PWA). Sin internet permite consultar lo ya descargado y registrar operaciones que se envían al recuperar la señal. Un DT-e no se emite sin conexión: se puede preparar el borrador.',
+    example: 'Durante la jornada en el campo podés registrar movimientos y colmenas; al volver la señal, la app los envía sin duplicarlos.',
   },
   idempotency: {
     title: 'Garantía de clave única (Idempotencia)',
@@ -535,14 +585,12 @@ export const HELP: Record<string, HelpEntry> = {
     category: 'Operación en Campo',
     body: 'Momento en que el transportista carga el vehículo, se verifican los precintos de seguridad y se firma la constancia de salida del establecimiento emisor.',
     example: 'Carga de 60 tambores en camión térmico; se verifica que el precinto número 994012 esté colocado y sano antes de la partida.',
-    regulation: 'Guía de Tránsito y Control SENASA',
   },
   reception: {
     title: 'Recepción y conformidad en destino',
     category: 'Control de Entrada',
     body: 'Verificación de la carga al llegar a sala o acopio: control de kilos reales pesados en báscula vs declarados en origen, estado de precintos y control de mermas.',
     example: 'Si salieron 10.000 kg y se reciben 9.940 kg, se anota una merma técnica de 60 kg (0.6%) y se emite la recepción con salvedad.',
-    regulation: 'Tolerancia técnica comercial SENASA',
   },
   tareWeight: {
     title: 'Tara y peso neto del tambor',
@@ -556,7 +604,6 @@ export const HELP: Record<string, HelpEntry> = {
     category: 'Seguridad de Carga',
     body: 'Dispositivo numerado irrepetible colocado en el aro de cierre del tambor que garantiza que la miel no ha sido adulterada, abierta ni contaminada durante el flete.',
     example: 'Precinto plástico tipo pulsera roja número "SENASA-B-084920" registrado al pie de la extracción.',
-    regulation: 'Res. SENASA 581/2014 Anexo III',
   },
   honeyType: {
     title: 'Origen botánico y floral de la miel',
@@ -572,19 +619,11 @@ export const HELP: Record<string, HelpEntry> = {
     example: 'Lote medido con 17,2% de humedad: condición óptima para almacenamiento prolongado y exportación a la Unión Europea.',
     regulation: 'CAA Art. 783 / Norma Codex Stan 12-1981',
   },
-  dteVerificationCode: {
-    title: 'Código de verificación oficial SENASA',
-    category: 'Seguridad Documental',
-    body: 'Código alfanumérico o código QR emitido por los servidores de SENASA/SIGSA que valida la autenticidad del DT-e ante cualquier autoridad policial o fiscal en ruta.',
-    example: 'Código de 12 dígitos "V4K9-2P8M-7X1Q" verificable desde la app pública de SENASA o escaneo de QR en el formulario papel.',
-    regulation: 'Res. SENASA 81/2019 Anexo I',
-  },
   settings: {
     title: 'Configuración del sistema',
     category: 'Preferencias y Perfiles',
-    body: 'Permite personalizar el comportamiento de la aplicación, alternar el tema visual, habilitar o deshabilitar la asistencia guiada y configurar parámetros operativos según tu rol asignado.',
-    example: 'Una sala de extracción puede fijar la tara estándar de 18.5 kg y los rangos de alerta de rendimiento de centrifugado.',
-    regulation: 'Personalización segura en almacenamiento local (W3C Storage)',
+    body: 'Permite elegir el tema visual, activar o desactivar la ayuda contextual y revisar el estado del dispositivo y del canal de emisión de DT-e.',
+    example: 'En el campo, bajo sol directo, conviene el tema claro; en la sala, el oscuro.',
   },
 };
 
@@ -653,6 +692,18 @@ const NODE_ATTRS: Record<string, string> = {
   registeredAt: 'Registrado',
   depth: 'Profundidad en la cadena',
   organizationId: 'Organización',
+  issueMode: 'Canal de emisión',
+  declaredQuantity: 'Alzas declaradas',
+  confirmedQuantity: 'Alzas confirmadas',
+  loadDate: 'Fecha de carga',
+  expiryDate: 'Vencimiento',
+  originCode: 'Origen (RENAPA)',
+  destinationCode: 'Destino (sala)',
+  renapaCode: 'RENAPA del apiario',
+  renapaStatus: 'Estado RENAPA',
+  senasaCode: 'Código SENASA',
+  senasaStatus: 'Habilitación SENASA',
+  replacedDocuments: 'DT-e anteriores',
 };
 
 export const nodeAttrLabel = (key: string): string =>
@@ -660,4 +711,8 @@ export const nodeAttrLabel = (key: string): string =>
 
 /** Campos cuyo valor es un estado del dominio y debe traducirse tambien. */
 export const isStatusAttr = (key: string): boolean =>
-  key === 'status' || key === 'syncStatus' || key === 'result';
+  key === 'status' ||
+  key === 'syncStatus' ||
+  key === 'result' ||
+  key === 'renapaStatus' ||
+  key === 'senasaStatus';

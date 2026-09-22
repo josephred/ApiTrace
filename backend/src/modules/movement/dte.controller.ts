@@ -6,145 +6,199 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Audit, CorrelationId, CurrentUser, Roles } from '../../common/decorators';
 import type { AuthenticatedUser } from '../../common/types';
+import { DteService } from './dte.service';
+import { DteQueryService } from './dte-query.service';
 import {
-  CloseDteDto,
-  CreateDteDraftDto,
-  DteFilterDto,
-  IssueManualDteDto,
+  CloseDteRequestDto,
+  CreateDteRequestDto,
+  IssueDteDto,
+  ListDteQueryDto,
   NoArrivalDteDto,
-  PreflightCheckDto,
+  PreflightDteDto,
   RegularizeDteDto,
+  UpdateDteDraftDto,
   VoidDteDto,
 } from './dto/dte.dto';
-import { DteService } from './dte.service';
 
-@ApiTags('DT-e API-SEM')
+/**
+ * DT-e por usuario (especificacion DT-e, seccion 8.2).
+ *
+ * Correspondencia con la especificacion:
+ *   POST /api/v1/tramites/dte        -> POST /dte (submit=true para enviar a SIGSA)
+ *   POST /api/v1/sita/dtes/cierre    -> POST /dte/:id/close
+ * Se conservan las convenciones de la API existente (recursos en ingles,
+ * camelCase, Idempotency-Key) en lugar de las del documento.
+ */
+@ApiTags('DT-e')
 @ApiBearerAuth()
 @Controller('dte')
 export class DteController {
-  constructor(private readonly dteService: DteService) {}
+  constructor(
+    private readonly dtes: DteService,
+    private readonly reads: DteQueryService,
+  ) {}
 
   @Get()
-  @ApiOperation({ summary: 'Listar documentos de transito electronicos (DT-e)' })
-  list(@Query() filter: DteFilterDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.dteService.list(filter, user);
+  @ApiOperation({
+    summary: 'DT-e del usuario',
+    description:
+      'Los que emite su organizacion (perspective=emitidos), los que llegan a sus salas (recibidos) o ambos. El estado ya contempla la vigencia.',
+  })
+  list(@Query() query: ListDteQueryDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.reads.list(query, actor);
   }
 
   @Get('summary')
-  @ApiOperation({ summary: 'Resumen de tareas y estados del DT-e' })
-  summary(@CurrentUser() user: AuthenticatedUser) {
-    return this.dteService.summary(user);
+  @ApiOperation({ summary: 'Resumen por estado y tareas pendientes (panel).' })
+  summary(@CurrentUser() actor: AuthenticatedUser) {
+    return this.reads.summary(actor);
+  }
+
+  @Get('integration')
+  @ApiOperation({
+    summary: 'Canal de emision activo (manual, simulado, sigsa) y parametros normativos.',
+  })
+  integration() {
+    return this.reads.integrationInfo();
   }
 
   @Post('preflight')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Evaluacion exhaustiva de condiciones previas a la emision' })
-  preflight(@Body() dto: PreflightCheckDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.dteService.preflight(dto, user);
+  @Roles('ADMIN', 'PRODUCTOR')
+  @ApiOperation({
+    summary: 'Verificacion previa sin efectos',
+    description:
+      'Revisa RENAPA del apiario, habilitacion de la sala, titular, vigencia, anticipacion, cantidad y transporte, igual que antes de pedir la emision.',
+  })
+  preflight(@Body() dto: PreflightDteDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.reads.preflight(dto, actor);
   }
 
-  @Post('draft')
-  @Roles('ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR')
-  @Audit('DTE_DRAFT_CREATED', 'dte')
+  @Post()
+  @Roles('ADMIN', 'PRODUCTOR')
+  @Audit('DTE_CREATED', 'dte')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
-  @ApiOperation({ summary: 'Crear un borrador de DT-e asociado a un movimiento' })
-  createDraft(@Body() dto: CreateDteDraftDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.dteService.createDraft(dto, user);
-  }
-
-  @Post(':id/issue-manual')
-  @Roles('ADMIN', 'PRODUCTOR', 'SALA')
-  @Audit('DTE_ISSUED_MANUAL', 'dte')
-  @ApiOperation({ summary: 'Emision en modo manual/contingencia con numero y codigo oficial de SIGSA' })
-  issueManual(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: IssueManualDteDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.dteService.issueManual(id, dto, user);
-  }
-
-  @Post(':id/request-sigsa')
-  @Roles('ADMIN', 'PRODUCTOR', 'SALA')
-  @Audit('DTE_REQUESTED_SIGSA', 'dte')
-  @ApiOperation({ summary: 'Solicitar emision automatica ante el servicio de SENASA' })
-  requestSigsa(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthenticatedUser,
+  @ApiOperation({
+    summary: 'CU-10 Solicitar DT-e API-SEM',
+    description:
+      'Crea el borrador (y el movimiento, si no se indica movementId). Con number registra un DT-e ya emitido en SIGSA; con submit=true pide la emision por API.',
+  })
+  create(
+    @Body() dto: CreateDteRequestDto,
+    @CurrentUser() actor: AuthenticatedUser,
     @CorrelationId() correlationId: string,
   ) {
-    return this.dteService.requestSigsa(id, user, correlationId);
-  }
-
-  @Post(':id/void')
-  @Roles('ADMIN', 'PRODUCTOR', 'SALA')
-  @Audit('DTE_VOIDED', 'dte')
-  @ApiOperation({ summary: 'Anular un DT-e emitido o vigente ante SENASA' })
-  voidDte(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: VoidDteDto,
-    @CurrentUser() user: AuthenticatedUser,
-    @CorrelationId() correlationId: string,
-  ) {
-    return this.dteService.voidDte(id, dto, user, correlationId);
-  }
-
-  @Post(':id/close')
-  @Roles('ADMIN', 'SALA', 'ACOPIADOR')
-  @Audit('DTE_CLOSED', 'dte')
-  @ApiOperation({ summary: 'Cerrar DT-e en sala de destino mediante codigo de verificacion y cantidad' })
-  closeDte(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: CloseDteDto,
-    @CurrentUser() user: AuthenticatedUser,
-    @CorrelationId() correlationId: string,
-  ) {
-    return this.dteService.closeDte(id, dto, user, correlationId);
-  }
-
-  @Post(':id/no-arrival')
-  @Roles('ADMIN', 'SALA', 'ACOPIADOR', 'PRODUCTOR')
-  @Audit('DTE_NO_ARRIVAL', 'dte')
-  @ApiOperation({ summary: 'Declarar sin arribo un DT-e en transito' })
-  reportNoArrival(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: NoArrivalDteDto,
-    @CurrentUser() user: AuthenticatedUser,
-    @CorrelationId() correlationId: string,
-  ) {
-    return this.dteService.reportNoArrival(id, dto, user, correlationId);
-  }
-
-  @Post(':id/regularize')
-  @Roles('ADMIN', 'SALA')
-  @Audit('DTE_REGULARIZED', 'dte')
-  @ApiOperation({ summary: 'Regularizar un DT-e vencido o caducado tras arribo extemporaneo' })
-  regularize(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: RegularizeDteDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.dteService.regularize(id, dto, user);
-  }
-
-  @Get('by-movement/:movementId')
-  @ApiOperation({ summary: 'Obtener el DT-e asociado a un movimiento' })
-  getByMovement(
-    @Param('movementId', ParseUUIDPipe) movementId: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.dteService.getByMovementId(movementId, user);
+    return this.dtes.create(dto, actor, correlationId);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Obtener detalle completo de un DT-e con bitacora de estados' })
-  getById(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.dteService.getById(id, user);
+  @ApiOperation({ summary: 'Detalle del DT-e con historial y acciones disponibles.' })
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.reads.findOne(id, actor);
+  }
+
+  @Patch(':id')
+  @Roles('ADMIN', 'PRODUCTOR')
+  @Audit('DTE_DRAFT_UPDATED', 'dte')
+  @ApiOperation({ summary: 'Editar un borrador (cantidades, fechas, transporte).' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateDteDraftDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.dtes.updateDraft(id, dto, actor);
+  }
+
+  @Post(':id/issue')
+  @HttpCode(HttpStatus.OK)
+  @Roles('ADMIN', 'PRODUCTOR')
+  @Audit('DTE_ISSUED', 'dte')
+  @ApiHeader({ name: 'Idempotency-Key', required: false })
+  @ApiOperation({
+    summary: 'Emitir un borrador',
+    description:
+      'Con number: registra el DT-e emitido en SIGSA. Sin number: pide la emision por API y queda SOLICITADO hasta la respuesta.',
+  })
+  issue(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: IssueDteDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @CorrelationId() correlationId: string,
+  ) {
+    return this.dtes.issue(id, dto, actor, correlationId);
+  }
+
+  @Post(':id/void')
+  @HttpCode(HttpStatus.OK)
+  @Roles('ADMIN', 'PRODUCTOR')
+  @Audit('DTE_VOIDED', 'dte')
+  @ApiHeader({ name: 'Idempotency-Key', required: false })
+  @ApiOperation({
+    summary: 'Anular o eliminar',
+    description: 'ANULADO si el arancel se abono (feePaid=true); ELIMINADO si no.',
+  })
+  void(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: VoidDteDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @CorrelationId() correlationId: string,
+  ) {
+    return this.dtes.void(id, dto, actor, correlationId);
+  }
+
+  @Post(':id/close')
+  @HttpCode(HttpStatus.OK)
+  @Roles('ADMIN', 'SALA', 'ACOPIADOR')
+  @Audit('DTE_CLOSED', 'dte')
+  @ApiHeader({ name: 'Idempotency-Key', required: false })
+  @ApiOperation({
+    summary: 'CU-12 Cierre en sala (SITA)',
+    description:
+      'Numero y codigo de cierre impresos, fecha de arribo y alzas reales. Qreal no puede superar la cantidad declarada (422 EXCESO_CANTIDAD_DECLARADA).',
+  })
+  close(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CloseDteRequestDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @CorrelationId() correlationId: string,
+  ) {
+    return this.dtes.close(id, dto, actor, correlationId);
+  }
+
+  @Post(':id/no-arrival')
+  @HttpCode(HttpStatus.OK)
+  @Roles('ADMIN', 'SALA', 'ACOPIADOR')
+  @Audit('DTE_NO_ARRIVAL', 'dte')
+  @ApiOperation({ summary: 'La sala declara que la carga no arribo (SIN ARRIBO).' })
+  noArrival(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: NoArrivalDteDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @CorrelationId() correlationId: string,
+  ) {
+    return this.dtes.reportNoArrival(id, dto, actor, correlationId);
+  }
+
+  @Post(':id/regularize')
+  @HttpCode(HttpStatus.OK)
+  @Roles('ADMIN')
+  @Audit('DTE_REGULARIZED', 'dte')
+  @ApiOperation({
+    summary: 'Registrar que SENASA regularizo un DT-e caducado (levanta el bloqueo).',
+  })
+  regularize(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RegularizeDteDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @CorrelationId() correlationId: string,
+  ) {
+    return this.dtes.regularize(id, dto, actor, correlationId);
   }
 }

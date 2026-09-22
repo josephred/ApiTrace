@@ -1,264 +1,394 @@
 /**
- * Reglas de negocio puras del Documento de Transito electronico (DT-e API-SEM).
- * Normativa: Resolucion SENASA 356/2008 y 875/2020.
+ * Reglas del DT-e API-SEM (especificacion tecnica DT-e, secciones 4 y 5).
  *
- * Estas funciones son deterministas, no tocan base de datos y pueden
- * compartirse conceptualmente entre backend y frontend.
+ * Todo lo que depende del reloj y de la norma vive aca, en funciones puras y
+ * sin acceso a la base: el servicio, el barrido periodico, el despacho del
+ * movimiento y la trazabilidad consultan las mismas reglas, y se prueban sin
+ * levantar PostgreSQL (dte.rules.spec.ts).
  */
 
-export const MIN_VALIDITY_DAYS = 2;
-export const MAX_VALIDITY_DAYS = 4;
-export const DEFAULT_VALIDITY_DAYS = 2;
-export const LAPSE_GRACE_DAYS = 4;
+export const DTE_STATUSES = [
+  'BORRADOR',
+  'SOLICITADO',
+  'EMITIDO',
+  'VIGENTE',
+  'CERRADO',
+  'VENCIDO',
+  'CADUCADO',
+  'SIN_ARRIBO',
+  'RECHAZADO',
+  'ANULADO',
+  'ELIMINADO',
+] as const;
 
-/** Estados oficiales del DT-e (11 estados segun API-SEM SENASA). */
-export const DteStatuses = {
-  BORRADOR: 'BORRADOR',
-  SOLICITADO: 'SOLICITADO',
-  EMITIDO: 'EMITIDO',
-  VIGENTE: 'VIGENTE',
-  VENCIDO: 'VENCIDO',
-  CADUCADO: 'CADUCADO',
-  CERRADO: 'CERRADO',
-  SIN_ARRIBO: 'SIN_ARRIBO',
-  ANULADO: 'ANULADO',
-  ELIMINADO: 'ELIMINADO',
-  RECHAZADO: 'RECHAZADO',
+export type DteStatus = (typeof DTE_STATUSES)[number];
+
+export type DteIssueMode = 'MANUAL' | 'SIMULADO' | 'SIGSA';
+
+/**
+ * Parametros normativos. Son constantes y no configuracion porque salen de la
+ * norma: si SENASA los cambia, el cambio se revisa y se prueba, no se edita en
+ * una variable de entorno.
+ */
+export const DTE_RULES = {
+  /** Tipo de movimiento SIGSA: apiarios a sala de extraccion. */
+  movementTypeCode: 'API-SEM',
+  transitReason: 'Extracción de miel',
+  /** Alzas melarias. Enteras, medias y 3/4 se computan igual: unidades. */
+  productCode: '24.45',
+  productName: 'Alzas melarias',
+  unit: 'UNIDAD',
+  /** Vencimiento por defecto: carga + 2 dias. */
+  defaultValidityDays: 2,
+  minValidityDays: 2,
+  /** Ampliable hasta 4 dias posteriores a la fecha de carga. */
+  maxValidityDays: 4,
+  /** Autogestion: hasta 4 dias de anticipacion a la fecha de carga. */
+  maxAnticipationDays: 4,
+  /** Periodo de gracia tras el vencimiento; despues, CADUCADO. */
+  graceDays: 4,
+  /** Factor sugerido para sobreestimar las alzas declaradas (regla 4.2.1). */
+  overestimationFactor: 1.5,
+  /** Hora oficial argentina (UTC-3, sin horario de verano desde 2009). */
+  utcOffset: '-03:00',
+  utcOffsetMinutes: -180,
 } as const;
 
-export type DteStatus = (typeof DteStatuses)[keyof typeof DteStatuses];
+/** Estados que ya no cambian. */
+export const TERMINAL_STATUSES: readonly DteStatus[] = [
+  'CERRADO',
+  'CADUCADO',
+  'SIN_ARRIBO',
+  'RECHAZADO',
+  'ANULADO',
+  'ELIMINADO',
+];
 
-/** Modos de emision soportados. */
-export const IssueModes = {
-  MANUAL: 'MANUAL',
-  SIMULADO: 'SIMULADO',
-  SIGSA: 'SIGSA',
-} as const;
+/** Dados de baja: no amparan el movimiento y dejan lugar a un DT-e nuevo. */
+export const VOID_STATUSES: readonly DteStatus[] = ['ANULADO', 'ELIMINADO', 'RECHAZADO'];
 
-export type IssueMode = (typeof IssueModes)[keyof typeof IssueModes];
+/** Con numero oficial y abiertos: su estado efectivo depende del reloj. */
+export const TIME_DRIVEN_STATUSES: readonly DteStatus[] = ['EMITIDO', 'VIGENTE', 'VENCIDO'];
 
-/** Semáforo de transito para el transporte. */
-export type TransitSemaphore = 'VERDE' | 'AMARILLO' | 'ROJO' | 'AZUL' | 'GRIS';
+export const isTerminal = (status: string): boolean =>
+  TERMINAL_STATUSES.includes(status as DteStatus);
 
-/**
- * Convierte una fecha a formato YYYY-MM-DD en zona horaria Argentina (UTC-3).
- */
-export function toArgentinaDateString(date: Date = new Date()): string {
-  // Desplazamiento UTC-3 (180 minutos)
-  const utc = date.getTime() + date.getTimezoneOffset() * 60000;
-  const arDate = new Date(utc - 3 * 3600000);
-  const y = arDate.getFullYear();
-  const m = String(arDate.getMonth() + 1).padStart(2, '0');
-  const d = String(arDate.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+export const isVoid = (status: string): boolean => VOID_STATUSES.includes(status as DteStatus);
+
+// ---------------------------------------------------------------------------
+// Fechas en hora argentina
+// ---------------------------------------------------------------------------
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+export const isIsoDate = (value: string | null | undefined): value is string =>
+  typeof value === 'string' &&
+  ISO_DATE.test(value) &&
+  !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+
+/** Dia calendario argentino (YYYY-MM-DD) de un instante. */
+export const toArDate = (instant: Date): string =>
+  new Date(instant.getTime() + DTE_RULES.utcOffsetMinutes * 60_000).toISOString().slice(0, 10);
+
+export const addDays = (date: string, days: number): string => {
+  const base = new Date(`${date}T00:00:00Z`);
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString().slice(0, 10);
+};
+
+/** Dias calendario de `from` a `to` (positivo si `to` es posterior). */
+export const daysBetween = (from: string, to: string): number =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+
+/** 00:00:00.000 del dia argentino. */
+export const startOfArDay = (date: string): Date =>
+  new Date(`${date}T00:00:00.000${DTE_RULES.utcOffset}`);
+
+/** 23:59:59.999 del dia argentino. */
+export const endOfArDay = (date: string): Date =>
+  new Date(`${date}T23:59:59.999${DTE_RULES.utcOffset}`);
+
+// ---------------------------------------------------------------------------
+// Ventana de transito y estado efectivo
+// ---------------------------------------------------------------------------
+
+export interface DteDates {
+  loadDate: string | null;
+  expiryDate: string | null;
 }
 
-/**
- * Obtiene el inicio del dia en UTC-3 como objeto Date.
- */
-export function startOfDayAr(dateStr: string): Date {
-  // dateStr: YYYY-MM-DD
-  return new Date(`${dateStr}T00:00:00.000-03:00`);
+export interface TransitWindow {
+  /** Desde: 00:00 de la fecha de carga. */
+  validFrom: Date;
+  /** Hasta: 23:59 de la fecha de vencimiento. */
+  validTo: Date;
+  /** Fin del periodo de gracia: despues de esto, CADUCADO. */
+  lapsesAt: Date;
+  /** Ultimo dia en que la sala todavia puede cerrar (cierre extemporaneo). */
+  lastClosingDate: string;
 }
 
-/**
- * Obtiene el fin del dia en UTC-3 como objeto Date.
- */
-export function endOfDayAr(dateStr: string): Date {
-  return new Date(`${dateStr}T23:59:59.999-03:00`);
-}
-
-/**
- * Suma dias a una fecha en formato YYYY-MM-DD.
- */
-export function addDaysIso(dateStr: string, days: number): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d + days, 12, 0, 0));
-  const ny = dt.getUTCFullYear();
-  const nm = String(dt.getUTCMonth() + 1).padStart(2, '0');
-  const nd = String(dt.getUTCDate()).padStart(2, '0');
-  return `${ny}-${nm}-${nd}`;
-}
-
-/**
- * Calcula la diferencia en dias entre dos fechas YYYY-MM-DD.
- */
-export function daysBetweenIso(fromIso: string, toIso: string): number {
-  const [y1, m1, d1] = fromIso.split('-').map(Number);
-  const [y2, m2, d2] = toIso.split('-').map(Number);
-  const t1 = Date.UTC(y1, m1 - 1, d1);
-  const t2 = Date.UTC(y2, m2 - 1, d2);
-  return Math.round((t2 - t1) / 86400000);
-}
-
-/**
- * Normaliza y valida una patente automotor argentina.
- * Formatos aceptados:
- * - Clasico: 3 letras + 3 numeros (AAA123)
- * - Mercosur: 2 letras + 3 numeros + 2 letras (AA123BB)
- * - Moto: 3 numeros + 3 letras o 1 letra + 3 numeros + 3 letras
- */
-export function normalizePlate(raw?: string | null): string {
-  if (!raw) return '';
-  return raw.trim().toUpperCase().replace(/[\s\-_.]/g, '');
-}
-
-export function isValidPlate(raw?: string | null): boolean {
-  const plate = normalizePlate(raw);
-  if (!plate) return false;
-  // Clasico: 3 letras y 3 numeros
-  const classic = /^[A-Z]{3}\d{3}$/;
-  // Mercosur automotor: 2 letras, 3 numeros, 2 letras
-  const mercosur = /^[A-Z]{2}\d{3}[A-Z]{2}$/;
-  // Acoplado o trailer tipo 101 o trailer clasico
-  const trailer = /^(101)?[A-Z]{2,3}\d{3}[A-Z]{0,2}$/;
-  return classic.test(plate) || mercosur.test(plate) || trailer.test(plate);
-}
-
-/**
- * Sugiere la cantidad declarada con sobreestimacion prudencial (+15%).
- * En material melario (alzas), la normativa de SENASA exige que la cantidad
- * recibida en sala de extraccion NO supere la cantidad declarada en el DT-e:
- * Q_real <= Q_declarada.
- */
-export function suggestDeclaredQuantity(estimatedQuantity: number): number {
-  if (!estimatedQuantity || estimatedQuantity <= 0) return 0;
-  // Margen del 15%, redondeado hacia arriba
-  return Math.ceil(estimatedQuantity * 1.15);
-}
-
-/**
- * Determina el semaforo de transito segun el estado y fechas del DT-e.
- */
-export function getTransitSemaphore(dte: {
-  status: string;
-  loadDate?: Date | string | null;
-  expiryDate?: Date | string | null;
-  now?: Date;
-}): { semaphore: TransitSemaphore; reason: string; canTransit: boolean } {
-  const now = dte.now ?? new Date();
-  const status = dte.status as DteStatus;
-
-  if (status === DteStatuses.CERRADO) {
-    return {
-      semaphore: 'AZUL',
-      reason: 'DT-e cerrado en sala de destino tras recepcion conforme.',
-      canTransit: false,
-    };
-  }
-
-  if (status === DteStatuses.ANULADO || status === DteStatuses.ELIMINADO || status === DteStatuses.RECHAZADO) {
-    return {
-      semaphore: 'ROJO',
-      reason: `DT-e en estado terminal ${status}. Transito prohibido.`,
-      canTransit: false,
-    };
-  }
-
-  if (status === DteStatuses.SIN_ARRIBO) {
-    return {
-      semaphore: 'GRIS',
-      reason: 'Declarado sin arribo a destino.',
-      canTransit: false,
-    };
-  }
-
-  if (status === DteStatuses.BORRADOR || status === DteStatuses.SOLICITADO) {
-    return {
-      semaphore: 'ROJO',
-      reason: 'El DT-e aun no ha sido emitido ante SENASA.',
-      canTransit: false,
-    };
-  }
-
-  const loadTime = dte.loadDate
-    ? typeof dte.loadDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dte.loadDate)
-      ? startOfDayAr(dte.loadDate.slice(0, 10)).getTime()
-      : new Date(dte.loadDate).getTime()
-    : 0;
-  const expiryTime = dte.expiryDate
-    ? typeof dte.expiryDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dte.expiryDate)
-      ? endOfDayAr(dte.expiryDate.slice(0, 10)).getTime()
-      : new Date(dte.expiryDate).getTime()
-    : 0;
-  const nowTime = now.getTime();
-
-  if (status === DteStatuses.CADUCADO || (expiryTime > 0 && nowTime > expiryTime + LAPSE_GRACE_DAYS * 86400000)) {
-    return {
-      semaphore: 'ROJO',
-      reason: 'DT-e caducado (mas de 5 dias posteriores a su vencimiento). Requiere regularizacion.',
-      canTransit: false,
-    };
-  }
-
-  if (status === DteStatuses.VENCIDO || (expiryTime > 0 && nowTime > expiryTime)) {
-    return {
-      semaphore: 'ROJO',
-      reason: 'DT-e con vigencia vencida. Transito no autorizado sin regularizar.',
-      canTransit: false,
-    };
-  }
-
-  if (status === DteStatuses.EMITIDO && loadTime > 0 && nowTime < loadTime) {
-    return {
-      semaphore: 'ROJO',
-      reason: 'DT-e emitido pero previo a la fecha autorizada de carga.',
-      canTransit: false,
-    };
-  }
-
-  if (status === DteStatuses.VIGENTE || status === DteStatuses.EMITIDO) {
-    // Si esta dentro de las 12 horas del vencimiento, se marca en amarillo
-    const hoursLeft = (expiryTime - nowTime) / 3600000;
-    if (hoursLeft <= 18) {
-      return {
-        semaphore: 'AMARILLO',
-        reason: `DT-e proximo a vencer (quedan aprox. ${Math.max(1, Math.round(hoursLeft))} horas).`,
-        canTransit: true,
-      };
-    }
-    return {
-      semaphore: 'VERDE',
-      reason: 'DT-e vigente y habilitado para transito por ruta nacional.',
-      canTransit: true,
-    };
-  }
-
+export const transitWindow = (dates: DteDates): TransitWindow | null => {
+  if (!isIsoDate(dates.loadDate) || !isIsoDate(dates.expiryDate)) return null;
+  const lastClosingDate = addDays(dates.expiryDate, DTE_RULES.graceDays);
   return {
-    semaphore: 'ROJO',
-    reason: `Estado ${status} no habilita transito.`,
-    canTransit: false,
+    validFrom: startOfArDay(dates.loadDate),
+    validTo: endOfArDay(dates.expiryDate),
+    lapsesAt: endOfArDay(lastClosingDate),
+    lastClosingDate,
   };
-}
+};
 
 /**
- * Valida las transiciones de estado permitidas del ciclo de vida oficial.
+ * Estado del DT-e en un instante dado (seccion 5.1).
+ *
+ * Solo los estados con numero oficial y abiertos dependen del reloj. Un
+ * documento sin fechas (remitos y DT-e anteriores a la migracion 0001) conserva
+ * su estado guardado: aplicarle vigencia seria inventar fechas que nadie cargo.
  */
-export function isAllowedTransition(from: DteStatus, to: DteStatus): boolean {
-  if (from === to) return true;
+export const effectiveStatus = (stored: string, dates: DteDates, at: Date): DteStatus => {
+  const status = stored as DteStatus;
+  if (!TIME_DRIVEN_STATUSES.includes(status)) return status;
+  const window = transitWindow(dates);
+  if (!window) return status;
+  if (at < window.validFrom) return 'EMITIDO';
+  if (at <= window.validTo) return 'VIGENTE';
+  if (at <= window.lapsesAt) return 'VENCIDO';
+  return 'CADUCADO';
+};
 
-  const allowed: Record<DteStatus, DteStatus[]> = {
-    [DteStatuses.BORRADOR]: [DteStatuses.SOLICITADO, DteStatuses.ELIMINADO],
-    [DteStatuses.SOLICITADO]: [DteStatuses.EMITIDO, DteStatuses.RECHAZADO, DteStatuses.BORRADOR],
-    [DteStatuses.EMITIDO]: [DteStatuses.VIGENTE, DteStatuses.ANULADO, DteStatuses.VENCIDO],
-    [DteStatuses.VIGENTE]: [
-      DteStatuses.VENCIDO,
-      DteStatuses.CERRADO,
-      DteStatuses.SIN_ARRIBO,
-      DteStatuses.ANULADO,
-    ],
-    [DteStatuses.VENCIDO]: [
-      DteStatuses.CADUCADO,
-      DteStatuses.CERRADO,
-      DteStatuses.SIN_ARRIBO,
-    ],
-    [DteStatuses.CADUCADO]: [DteStatuses.CERRADO],
-    [DteStatuses.CERRADO]: [],
-    [DteStatuses.SIN_ARRIBO]: [],
-    [DteStatuses.ANULADO]: [],
-    [DteStatuses.ELIMINADO]: [],
-    [DteStatuses.RECHAZADO]: [DteStatuses.BORRADOR],
-  };
+const TIME_RANK: Record<string, number> = { EMITIDO: 0, VIGENTE: 1, VENCIDO: 2, CADUCADO: 3 };
 
-  return allowed[from]?.includes(to) ?? false;
+/**
+ * Transicion por paso del tiempo, solo hacia adelante. El barrido periodico
+ * nunca "rejuvenece" un DT-e aunque alguien corrija el reloj del servidor.
+ */
+export const timeTransition = (stored: string, dates: DteDates, now: Date): DteStatus | null => {
+  if (!TIME_DRIVEN_STATUSES.includes(stored as DteStatus)) return null;
+  const next = effectiveStatus(stored, dates, now);
+  return TIME_RANK[next] > TIME_RANK[stored] ? next : null;
+};
+
+/** Semaforo de transito (checklist 9): solo VIGENTE habilita la ruta. */
+export const isAptForTransit = (stored: string, dates: DteDates, at: Date): boolean =>
+  effectiveStatus(stored, dates, at) === 'VIGENTE';
+
+// ---------------------------------------------------------------------------
+// Validaciones del tramite
+// ---------------------------------------------------------------------------
+
+export interface RuleViolation {
+  code: string;
+  message: string;
 }
+
+/** Fecha de vencimiento por defecto: carga + 2 dias. */
+export const defaultExpiryDate = (loadDate: string): string =>
+  addDays(loadDate, DTE_RULES.defaultValidityDays);
+
+/** Vencimiento entre 2 y 4 dias posteriores a la carga (seccion 4.1). */
+export const validateValidity = (loadDate: string, expiryDate: string): RuleViolation | null => {
+  const days = daysBetween(loadDate, expiryDate);
+  if (days < DTE_RULES.minValidityDays || days > DTE_RULES.maxValidityDays) {
+    return {
+      code: 'VIGENCIA_FUERA_DE_RANGO',
+      message: `La fecha de vencimiento debe estar entre ${DTE_RULES.minValidityDays} y ${DTE_RULES.maxValidityDays} dias despues de la fecha de carga (${loadDate}); se indicaron ${days}.`,
+    };
+  }
+  return null;
+};
+
+/**
+ * Anticipacion (seccion 4.2.3): SIGSA acepta la autogestion hasta 4 dias antes
+ * de la fecha de carga y no para fechas pasadas. Aplica al pedir la emision,
+ * no al preparar un borrador ni al registrar un DT-e que ya existe.
+ */
+export const validateAnticipation = (loadDate: string, now: Date): RuleViolation | null => {
+  const today = toArDate(now);
+  const ahead = daysBetween(today, loadDate);
+  if (ahead < 0) {
+    return {
+      code: 'FECHA_CARGA_PASADA',
+      message: `La fecha de carga (${loadDate}) ya paso. Corregila antes de solicitar la emision.`,
+    };
+  }
+  if (ahead > DTE_RULES.maxAnticipationDays) {
+    return {
+      code: 'ANTICIPACION_EXCEDIDA',
+      message: `SIGSA admite emitir hasta ${DTE_RULES.maxAnticipationDays} dias antes de la carga. Este DT-e se podra solicitar desde el ${addDays(loadDate, -DTE_RULES.maxAnticipationDays)}.`,
+    };
+  }
+  return null;
+};
+
+/** Cantidad sugerida para declarar a partir de lo estimado (regla 4.2.1). */
+export const suggestDeclaredQuantity = (estimated: number): number =>
+  Math.max(estimated + 1, Math.ceil(estimated * DTE_RULES.overestimationFactor));
+
+/**
+ * La sala solo puede confirmar Qreal <= Qdeclarada (seccion 5.2). Si se supera,
+ * no hay forma de corregirlo en el cierre: hay que anular y emitir otro DT-e.
+ */
+export const validateConfirmedQuantity = (
+  declared: number | null,
+  confirmed: number,
+): RuleViolation | null => {
+  if (declared === null || declared === undefined) return null;
+  if (confirmed > declared) {
+    return {
+      code: 'EXCESO_CANTIDAD_DECLARADA',
+      message: `La cantidad real de alzas (${confirmed}) supera la declarada en el DT-e (${declared}). Hay que anular este DT-e y emitir uno nuevo con al menos ${confirmed} alzas antes de descargar.`,
+    };
+  }
+  return null;
+};
+
+// ---------------------------------------------------------------------------
+// Formatos de identificadores (se advierten, no se imponen: son ejemplos de la
+// especificacion y el formato definitivo lo confirma SENASA)
+// ---------------------------------------------------------------------------
+
+/** RENAPA del apiario: Letra-N°RENAPA-N°Apiario, ej. B53999-2. */
+export const RENAPA_APIARY_PATTERN = /^[A-Z]\d{1,7}-\d{1,4}$/;
+
+/** Sala de extraccion: SEF-Letra-N°, ej. SEF-B-20010. */
+export const SALA_CODE_PATTERN = /^SEF-[A-Z]-\d{1,7}$/;
+
+/** Numero de DT-e: prefijo de oficina y correlativo con verificador, ej. 022440451-4. */
+export const DTE_NUMBER_PATTERN = /^\d{9}-\d$/;
+
+export const normalizeCode = (value: string): string => value.trim().toUpperCase();
+
+/** Patente sin espacios ni guiones, en mayusculas. "NO" y vacio significan sin acoplado. */
+export const normalizePlate = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+  const clean = value.toUpperCase().replace(/[\s.\-]/g, '');
+  if (!clean || clean === 'NO' || clean === 'SIN') return null;
+  return clean;
+};
+
+/** Formatos vigentes en Argentina: AAA999 (anterior) y AA999AA (Mercosur). */
+export const isArgentinePlate = (plate: string): boolean =>
+  /^[A-Z]{3}\d{3}$/.test(plate) || /^[A-Z]{2}\d{3}[A-Z]{2}$/.test(plate);
+
+export const TRANSPORT_TYPES = ['CAMION', 'CAMIONETA', 'FURGON', 'UTILITARIO', 'OTRO'] as const;
+export type TransportType = (typeof TRANSPORT_TYPES)[number];
+
+// ---------------------------------------------------------------------------
+// Avisos por estado: lo que el usuario tiene que saber o hacer
+// ---------------------------------------------------------------------------
+
+export interface DteAlert {
+  code: string;
+  severity: 'info' | 'success' | 'warning' | 'danger';
+  message: string;
+}
+
+export interface AlertInput extends DteDates {
+  status: string;
+  issueMode: string;
+  syncStatus: string;
+  errorMessage: string | null;
+  regularizedAt: Date | null;
+}
+
+export const alertsFor = (dte: AlertInput, now: Date): DteAlert[] => {
+  const alerts: DteAlert[] = [];
+  const status = effectiveStatus(dte.status, dte, now);
+  const window = transitWindow(dte);
+  const today = toArDate(now);
+
+  if (dte.issueMode === 'SIMULADO') {
+    alerts.push({
+      code: 'SIMULADO',
+      severity: 'warning',
+      message: 'Emision simulada: sin validez oficial. No sirve para transitar.',
+    });
+  }
+
+  switch (status) {
+    case 'BORRADOR': {
+      if (dte.loadDate) {
+        const opensOn = addDays(dte.loadDate, -DTE_RULES.maxAnticipationDays);
+        if (daysBetween(today, opensOn) > 0) {
+          alerts.push({
+            code: 'BORRADOR_ANTICIPADO',
+            severity: 'info',
+            message: `Borrador listo. SIGSA lo acepta desde el ${opensOn}.`,
+          });
+        } else if (daysBetween(today, dte.loadDate) < 0) {
+          alerts.push({
+            code: 'BORRADOR_VENCIDO',
+            severity: 'warning',
+            message: 'La fecha de carga del borrador ya paso: actualizala o eliminalo.',
+          });
+        } else {
+          alerts.push({
+            code: 'BORRADOR_PENDIENTE',
+            severity: 'info',
+            message: 'Borrador: falta emitir el DT-e.',
+          });
+        }
+      }
+      break;
+    }
+    case 'SOLICITADO':
+      alerts.push(
+        dte.syncStatus === 'ERROR'
+          ? {
+              code: 'SOLICITUD_CON_ERROR',
+              severity: 'danger',
+              message: `No se pudo enviar a SIGSA: ${dte.errorMessage ?? 'error de comunicacion'}. Se reintenta solo.`,
+            }
+          : {
+              code: 'SOLICITUD_EN_CURSO',
+              severity: 'info',
+              message: 'Solicitud enviada a SIGSA. Esperando el numero de DT-e.',
+            },
+      );
+      break;
+    case 'EMITIDO':
+      alerts.push({
+        code: 'NO_TRANSITAR',
+        severity: 'warning',
+        message: `Todavia no se puede transitar: el DT-e se habilita el ${dte.loadDate} a las 00:00.`,
+      });
+      break;
+    case 'VIGENTE':
+      alerts.push(
+        dte.expiryDate === today
+          ? {
+              code: 'VENCE_HOY',
+              severity: 'warning',
+              message: 'Vence hoy a las 23:59. Llevalo impreso en la cabina.',
+            }
+          : {
+              code: 'APTO_TRANSITO',
+              severity: 'success',
+              message: `Apto para transitar hasta el ${dte.expiryDate} a las 23:59. Llevalo impreso en la cabina.`,
+            },
+      );
+      break;
+    case 'VENCIDO':
+      alerts.push({
+        code: 'VENCIDO_SIN_CIERRE',
+        severity: 'danger',
+        message: `Vencido sin cierre. La sala puede cerrarlo hasta el ${window?.lastClosingDate}; despues caduca y SIGSA bloquea al productor.`,
+      });
+      break;
+    case 'CADUCADO':
+      if (!dte.regularizedAt) {
+        alerts.push({
+          code: 'CADUCADO_BLOQUEO',
+          severity: 'danger',
+          message:
+            'Caducado: SIGSA bloquea al productor para emitir nuevos DT-e hasta regularizar ante SENASA.',
+        });
+      }
+      break;
+    default:
+      break;
+  }
+
+  return alerts;
+};

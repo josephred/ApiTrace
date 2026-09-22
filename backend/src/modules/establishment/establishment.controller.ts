@@ -4,6 +4,7 @@ import { EstablishmentService } from './establishment.service';
 import {
   AssociateRenspaDto,
   CreateEstablishmentDto,
+  ListReceiversQueryDto,
   UpdateEstablishmentDto,
 } from './dto/establishment.dto';
 import { ListEstablishmentsQueryDto } from '../../common/dto/filters.dto';
@@ -41,13 +42,16 @@ export class EstablishmentController {
     return paginated(rows, total, query);
   }
 
+  // Debe declararse antes de ':id': si no, 'receivers' se interpretaria como un id.
   @Get('receivers')
   @ApiOperation({
-    summary: 'Listar salas de extraccion y acopios habilitados (H-02)',
-    description: 'Permite seleccionar destinos inter-empresa para la emision de DT-e.',
+    summary: 'Destinos habilitados de cualquier organizacion',
+    description:
+      'Salas de extraccion (o acopios) activas, con su codigo SENASA, para elegir el destino de un traslado o de un DT-e. Resuelve H-02.',
   })
-  listReceivers(@Query('q') q?: string) {
-    return this.establishments.listReceivers(q);
+  async receivers(@Query() query: ListReceiversQueryDto) {
+    const { rows, total } = await this.establishments.receivers(query);
+    return paginated(rows, total, query);
   }
 
   @Get(':id')

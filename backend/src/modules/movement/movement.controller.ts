@@ -12,6 +12,7 @@ import {
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { MovementService } from './movement.service';
 import { DteService } from './dte.service';
+import { DteQueryService } from './dte-query.service';
 import { MovementRuleService } from './movement-rule.service';
 import {
   CancelMovementDto,
@@ -37,6 +38,7 @@ export class MovementController {
   constructor(
     private readonly movements: MovementService,
     private readonly dte: DteService,
+    private readonly dteReads: DteQueryService,
   ) {}
 
   @Post()
@@ -123,9 +125,9 @@ export class MovementController {
   @Roles('ADMIN', 'PRODUCTOR', 'SALA')
   @Audit('DTE_CREATED', 'dte')
   @ApiOperation({
-    summary: 'CU-10 Generar o registrar el DT-e del movimiento',
+    summary: 'CU-10 Registrar el documento del movimiento',
     description:
-      'El DT-e se modela como documento asociado (regla 4). Sin integracion con SIGSA queda PENDING_SYNC.',
+      'El DT-e se modela como documento asociado (regla 4). Para traslados apiario -> sala se trata como DT-e API-SEM (alzas, fechas de carga y vencimiento, transporte). Para la gestion completa por usuario ver /dte.',
   })
   createDte(
     @Param('id', ParseUUIDPipe) id: string,
@@ -133,35 +135,42 @@ export class MovementController {
     @CurrentUser() actor: AuthenticatedUser,
     @CorrelationId() correlationId: string,
   ) {
-    return this.dte.create(id, dto, actor, correlationId);
+    return this.dte.createForMovement(id, dto, actor, correlationId);
   }
 
   @Get(':id/dte')
+  @ApiOperation({ summary: 'DT-e en juego del movimiento (el ultimo no anulado).' })
   getDte(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: AuthenticatedUser) {
-    return this.dte.getByMovement(id, actor);
+    return this.dteReads.getByMovement(id, actor);
   }
 
   @Post(':id/dte/status')
   @HttpCode(HttpStatus.OK)
   @Roles('ADMIN', 'PRODUCTOR', 'SALA')
   @Audit('DTE_STATUS_UPDATED', 'dte')
-  @ApiOperation({ summary: 'CU-10 Actualizar el estado del DT-e.' })
+  @ApiOperation({
+    summary: 'CU-10 Actualizar el estado del DT-e (obsoleto)',
+    description:
+      'Se conserva por compatibilidad. Usar POST /dte/:id/issue y POST /dte/:id/void. ISSUED emite con numero, CANCELLED elimina, REJECTED rechaza un borrador, APPROVED no cambia nada.',
+    deprecated: true,
+  })
   updateDteStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateDteStatusDto,
     @CurrentUser() actor: AuthenticatedUser,
     @CorrelationId() correlationId: string,
   ) {
-    return this.dte.updateStatus(id, dto, actor, correlationId);
+    return this.dte.updateStatusLegacy(id, dto, actor, correlationId);
   }
 
   @Post(':id/dte/close')
   @HttpCode(HttpStatus.OK)
-  @Roles('ADMIN', 'SALA')
+  @Roles('ADMIN', 'SALA', 'ACOPIADOR')
   @Audit('DTE_CLOSED', 'dte')
   @ApiOperation({
     summary: 'CU-12 Cerrar el DT-e',
-    description: 'Lo realiza el establecimiento receptor una vez registrada la recepcion.',
+    description:
+      'Lo realiza el establecimiento receptor una vez registrada la recepcion. Equivale a POST /dte/:id/close sobre el DT-e en juego del movimiento.',
   })
   closeDte(
     @Param('id', ParseUUIDPipe) id: string,
@@ -169,7 +178,7 @@ export class MovementController {
     @CurrentUser() actor: AuthenticatedUser,
     @CorrelationId() correlationId: string,
   ) {
-    return this.dte.close(id, dto, actor, correlationId);
+    return this.dte.closeForMovement(id, dto, actor, correlationId);
   }
 }
 

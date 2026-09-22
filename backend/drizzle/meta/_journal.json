@@ -19,8 +19,8 @@
     {
       "idx": 2,
       "version": "7",
-      "when": 1789862400000,
-      "tag": "0002_fix_movement_rule_columns",
+      "when": 1789920000000,
+      "tag": "0002_dte_reparacion",
       "breakpoints": true
     }
   ]

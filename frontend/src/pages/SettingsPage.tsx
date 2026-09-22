@@ -2,10 +2,12 @@ import { useState, type FormEvent } from 'react';
 import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { useHelpSettings } from '../lib/helpContext';
-import { useRoleSettings } from '../lib/settingsContext';
+import { usePreferences } from '../lib/settingsContext';
 import { useSync } from '../lib/sync';
+import { useResource } from '../lib/useResource';
 import { formatRelative } from '../lib/format';
-import { roleLabel } from '../lib/vocabulary';
+import { normalizePlate } from '../lib/dte';
+import { INTEGRATION_MODES, roleLabel } from '../lib/vocabulary';
 import { Icon } from '../components/Icon';
 import {
   Button,
@@ -13,85 +15,47 @@ import {
   HelpTip,
   Notice,
   PageHeader,
+  SummaryList,
   useWriteFeedback,
 } from '../components/ui';
+import type { DteIntegration, UserRole } from '../lib/types';
+
+/** Roles que trabajan con DT-e (la misma lista que App.tsx). */
+const DTE_ROLES: UserRole[] = ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'AUDITOR'];
+/** Roles que cargan el transporte de un traslado. */
+const VEHICLE_ROLES: UserRole[] = ['ADMIN', 'PRODUCTOR', 'TRANSPORTISTA'];
 
 export const SettingsPage = () => {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const { helpEnabled, setHelpEnabled } = useHelpSettings();
-  const { settings, updateRoleSettings, resetRoleSettings, getRoleSettingsKey } = useRoleSettings();
+  const { preferences, updatePreferences, resetPreferences } = usePreferences();
   const { online, syncing, pendingCount, flush, lastSyncAt } = useSync();
   const feedback = useWriteFeedback();
 
+  const worksWithDte = Boolean(user && DTE_ROLES.includes(user.role));
+  const loadsVehicles = Boolean(user && VEHICLE_ROLES.includes(user.role));
+  const integration = useResource<DteIntegration>(worksWithDte ? '/dte/integration' : null);
+
+  const [vehiclePlate, setVehiclePlate] = useState(preferences.vehiclePlate);
+  const [trailerPlate, setTrailerPlate] = useState(preferences.trailerPlate);
+
   if (!user) return null;
 
-  const roleKey = getRoleSettingsKey(user.role);
-
-  // Estados locales temporales para formulario por rol
-  const [adminMode, setAdminMode] = useState(settings.admin.senasaDefaultMode);
-  const [overestimate, setOverestimate] = useState(settings.admin.overestimateMelariosPercent);
-  const [strictPreflight, setStrictPreflight] = useState(settings.admin.strictPreflightValidation);
-
-  const [renapa, setRenapa] = useState(settings.productor.defaultRenapaNumber);
-  const [prodPlate, setProdPlate] = useState(settings.productor.defaultPlateVehicle);
-  const [prodTrailer, setProdTrailer] = useState(settings.productor.defaultPlateTrailer);
-
-  const [drumTare, setDrumTare] = useState(settings.sala.defaultDrumTareKg);
-  const [minYield, setMinYield] = useState(settings.sala.minYieldKgPerMelario);
-  const [requireVerifCode, setRequireVerifCode] = useState(settings.sala.requireVerificationCodeOnClose);
-
-  const [maxMoisture, setMaxMoisture] = useState(settings.acopiador.maxMoisturePercent);
-  const [lotUnit, setLotUnit] = useState(settings.acopiador.preferredLotUnit);
-
-  const [transPlate, setTransPlate] = useState(settings.transportista.defaultPlateVehicle);
-  const [transTrailer, setTransTrailer] = useState(settings.transportista.defaultPlateTrailer);
-
-  const [exportFmt, setExportFmt] = useState(settings.auditor.defaultExportFormat);
-
-  const handleSaveRoleSettings = (e: FormEvent) => {
-    e.preventDefault();
-    if (user.role === 'ADMIN') {
-      updateRoleSettings('admin', {
-        senasaDefaultMode: adminMode,
-        overestimateMelariosPercent: Number(overestimate),
-        strictPreflightValidation: strictPreflight,
-      });
-    } else if (user.role === 'PRODUCTOR') {
-      updateRoleSettings('productor', {
-        defaultRenapaNumber: renapa.trim(),
-        defaultPlateVehicle: prodPlate.trim(),
-        defaultPlateTrailer: prodTrailer.trim(),
-      });
-    } else if (user.role === 'SALA') {
-      updateRoleSettings('sala', {
-        defaultDrumTareKg: Number(drumTare),
-        minYieldKgPerMelario: Number(minYield),
-        requireVerificationCodeOnClose: requireVerifCode,
-      });
-    } else if (user.role === 'ACOPIADOR' || user.role === 'FRACCIONADOR' || user.role === 'EXPORTADOR') {
-      updateRoleSettings('acopiador', {
-        maxMoisturePercent: Number(maxMoisture),
-        preferredLotUnit: lotUnit,
-      });
-    } else if (user.role === 'TRANSPORTISTA') {
-      updateRoleSettings('transportista', {
-        defaultPlateVehicle: transPlate.trim(),
-        defaultPlateTrailer: transTrailer.trim(),
-      });
-    } else if (user.role === 'AUDITOR' || user.role === 'LABORATORIO') {
-      updateRoleSettings('auditor', {
-        defaultExportFormat: exportFmt,
-      });
-    }
-    feedback.saved('Configuración guardada', 'Los parámetros fueron actualizados para tu sesión.');
+  const savePreferences = (event: FormEvent) => {
+    event.preventDefault();
+    updatePreferences({
+      vehiclePlate: normalizePlate(vehiclePlate),
+      trailerPlate: normalizePlate(trailerPlate),
+    });
+    feedback.saved('Preferencias guardadas', 'Se usan en este dispositivo al preparar un DT-e.');
   };
 
   return (
     <div className="stack" style={{ gap: 'var(--sp-6)' }}>
       <PageHeader
-        title="Configuración del sistema"
-        sub={`Preferencias de interfaz, almacenamiento y parámetros específicos para tu perfil de ${roleLabel(user.role)}.`}
+        title="Configuración"
+        sub="Preferencias de este dispositivo y el canal de emisión de DT-e que usa el sistema."
         help="settings"
         actions={
           <div className="row row-tight">
@@ -287,308 +251,120 @@ export const SettingsPage = () => {
       </div>
 
       {/* =====================================================================
-          SECCIÓN 3: PARÁMETROS OPERATIVOS SEGÚN EL ROL
+          SECCIÓN 3: CANAL DE EMISIÓN DE DT-e (SOLO LECTURA)
           ===================================================================== */}
-      <div>
-        <div className="form-section-title" style={{ marginBottom: 'var(--sp-3)' }}>
-          Parámetros operativos para {roleLabel(user.role)}
+      {worksWithDte && (
+        <div>
+          <div className="form-section-title" style={{ marginBottom: 'var(--sp-3)' }}>
+            Emisión de DT-e
+          </div>
+          <Card title="Canal de emisión" help="dteModes">
+            {integration.data ? (
+              <div className="stack" style={{ gap: 'var(--sp-3)' }}>
+                {integration.data.mode === 'simulado' && (
+                  <Notice tone="warning" title="Modo simulado">
+                    Los DT-e que se «emiten» en este modo no tienen validez oficial: sirven para
+                    practicar. No se debe transitar con ellos.
+                  </Notice>
+                )}
+                <SummaryList
+                  rows={[
+                    { key: 'Canal', value: INTEGRATION_MODES.label(integration.data.mode) },
+                    { key: 'Detalle', value: integration.data.description },
+                    {
+                      key: 'Vencimiento',
+                      value: `${integration.data.rules.defaultValidityDays} días después de la carga por defecto; hasta ${integration.data.rules.maxValidityDays}`,
+                    },
+                    {
+                      key: 'Anticipación',
+                      value: `Hasta ${integration.data.rules.maxAnticipationDays} días antes de la carga`,
+                    },
+                    {
+                      key: 'Gracia sin cierre',
+                      value: `${integration.data.rules.graceDays} días después del vencimiento; después caduca`,
+                    },
+                  ]}
+                />
+                <p className="small muted" style={{ margin: 0 }}>
+                  El canal lo define quien opera el servidor (variable <span className="mono">SENASA_MODE</span>)
+                  y las reglas vienen de la norma: no se cambian desde esta pantalla.
+                </p>
+              </div>
+            ) : (
+              <p className="small muted" style={{ margin: 0 }}>
+                {integration.loading ? 'Consultando…' : 'No se pudo consultar el canal de emisión.'}
+              </p>
+            )}
+          </Card>
         </div>
+      )}
 
-        <Card>
-          <form onSubmit={handleSaveRoleSettings} className="stack" style={{ gap: 'var(--sp-4)' }}>
-            {/* --------------------------- ADMIN --------------------------- */}
-            {user.role === 'ADMIN' && (
-              <>
-                <Notice tone="info">
-                  Como <strong>Administrador</strong>, estos parámetros afectan los valores por defecto del sistema
-                  y los motores de validación previa (Preflight) ante SENASA / ARCA.
-                </Notice>
-
-                <div className="grid c2" style={{ gap: 'var(--sp-4)' }}>
-                  <div className="field">
-                    <label className="field-label" htmlFor="senasa-mode">
-                      Modo de integración SENASA / API-SEM por defecto
-                    </label>
-                    <select
-                      id="senasa-mode"
-                      value={adminMode}
-                      onChange={(e) => setAdminMode(e.target.value as any)}
-                    >
-                      <option value="SIGSA">Oficial (SENASA / SIGSA en línea)</option>
-                      <option value="MANUAL">Carga manual de comprobante</option>
-                      <option value="SIMULADO">Simulador para capacitación y pruebas</option>
-                    </select>
-                    <span className="field-hint">
-                      Define qué adaptador se preselecciona al preparar un nuevo DT-e.
-                    </span>
-                  </div>
-
-                  <div className="field">
-                    <label className="field-label" htmlFor="overestimate">
-                      Margen de sobreestimación en melarios cosechados (%)
-                    </label>
-                    <input
-                      id="overestimate"
-                      type="number"
-                      min="0"
-                      max="50"
-                      value={overestimate}
-                      onChange={(e) => setOverestimate(Number(e.target.value))}
-                    />
-                    <span className="field-hint">
-                      Porcentaje técnico de holgura (+15% estándar SENASA) para evitar diferencias de carga.
-                    </span>
-                  </div>
-                </div>
-
+      {/* =====================================================================
+          SECCIÓN 4: VEHÍCULO HABITUAL (PRECARGA DEL DT-e)
+          ===================================================================== */}
+      {loadsVehicles && (
+        <div>
+          <div className="form-section-title" style={{ marginBottom: 'var(--sp-3)' }}>
+            Vehículo habitual
+          </div>
+          <Card>
+            <form onSubmit={savePreferences} className="stack" style={{ gap: 'var(--sp-4)' }}>
+              <p className="small muted" style={{ margin: 0 }}>
+                Se guarda en este dispositivo y precarga el paso «Transporte» al preparar un DT-e.
+                Siempre podés cambiarla en el momento.
+              </p>
+              <div className="grid c2" style={{ gap: 'var(--sp-4)' }}>
                 <div className="field">
-                  <label className="row row-tight" style={{ cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={strictPreflight}
-                      onChange={(e) => setStrictPreflight(e.target.checked)}
-                    />
-                    <span>
-                      <strong>Exigir validación estricta en Preflight</strong> (frenar emisión si la patente o RENSPA no están activos)
-                    </span>
+                  <label className="field-label" htmlFor="pref-plate">
+                    Patente del vehículo
                   </label>
+                  <input
+                    id="pref-plate"
+                    type="text"
+                    placeholder="AA123BC"
+                    autoComplete="off"
+                    value={vehiclePlate}
+                    onChange={(event) => setVehiclePlate(event.target.value)}
+                  />
                 </div>
-              </>
-            )}
-
-            {/* ------------------------- PRODUCTOR ------------------------- */}
-            {user.role === 'PRODUCTOR' && (
-              <>
-                <Notice tone="info">
-                  Parámetros para agilizar tus registros de traslados y mantener al día tus apiarios ante SENASA.
-                </Notice>
-
-                <div className="grid c2" style={{ gap: 'var(--sp-4)' }}>
-                  <div className="field">
-                    <label className="field-label" htmlFor="default-renapa">
-                      Número de RENAPA habitual
-                    </label>
-                    <input
-                      id="default-renapa"
-                      type="text"
-                      placeholder="Ej: BA-09241"
-                      value={renapa}
-                      onChange={(e) => setRenapa(e.target.value)}
-                    />
-                    <span className="field-hint">
-                      Se utilizará para autocompletar tus solicitudes de DT-e y movimientos.
-                    </span>
-                  </div>
-
-                  <div className="field">
-                    <label className="field-label" htmlFor="prod-plate">
-                      Patente de vehículo habitual (Chasis)
-                    </label>
-                    <input
-                      id="prod-plate"
-                      type="text"
-                      placeholder="Ej: AF-123-CD"
-                      value={prodPlate}
-                      onChange={(e) => setProdPlate(e.target.value)}
-                    />
-                    <span className="field-hint">Formato oficial argentino (ej: AA-123-BB o AAA-123).</span>
-                  </div>
-
-                  <div className="field">
-                    <label className="field-label" htmlFor="prod-trailer">
-                      Patente de remolque / acoplado habitual
-                    </label>
-                    <input
-                      id="prod-trailer"
-                      type="text"
-                      placeholder="Ej: AD-456-EF"
-                      value={prodTrailer}
-                      onChange={(e) => setProdTrailer(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* --------------------------- SALA ---------------------------- */}
-            {user.role === 'SALA' && (
-              <>
-                <Notice tone="info">
-                  Configuraciones de pesaje, tara de tambores y validación de cierre en sala de extracción.
-                </Notice>
-
-                <div className="grid c2" style={{ gap: 'var(--sp-4)' }}>
-                  <div className="field">
-                    <label className="field-label" htmlFor="drum-tare">
-                      Tara estándar de tambores vacíos (kg)
-                    </label>
-                    <input
-                      id="drum-tare"
-                      type="number"
-                      step="0.1"
-                      value={drumTare}
-                      onChange={(e) => setDrumTare(Number(e.target.value))}
-                    />
-                    <span className="field-hint">
-                      Peso promedio del envase metálico con aro y tapa (habitual: 18.5 kg).
-                    </span>
-                  </div>
-
-                  <div className="field">
-                    <label className="field-label" htmlFor="min-yield">
-                      Rendimiento mínimo de extracción esperado (kg / alza)
-                    </label>
-                    <input
-                      id="min-yield"
-                      type="number"
-                      step="0.5"
-                      value={minYield}
-                      onChange={(e) => setMinYield(Number(e.target.value))}
-                    />
-                    <span className="field-hint">
-                      El sistema advertirá si una extracción rinde menos de este valor.
-                    </span>
-                  </div>
-                </div>
-
                 <div className="field">
-                  <label className="row row-tight" style={{ cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={requireVerifCode}
-                      onChange={(e) => setRequireVerifCode(e.target.checked)}
-                    />
-                    <span>
-                      <strong>Exigir código de verificación de 12 dígitos</strong> para autorizar el cierre oficial del DT-e en sala
-                    </span>
+                  <label className="field-label" htmlFor="pref-trailer">
+                    Patente del acoplado
                   </label>
+                  <input
+                    id="pref-trailer"
+                    type="text"
+                    placeholder="Si lleva acoplado"
+                    autoComplete="off"
+                    value={trailerPlate}
+                    onChange={(event) => setTrailerPlate(event.target.value)}
+                  />
                 </div>
-              </>
-            )}
-
-            {/* ------------------ ACOPIADOR / FRACCIONADOR ----------------- */}
-            {(user.role === 'ACOPIADOR' || user.role === 'FRACCIONADOR' || user.role === 'EXPORTADOR') && (
-              <>
-                <Notice tone="info">
-                  Parámetros para acopio a granel, homogeneización y control de calidad bromatológica.
-                </Notice>
-
-                <div className="grid c2" style={{ gap: 'var(--sp-4)' }}>
-                  <div className="field">
-                    <label className="field-label" htmlFor="max-moisture">
-                      Límite de alerta de humedad máxima (%)
-                    </label>
-                    <input
-                      id="max-moisture"
-                      type="number"
-                      step="0.1"
-                      value={maxMoisture}
-                      onChange={(e) => setMaxMoisture(Number(e.target.value))}
-                    />
-                    <span className="field-hint">
-                      Límite comercial y bromatológico (18.0% estándar para exportación).
-                    </span>
-                  </div>
-
-                  <div className="field">
-                    <label className="field-label" htmlFor="lot-unit">
-                      Unidad de lote preferida
-                    </label>
-                    <select
-                      id="lot-unit"
-                      value={lotUnit}
-                      onChange={(e) => setLotUnit(e.target.value as any)}
-                    >
-                      <option value="KG">Kilogramos (KG)</option>
-                      <option value="TAMBOR">Tambores</option>
-                    </select>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* ----------------------- TRANSPORTISTA ----------------------- */}
-            {user.role === 'TRANSPORTISTA' && (
-              <>
-                <Notice tone="info">
-                  Configuración de tu vehículo asignado y preferencias de pantalla para controles camineros en ruta.
-                </Notice>
-
-                <div className="grid c2" style={{ gap: 'var(--sp-4)' }}>
-                  <div className="field">
-                    <label className="field-label" htmlFor="trans-plate">
-                      Patente de tu camión / chasis asignado
-                    </label>
-                    <input
-                      id="trans-plate"
-                      type="text"
-                      placeholder="Ej: AF-123-CD"
-                      value={transPlate}
-                      onChange={(e) => setTransPlate(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="field">
-                    <label className="field-label" htmlFor="trans-trailer">
-                      Patente de remolque o acoplado
-                    </label>
-                    <input
-                      id="trans-trailer"
-                      type="text"
-                      placeholder="Ej: AD-456-EF"
-                      value={transTrailer}
-                      onChange={(e) => setTransTrailer(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* -------------------- AUDITOR / LABORATORIO ------------------ */}
-            {(user.role === 'AUDITOR' || user.role === 'LABORATORIO') && (
-              <>
-                <Notice tone="info">
-                  Parámetros de inspección de lotes, balance de masas y exportación de reportes de fiscalización.
-                </Notice>
-
-                <div className="grid c2" style={{ gap: 'var(--sp-4)' }}>
-                  <div className="field">
-                    <label className="field-label" htmlFor="export-fmt">
-                      Formato de descarga de reportes de trazabilidad
-                    </label>
-                    <select
-                      id="export-fmt"
-                      value={exportFmt}
-                      onChange={(e) => setExportFmt(e.target.value as any)}
-                    >
-                      <option value="PDF">Documento PDF oficial</option>
-                      <option value="CSV">Planilla CSV de balance de masas</option>
-                      <option value="JSON">Archivo JSON estructurado (Auditoría API)</option>
-                    </select>
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div className="row row-between" style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--sp-4)', marginTop: 'var(--sp-2)' }}>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  resetRoleSettings(roleKey);
-                  feedback.saved('Valores restablecidos', 'Se volvieron a cargar los valores por defecto.');
-                }}
+              </div>
+              <div
+                className="row row-between"
+                style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--sp-4)' }}
               >
-                Restablecer valores por defecto
-              </Button>
-
-              <Button type="submit" variant="primary" icon="check">
-                Guardar configuración
-              </Button>
-            </div>
-          </form>
-        </Card>
-      </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    resetPreferences();
+                    setVehiclePlate('');
+                    setTrailerPlate('');
+                    feedback.saved('Preferencias borradas', 'Este dispositivo ya no precarga patentes.');
+                  }}
+                >
+                  Borrar
+                </Button>
+                <Button type="submit" variant="primary" icon="check">
+                  Guardar
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

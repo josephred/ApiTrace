@@ -1,69 +1,101 @@
-import { Injectable, Logger } from '@nestjs/common';
-import type {
-  CloseDteInput,
-  CloseDteResult,
-  NoArrivalInput,
-  NoArrivalResult,
-  RequestDteInput,
-  RequestDteResult,
-  SenasaGateway,
-  VoidDteInput,
-  VoidDteResult,
+import { createHash } from 'node:crypto';
+import {
+  SenasaBusinessError,
+  type DteCloseRequest,
+  type DteEmissionRequest,
+  type DteEmissionResult,
+  type RegistryLookup,
+  type SenasaGateway,
 } from './senasa.gateway';
 
-@Injectable()
+/**
+ * Simulador de SIGSA/SITA.
+ *
+ * Sirve para demostrar y probar el circuito completo (solicitud asincrona,
+ * numero, codigo de cierre, rechazos) sin credenciales oficiales. Todo lo que
+ * produce lleva el prefijo SIM- y el DT-e queda marcado como SIMULADO: un numero
+ * simulado nunca debe confundirse con uno real ni usarse para transitar.
+ *
+ * Es determinista: la misma referencia produce el mismo numero y el mismo
+ * codigo, igual que un servicio idempotente. Un reintento del outbox no genera
+ * un segundo DT-e.
+ */
 export class SimulatedSenasaGateway implements SenasaGateway {
-  private readonly logger = new Logger(SimulatedSenasaGateway.name);
+  readonly mode = 'simulado' as const;
+  readonly environment = 'local' as const;
+  readonly capabilities = { emit: true, void: true, close: true, registryLookup: false };
+  readonly description =
+    'Simulacion de SIGSA: el circuito es completo pero los numeros no tienen validez oficial.';
 
-  async requestDte(input: RequestDteInput): Promise<RequestDteResult> {
-    const randomSuffix = Math.floor(100000 + Math.random() * 900000);
-    const verifSuffix = Math.floor(1000 + Math.random() * 9000);
-    const number = `DTE-SIM-2026-${randomSuffix}`;
-    const verificationCode = `VER-${verifSuffix}`;
-    const externalId = `SIGSA-SIM-${Date.now()}-${randomSuffix}`;
-    const issuedAt = new Date();
+  async lookupApiary(): Promise<RegistryLookup | null> {
+    return null;
+  }
 
-    this.logger.log(
-      `[SIMULADOR] DT-e emitido exitosamente: ${number} (verificacion: ${verificationCode}) para movimiento ${input.movementId}`,
-    );
+  async lookupSala(): Promise<RegistryLookup | null> {
+    return null;
+  }
+
+  async emitDte(request: DteEmissionRequest): Promise<DteEmissionResult> {
+    // Las mismas precondiciones que SIGSA verifica antes de emitir (seccion 4.2.2).
+    if (!request.originCode) {
+      throw new SenasaBusinessError('ORIGEN_REQUERIDO', 'Falta el RENAPA del apiario de origen.');
+    }
+    if (!request.destinationCode) {
+      throw new SenasaBusinessError('DESTINO_REQUERIDO', 'Falta el codigo de la sala de destino.');
+    }
+    const origin = request.localRegistry?.originStatus;
+    if (origin && !['ACTIVE', 'PENDING_VERIFICATION'].includes(origin)) {
+      throw new SenasaBusinessError(
+        'ORIGEN_NO_HABILITADO',
+        `El apiario ${request.originCode} no esta habilitado en RENAPA (${origin}).`,
+      );
+    }
+    const destination = request.localRegistry?.destinationStatus;
+    if (destination && !['ACTIVE', 'PENDING_VERIFICATION'].includes(destination)) {
+      throw new SenasaBusinessError(
+        'DESTINO_NO_HABILITADO',
+        `La sala ${request.destinationCode} no esta habilitada (${destination}).`,
+      );
+    }
+    if (!request.holderTaxId) {
+      throw new SenasaBusinessError('TITULAR_SIN_CUIT', 'El titular del apiario no tiene CUIT.');
+    }
+
+    const digest = createHash('sha256').update(request.externalReference).digest('hex');
+    const body = String(Number.parseInt(digest.slice(0, 12), 16) % 1_000_000_000).padStart(9, '0');
+    const check =
+      [...body].reduce((sum, digit, index) => sum + Number(digit) * (index + 2), 0) % 10;
+    const code = String(Number.parseInt(digest.slice(12, 20), 16) % 1_000_000).padStart(6, '0');
 
     return {
-      externalId,
-      number,
-      verificationCode,
-      pdfUrl: `https://apitrace.ar/static/dte/simulado/${number}.pdf`,
-      status: 'EMITIDO',
-      feePaid: true,
-      issuedAt,
+      number: `SIM-${body}-${check}`,
+      verificationCode: code,
+      issuedAt: new Date(),
+      externalId: `SIM-${request.externalReference}`,
+      externalStatus: 'EMITIDO',
+      pdfUrl: null,
     };
   }
 
-  async voidDte(input: VoidDteInput): Promise<VoidDteResult> {
-    this.logger.log(`[SIMULADOR] DT-e ${input.dteNumber} anulado ante SENASA. Motivo: ${input.reason}`);
-    return {
-      success: true,
-      voidedAt: new Date(),
-      message: `DT-e ${input.dteNumber} anulado con exito en simulador SIGSA.`,
-    };
+  async voidDte(input: { number: string }): Promise<void> {
+    this.assertSimulated(input.number);
   }
 
-  async closeDte(input: CloseDteInput): Promise<CloseDteResult> {
-    this.logger.log(
-      `[SIMULADOR] DT-e ${input.dteNumber} cerrado en sala con codigo ${input.verificationCode} y cantidad ${input.confirmedQuantity}`,
-    );
-    return {
-      success: true,
-      closedAt: input.arrivalAt ?? new Date(),
-      message: `DT-e ${input.dteNumber} cerrado correctamente en SITA (simulador).`,
-    };
+  async closeDte(input: DteCloseRequest): Promise<void> {
+    this.assertSimulated(input.number);
   }
 
-  async reportNoArrival(input: NoArrivalInput): Promise<NoArrivalResult> {
-    this.logger.log(`[SIMULADOR] Declarado sin arribo DT-e ${input.dteNumber}. Motivo: ${input.reason}`);
-    return {
-      success: true,
-      reportedAt: new Date(),
-      message: `Reporte de sin arribo asentado para DT-e ${input.dteNumber} (simulador).`,
-    };
+  async reportNoArrival(input: { number: string }): Promise<void> {
+    this.assertSimulated(input.number);
+  }
+
+  /** El simulador no toca documentos reales: un numero sin prefijo SIM- no es suyo. */
+  private assertSimulated(number: string): void {
+    if (!number.startsWith('SIM-')) {
+      throw new SenasaBusinessError(
+        'NO_SIMULADO',
+        `El DT-e ${number} no fue emitido por el simulador; su gestion se hace en SIGSA.`,
+      );
+    }
   }
 }

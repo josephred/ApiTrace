@@ -10,12 +10,46 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 
-export class CreateApiaryDto {
+export const REGISTRATION_STATUSES = [
+  'PENDING_VERIFICATION',
+  'ACTIVE',
+  'SUSPENDED',
+  'EXPIRED',
+  'CANCELLED',
+] as const;
+
+/**
+ * Identificacion oficial del apiario en RENAPA. Es el origen del DT-e API-SEM:
+ * sin ella SIGSA no emite. Se comparte entre el alta y la edicion.
+ */
+class ApiaryRenapaFields {
+  @ApiPropertyOptional({
+    example: 'B53999-2',
+    description: 'Codigo RENAPA del apiario: Letra-N°RENAPA-N°Apiario.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  renapaCode?: string;
+
+  @ApiPropertyOptional({ enum: REGISTRATION_STATUSES, default: 'PENDING_VERIFICATION' })
+  @IsOptional()
+  @IsEnum(REGISTRATION_STATUSES)
+  renapaStatus?: (typeof REGISTRATION_STATUSES)[number];
+
+  @ApiPropertyOptional({ example: '2027-06-30', description: 'Vigencia de la habilitacion (YYYY-MM-DD).' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'renapaValidTo debe tener el formato YYYY-MM-DD' })
+  renapaValidTo?: string;
+}
+
+export class CreateApiaryDto extends ApiaryRenapaFields {
   @ApiProperty({ format: 'uuid', description: 'Establecimiento al que pertenece el apiario.' })
   @IsUUID()
   establishmentId!: string;
@@ -70,24 +104,6 @@ export class CreateApiaryDto {
   @IsDateString()
   registeredAt?: string;
 
-  @ApiPropertyOptional({ example: '12.345.678' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(40)
-  renapaCode?: string;
-
-  @ApiPropertyOptional({ example: 'ACTIVE' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(40)
-  renapaStatus?: string;
-
-  @ApiPropertyOptional({ example: '2027-12-31' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(10)
-  renapaValidTo?: string;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -95,7 +111,7 @@ export class CreateApiaryDto {
   notes?: string;
 }
 
-export class UpdateApiaryDto {
+export class UpdateApiaryDto extends ApiaryRenapaFields {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -140,24 +156,6 @@ export class UpdateApiaryDto {
   @IsOptional()
   @IsEnum(['ACTIVE', 'INACTIVE', 'SUSPENDED'])
   status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
-
-  @ApiPropertyOptional({ example: '12.345.678' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(40)
-  renapaCode?: string;
-
-  @ApiPropertyOptional({ example: 'ACTIVE' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(40)
-  renapaStatus?: string;
-
-  @ApiPropertyOptional({ example: '2027-12-31' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(10)
-  renapaValidTo?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

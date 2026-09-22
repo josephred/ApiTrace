@@ -69,8 +69,19 @@ services:
         value: "60000"
       - key: THROTTLE_LIMIT
         value: "240"
+      # DT-e: canal de emision (docs/plan-dte/09 y 10).
+      #   manual    el DT-e se emite en SIGSA y en ApiTrace se registra su numero.
+      #   simulado  numeros SIM- sin validez oficial: solo para una instancia de demo.
+      #   sigsa     API oficial de SENASA, pendiente del contrato (esqueleto).
       - key: SENASA_MODE
-        value: SIMULADO
+        value: manual
+      - key: SENASA_ENV
+        value: homologacion
+      # Barrido de vigencia: EMITIDO -> VIGENTE -> VENCIDO -> CADUCADO.
+      - key: DTE_LIFECYCLE_ENABLED
+        value: "true"
+      - key: DTE_LIFECYCLE_INTERVAL_MS
+        value: "600000"
 
   # ------------------------------------------------- Aplicacion web (PWA)
   - type: web
@@ -83,6 +94,13 @@ services:
     envVars:
       - key: VITE_API_URL
         value: https://apitrace-api.onrender.com
+      # Acceso rapido con las cuentas de prueba en la pantalla de ingreso.
+      # Esta instancia es la demostracion publica que enlaza la landing, asi que
+      # queda en true. Antes de cargar datos reales de productores: poner en
+      # false y desactivar esas cuentas con
+      # docs/plan-dte/sql/cuentas-demo-produccion.sql.
+      - key: VITE_DEMO_ACCESS
+        value: "true"
     routes:
       # La aplicacion es una SPA: cualquier ruta desconocida devuelve el shell y
       # el enrutador del cliente resuelve. Sin esto, recargar en /movements da 404.

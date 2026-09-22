@@ -9,8 +9,40 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
 } from 'class-validator';
+import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
+
+const REGISTRATION_STATUSES = [
+  'PENDING_VERIFICATION',
+  'ACTIVE',
+  'SUSPENDED',
+  'EXPIRED',
+  'CANCELLED',
+] as const;
+
+/** Habilitacion SENASA del establecimiento (la sala es el destino del DT-e API-SEM). */
+class EstablishmentSenasaFields {
+  @ApiPropertyOptional({
+    example: 'SEF-B-20010',
+    description: 'Codigo SENASA del establecimiento habilitado (sala: SEF-Letra-N°).',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  senasaCode?: string;
+
+  @ApiPropertyOptional({ enum: REGISTRATION_STATUSES, default: 'PENDING_VERIFICATION' })
+  @IsOptional()
+  @IsEnum(REGISTRATION_STATUSES)
+  senasaStatus?: (typeof REGISTRATION_STATUSES)[number];
+
+  @ApiPropertyOptional({ example: '2027-12-31', description: 'Vigencia de la habilitacion (YYYY-MM-DD).' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'senasaValidTo debe tener el formato YYYY-MM-DD' })
+  senasaValidTo?: string;
+}
 
 export const ESTABLISHMENT_TYPES = [
   'APIARIO_BASE',
@@ -22,7 +54,7 @@ export const ESTABLISHMENT_TYPES = [
   'OTRO',
 ] as const;
 
-export class CreateEstablishmentDto {
+export class CreateEstablishmentDto extends EstablishmentSenasaFields {
   @ApiProperty({ example: 'Sala de Extraccion San Andres' })
   @IsString()
   @MaxLength(200)
@@ -79,27 +111,9 @@ export class CreateEstablishmentDto {
   @IsString()
   @MaxLength(60)
   rne?: string;
-
-  @ApiPropertyOptional({ example: 'SEF-B-012' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(40)
-  senasaCode?: string;
-
-  @ApiPropertyOptional({ example: 'ACTIVE' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(40)
-  senasaStatus?: string;
-
-  @ApiPropertyOptional({ example: '2027-12-31' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(10)
-  senasaValidTo?: string;
 }
 
-export class UpdateEstablishmentDto {
+export class UpdateEstablishmentDto extends EstablishmentSenasaFields {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -153,24 +167,6 @@ export class UpdateEstablishmentDto {
   @IsOptional()
   @IsEnum(['ACTIVE', 'INACTIVE', 'SUSPENDED'])
   status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
-
-  @ApiPropertyOptional({ example: 'SEF-B-012' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(40)
-  senasaCode?: string;
-
-  @ApiPropertyOptional({ example: 'ACTIVE' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(40)
-  senasaStatus?: string;
-
-  @ApiPropertyOptional({ example: '2027-12-31' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(10)
-  senasaValidTo?: string;
 }
 
 /** CU-06: el RENSPA vincula productor, actividad y establecimiento. */
@@ -212,4 +208,12 @@ export class AssociateRenspaDto {
   @IsString()
   @MaxLength(300)
   sourceNote?: string;
+}
+
+/** Destinos habilitados de cualquier organizacion (hallazgo H-02 de la guia de pantallas). */
+export class ListReceiversQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ enum: ['SALA_EXTRACCION', 'ACOPIO', 'FRACCIONADORA'], default: 'SALA_EXTRACCION' })
+  @IsOptional()
+  @IsEnum(['SALA_EXTRACCION', 'ACOPIO', 'FRACCIONADORA'])
+  type?: 'SALA_EXTRACCION' | 'ACOPIO' | 'FRACCIONADORA';
 }

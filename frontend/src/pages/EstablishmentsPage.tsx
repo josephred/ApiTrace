@@ -67,13 +67,19 @@ export const EstablishmentsPage = () => {
       cell: (item) => <span className="mono">{item.rne ?? '—'}</span>,
     },
     {
+      // Destino oficial del DT-e: la sala se identifica por su codigo SENASA.
       key: 'senasa',
-      header: 'SENASA',
+      header: 'Código SENASA',
       cell: (item) =>
         item.senasaCode ? (
-          <span className="mono font-medium">{item.senasaCode}</span>
+          <span className="row row-tight">
+            <span className="mono">{item.senasaCode}</span>
+            {item.senasaStatus && item.senasaStatus !== 'ACTIVE' && (
+              <StatusPill status={item.senasaStatus} withIcon={false} />
+            )}
+          </span>
         ) : (
-          <span className="faint small">Sin registrar</span>
+          <span className="faint small">—</span>
         ),
     },
   ];
@@ -128,9 +134,11 @@ export const EstablishmentsPage = () => {
                   <Button size="sm" onClick={() => setRenspaFor(item)}>
                     RENSPA
                   </Button>
-                  <Button size="sm" variant="secondary" onClick={() => setSenasaFor(item)}>
-                    Habilitación SENASA
-                  </Button>
+                  {item.type !== 'APIARIO_BASE' && (
+                    <Button size="sm" variant="secondary" onClick={() => setSenasaFor(item)}>
+                      Habilitación SENASA
+                    </Button>
+                  )}
                 </>
               )}
             </div>
@@ -173,6 +181,29 @@ export const EstablishmentsPage = () => {
         />
       )}
 
+      {senasaFor && (
+        <OfficialRegistrySheet
+          title="Habilitación SENASA"
+          subtitle={senasaFor.name}
+          path={`/establishments/${senasaFor.id}`}
+          entity="/establishments"
+          names={{ code: 'senasaCode', status: 'senasaStatus', validTo: 'senasaValidTo' }}
+          codeLabel="Código SENASA"
+          codePlaceholder="SEF-B-20010"
+          help="senasaSala"
+          initial={{
+            code: senasaFor.senasaCode,
+            status: senasaFor.senasaStatus,
+            validTo: senasaFor.senasaValidTo,
+          }}
+          onClose={() => setSenasaFor(null)}
+          onDone={() => {
+            setSenasaFor(null);
+            list.reload();
+          }}
+        />
+      )}
+
       {renspaFor && (
         <RenspaSheet
           establishment={renspaFor}
@@ -180,17 +211,6 @@ export const EstablishmentsPage = () => {
           onClose={() => setRenspaFor(null)}
           onDone={() => {
             setRenspaFor(null);
-            list.reload();
-          }}
-        />
-      )}
-
-      {senasaFor && (
-        <OfficialRegistrySheet
-          target={{ type: 'establishment', data: senasaFor }}
-          onClose={() => setSenasaFor(null)}
-          onDone={() => {
-            setSenasaFor(null);
             list.reload();
           }}
         />
@@ -235,6 +255,13 @@ const CreateEstablishmentSheet = ({
     { name: 'province', label: 'Provincia' },
     { name: 'address', label: 'Domicilio', full: true },
     { name: 'rne', label: 'RNE', help: 'rne' },
+    {
+      name: 'senasaCode',
+      label: 'Código SENASA',
+      placeholder: 'SEF-B-20010',
+      help: 'senasaSala',
+      hint: 'Para salas de extracción: es el destino del DT-e.',
+    },
     { name: 'latitude', label: 'Latitud', type: 'number', step: 'any', placeholder: '-34.570300' },
     { name: 'longitude', label: 'Longitud', type: 'number', step: 'any', placeholder: '-59.105300' },
   ];

@@ -57,7 +57,7 @@ flowchart LR
 2. Ingresá el identificador que querés auditar:
    * **Número de precinto de tambor** (ej: `SEN-982103`).
    * **Código de lote** (ej: `LOT-2026-004`).
-   * **Número de DT-e oficial de SENASA** (ej: `26-004-9281740-1`).
+   * **Número de DT-e** (ej: `022440451-4`).
    * **RENSPA del productor o sala**.
 3. Presioná el botón azul **"Rastrear"**.
 
@@ -93,11 +93,11 @@ Un "hueco de trazabilidad" es una rotura lógica en la cadena de custodia donde 
 
 ---
 
-## 5. El Registro de Auditoría Inmutable (Audit Log)
+## 5. El Libro de Auditoría (Audit Log)
 
-Para garantizar que nadie dentro de la empresa ni en los organismos públicos pueda alterar los registros a posteriori, ApiTrace cuenta con un **Libro de Auditoría Inmutable**.
+ApiTrace lleva un **libro de auditoría**: cada operación deja una entrada que la aplicación agrega y nunca edita ni borra.
 
-![Listado del registro inmutable de auditoría](../capturas/escritorio/101-auditoria-listado.png)
+![Listado del libro de auditoría](../capturas/escritorio/101-auditoria-listado.png)
 
 Cada vez que un usuario:
 * Da de alta un lote o apiario,
@@ -105,7 +105,7 @@ Cada vez que un usuario:
 * Intenta cancelar un movimiento despachado,
 * O inicia sesión en el sistema,
 
-El sistema genera una entrada criptográficamente sellada que almacena:
+Cada entrada guarda:
 1. **Marca temporal exacta (Timestamp ISO 8601)** al milisegundo.
 2. **Usuario y CUIT responsable**.
 3. **Dirección IP de conexión** y dispositivo utilizado.
@@ -121,7 +121,7 @@ El sistema genera una entrada criptográficamente sellada que almacena:
 Los técnicos y analistas de laboratorio cargan los resultados analíticos para dictaminar la conformidad de los lotes antes de su comercialización:
 
 ### Parámetros Físico-Químicos Reglamentarios:
-* **Humedad (Refractometría)**: Límite máximo según CAA y SENASA: **18.0%**. Mieles con mayor humedad se bloquean automáticamente en el sistema para evitar fermentación.
+* **Humedad (Refractometría)**: Límite máximo habitual para miel a granel: **18,0 %** (verificar el valor vigente en el Código Alimentario Argentino y en la normativa de SENASA). ApiTrace registra el valor medido junto al lote; la decisión de bloquear o reprocesar la toma la sala o el acopiador.
 * **HMF (Hidroximetilfurfural)**: Máximo permitido: **40 mg/kg** (o 60 mg/kg en regiones tropicales). Un valor elevado indica miel vieja, sobrecalentada o adulterada.
 * **Actividad Diastásica**: Mínimo **8 unidades Schade**. Refleja la frescura y conservación de las enzimas naturales de la abeja.
 * **Contenido de Azúcares Aparentes**: Glucosa + Fructosa ≥ 65 g/100g. Sacarosa aparente ≤ 5 g/100g.

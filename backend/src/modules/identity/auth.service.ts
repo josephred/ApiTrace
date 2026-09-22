@@ -9,13 +9,25 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { compare, hash } from 'bcryptjs';
 import { createHmac, randomBytes } from 'node:crypto';
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../database/database.module';
 import { organization, refreshToken, user } from '../../database/schema';
 import { AuditService } from '../../common/services/audit.service';
 import type { AuthenticatedUser } from '../../common/types';
 import type { JwtPayload } from './jwt.strategy';
 import type { LoginDto, RegisterDto } from './dto/auth.dto';
+
+/**
+ * Dominios de las cuentas de demostracion, en orden de preferencia, para el
+ * atajo de ingresar solo el nombre corto ("admin", "productor").
+ */
+const DEMO_LOGIN_DOMAINS = [
+  'apitrace',
+  'apitrace.test',
+  'apitrace.ar',
+  'apigestion.test',
+  'beetrace.test',
+] as const;
 
 export interface AuthTokens {
   accessToken: string;
@@ -100,24 +112,18 @@ export class AuthService {
 
   /** CU-02. */
   async login(dto: LoginDto, context?: { ip?: string; userAgent?: string }): Promise<AuthTokens> {
-    const rawEmail = dto.email.trim().toLowerCase();
-    const username = rawEmail.split('@')[0];
+    const typed = dto.email.trim().toLowerCase();
+    // Un correo completo identifica una sola cuenta: se busca exacto. Un nombre
+    // corto ("productor") es el atajo de las cuentas de demostracion y se
+    // resuelve en un orden fijo, para que nunca dependa del orden de la base.
+    const candidates = typed.includes('@')
+      ? [typed]
+      : DEMO_LOGIN_DOMAINS.map((domain) => `${typed}@${domain}`);
 
-    const candidates = [
-      rawEmail,
-      `${username}@apitrace`,
-      `${username}@apitrace.test`,
-      `${username}@apitrace.ar`,
-      `${username}@apigestion.test`,
-      `${username}@beetrace.test`,
-    ];
-
-    const rows = await this.db
-      .select()
-      .from(user)
-      .where(or(...candidates.map((candidate) => eq(user.email, candidate))))
-      .limit(1);
-    const record = rows[0];
+    const rows = await this.db.select().from(user).where(inArray(user.email, candidates));
+    const record = candidates
+      .map((candidate) => rows.find((row) => row.email === candidate))
+      .find((row) => row !== undefined);
 
     // Mensaje unico para credenciales invalidas: no revelar si el correo existe.
     const invalid = new UnauthorizedException('Credenciales invalidas.');
@@ -127,15 +133,10 @@ export class AuthService {
       throw invalid;
     }
 
-    // Para usuarios demo de la plataforma, aceptar la contraseña oficial de prueba ApiTrace2026!
-    const isTestUser = record.email.includes('@apitrace') || record.email.endsWith('.test');
-    const isAcceptedDemoPassword =
-      isTestUser &&
-      ['apitrace2026!', 'apigestion2026!', 'beetrace2026!'].includes(
-        dto.password.trim().toLowerCase(),
-      );
-
-    if (!isAcceptedDemoPassword && !(await compare(dto.password, record.passwordHash))) {
+    // Solo la contrasena guardada abre la cuenta. No hay contrasenas "de prueba"
+    // aceptadas por dominio: en produccion serian una puerta abierta para
+    // cualquier cuenta @apitrace (ver docs/plan-dte/09, hallazgo S-01).
+    if (!(await compare(dto.password, record.passwordHash))) {
       throw invalid;
     }
     if (record.status !== 'ACTIVE') {

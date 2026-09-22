@@ -68,15 +68,21 @@ npm install
 npm run dev                # aplicación en :5173
 ```
 
-Usuarios del seed — contraseña `ApiTrace2026!`:
+Usuarios del seed — contraseña `ApiTrace2026!` (o la que se pase en
+`SEED_PASSWORD`). En la pantalla de ingreso alcanza con el nombre corto
+(`admin`, `productor`, …):
 
 | Correo | Rol |
 |---|---|
-| `admin@apitrace.test` | ADMIN — ve todas las organizaciones |
-| `productor@apitrace.test` | PRODUCTOR |
-| `sala@apitrace.test` | SALA |
-| `acopio@apitrace.test` | ACOPIADOR |
-| `auditor@apitrace.test` | AUDITOR — solo lectura, alcance global |
+| `admin@apitrace` | ADMIN — ve todas las organizaciones |
+| `productor@apitrace` | PRODUCTOR |
+| `sala@apitrace` | SALA |
+| `acopio@apitrace` | ACOPIADOR |
+| `auditor@apitrace` | AUDITOR — solo lectura, alcance global |
+| `laboratorio@apitrace` | LABORATORIO |
+
+> Son cuentas de demostración con una contraseña conocida. En una instancia con
+> datos reales hay que desactivarlas: `docs/plan-dte/sql/cuentas-demo-produccion.sql`.
 
 ---
 

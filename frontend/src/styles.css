@@ -1518,8 +1518,81 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   }
 }
 
+/* ========================================================================
+   DT-e
+   ======================================================================== */
+
+/* Semaforo de transito: es lo primero que se lee en el detalle del DT-e. */
+.transit-light {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid;
+  border-left-width: 6px;
+}
+.transit-light-body { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.transit-light-body svg { flex-shrink: 0; }
+.transit-light-title { font-weight: 700; font-size: var(--fs-lg); }
+.transit-success { background: var(--success-bg); color: var(--success-fg); border-color: var(--success-br); border-left-color: var(--success-fg); }
+.transit-warning { background: var(--warning-bg); color: var(--warning-fg); border-color: var(--warning-br); border-left-color: var(--warning-fg); }
+.transit-danger  { background: var(--danger-bg);  color: var(--danger-fg);  border-color: var(--danger-br);  border-left-color: var(--danger-fg); }
+.transit-neutral { background: var(--surface-2);  color: var(--text-2);     border-color: var(--border);     border-left-color: var(--border-control); }
+
+/* Verificacion previa: lo que impide emitir va arriba y con color. */
+.check-list { list-style: none; margin: 0 0 var(--sp-4); padding: 0; display: grid; gap: var(--sp-2); }
+.check {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+}
+.check svg { flex-shrink: 0; margin-top: 2px; }
+.check-label { font-weight: 650; }
+.check-message { color: var(--text-2); }
+.check-ok svg { color: var(--success-fg); }
+.check-info svg { color: var(--info-fg); }
+.check-warning { background: var(--warning-bg); border-color: var(--warning-br); }
+.check-warning svg { color: var(--warning-fg); }
+.check-error { background: var(--danger-bg); border-color: var(--danger-br); }
+.check-error svg { color: var(--danger-fg); }
+
+/* Codigo de cierre: se copia a mano, tiene que leerse sin dudas. */
+.code-box {
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  border: 1px dashed var(--border-control);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  user-select: all;
+}
+
+.plain-list { list-style: none; margin: 0; padding: 0; }
+.plain-list li + li { margin-top: var(--sp-2); }
+
+/* La constancia imprimible solo existe en papel. */
+.print-only { display: none; }
+
 @media print {
   .sidebar, .tabbar, .statusbar, .toast-region { display: none !important; }
   .content { padding: 0; max-width: none; }
   .card { box-shadow: none; border-color: #ccc; }
+
+  /* Si la pagina trae constancia, se imprime solo la constancia. */
+  .stack:has(> .print-only) > :not(.print-only) { display: none !important; }
+  .print-only { display: block !important; }
+  .dte-print { color: #000; font-size: 11pt; }
+  .dte-print h1 { font-size: 15pt; margin: 0 0 8pt; }
+  .dte-print table { width: 100%; border-collapse: collapse; margin-top: 8pt; }
+  .dte-print th,
+  .dte-print td { text-align: left; vertical-align: top; padding: 4pt 6pt; border: 1px solid #999; }
+  .dte-print th { width: 34%; background: #f0f0f0; }
 }

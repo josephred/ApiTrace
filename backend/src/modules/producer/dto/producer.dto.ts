@@ -157,29 +157,35 @@ export class AssociateRenapaDto {
   sourceNote?: string;
 }
 
+export const SENASA_SERVICES = ['SIGSA_DTE', 'SITA'] as const;
+export const SENASA_DELEGATION_STATUSES = [
+  'NO_INICIADA',
+  'PENDIENTE',
+  'ACEPTADA',
+  'REVOCADA',
+  'RECHAZADA',
+] as const;
+
+/**
+ * Estado de la delegacion de un servicio SENASA en ApiTrace (especificacion
+ * DT-e, 3.3). La delegacion se hace en ARCA; aca solo se deja constancia.
+ */
 export class UpsertSenasaDelegationDto {
-  @ApiProperty({ enum: ['SIGSA_DTE', 'SITA'], example: 'SIGSA_DTE' })
-  @IsEnum(['SIGSA_DTE', 'SITA'])
-  service!: 'SIGSA_DTE' | 'SITA';
+  @ApiProperty({ enum: SENASA_DELEGATION_STATUSES, example: 'ACEPTADA' })
+  @IsEnum(SENASA_DELEGATION_STATUSES)
+  status!: (typeof SENASA_DELEGATION_STATUSES)[number];
 
-  @ApiProperty({
-    enum: ['NO_INICIADA', 'PENDIENTE', 'ACEPTADA', 'REVOCADA', 'RECHAZADA'],
-    example: 'ACEPTADA',
-  })
-  @IsEnum(['NO_INICIADA', 'PENDIENTE', 'ACEPTADA', 'REVOCADA', 'RECHAZADA'])
-  status!: 'NO_INICIADA' | 'PENDIENTE' | 'ACEPTADA' | 'REVOCADA' | 'RECHAZADA';
-
-  @ApiPropertyOptional({ example: '30-71829384-5', description: 'CUIT de la empresa delegada en ARCA' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(20)
-  delegatedToTaxId?: string;
-
-  @ApiPropertyOptional({ example: 'F3283-99481', description: 'Numero de formulario F3283/E de ARCA' })
+  @ApiPropertyOptional({ example: '123456789', description: 'Numero de la constancia F3283/E.' })
   @IsOptional()
   @IsString()
   @MaxLength(60)
   formNumber?: string;
+
+  @ApiPropertyOptional({ example: '30-71234567-9', description: 'CUIT del representante (ApiTrace).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  delegatedToTaxId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -187,4 +193,3 @@ export class UpsertSenasaDelegationDto {
   @MaxLength(600)
   notes?: string;
 }
-

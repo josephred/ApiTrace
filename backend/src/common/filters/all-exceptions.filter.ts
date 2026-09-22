@@ -8,14 +8,14 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
-import { DomainRuleException } from '../exceptions/domain-rule.exception';
-
 interface ErrorBody {
   statusCode: number;
   error: string;
-  code?: string;
-  details?: Record<string, unknown>;
   message: string | string[];
+  /** Codigo estable de la regla violada (ver DomainRuleException). */
+  code?: string;
+  /** Datos para que el cliente ofrezca una salida (p. ej. cantidades en conflicto). */
+  details?: Record<string, unknown>;
   correlationId?: string;
   path: string;
   timestamp: string;
@@ -37,13 +37,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let code: string | undefined;
     let details: Record<string, unknown> | undefined;
 
-    if (exception instanceof DomainRuleException) {
-      status = exception.getStatus();
-      code = exception.code;
-      error = exception.code;
-      message = exception.message;
-      details = exception.details;
-    } else if (exception instanceof HttpException) {
+    if (exception instanceof HttpException) {
       status = exception.getStatus();
       const payload = exception.getResponse();
       if (typeof payload === 'string') {
@@ -78,9 +72,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const body: ErrorBody = {
       statusCode: status,
       error,
+      message,
       ...(code ? { code } : {}),
       ...(details ? { details } : {}),
-      message,
       correlationId: request.correlationId,
       path: request.url,
       timestamp: new Date().toISOString(),

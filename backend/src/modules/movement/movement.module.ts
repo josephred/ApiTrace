@@ -2,11 +2,14 @@ import { Module } from '@nestjs/common';
 import { MovementController, MovementRuleController } from './movement.controller';
 import { MovementService } from './movement.service';
 import { MovementRuleService } from './movement-rule.service';
-import { DteService } from './dte.service';
 import { DteController } from './dte.controller';
+import { DteService } from './dte.service';
+import { DteQueryService } from './dte-query.service';
+import { DteChecksService } from './dte-checks.service';
+import { DteQueries } from './dte.queries';
 import { DteLifecycleService } from './dte-lifecycle.service';
 import { DteSyncWorker } from './dte-sync.worker';
-import { SenasaGatewayProvider } from './senasa/senasa.provider';
+import { senasaGatewayProvider } from './senasa/senasa.provider';
 import { EstablishmentModule } from '../establishment/establishment.module';
 
 @Module({
@@ -15,11 +18,21 @@ import { EstablishmentModule } from '../establishment/establishment.module';
   providers: [
     MovementService,
     MovementRuleService,
-    DteService,
+    DteQueries,
     DteLifecycleService,
+    DteChecksService,
+    DteQueryService,
+    DteService,
     DteSyncWorker,
-    SenasaGatewayProvider,
+    senasaGatewayProvider,
   ],
-  exports: [MovementService, MovementRuleService, DteService, SenasaGatewayProvider],
+  exports: [
+    MovementService,
+    MovementRuleService,
+    DteService,
+    DteQueryService,
+    DteQueries,
+    DteLifecycleService,
+  ],
 })
 export class MovementModule {}

@@ -31,17 +31,24 @@ export interface AppConfig {
     ttlMs: number;
     limit: number;
   };
+  /** Integracion con SENASA (SIGSA/SITA). Ver src/modules/movement/senasa. */
   senasa: {
-    mode: 'MANUAL' | 'SIMULADO' | 'SIGSA';
-    apiUrl: string;
-    apiKey: string;
+    mode: 'manual' | 'simulado' | 'sigsa';
+    environment: 'homologacion' | 'produccion';
+    sigsaBaseUrl: string | null;
+    /** CUIT del representante (ApiTrace) al que los titulares delegan los servicios. */
+    platformTaxId: string | null;
     timeoutMs: number;
   };
+  /** Barrido de vigencia del DT-e (EMITIDO -> VIGENTE -> VENCIDO -> CADUCADO). */
   dteLifecycle: {
     enabled: boolean;
     intervalMs: number;
   };
 }
+
+const SENASA_MODES = ['manual', 'simulado', 'sigsa'] as const;
+const SENASA_ENVIRONMENTS = ['homologacion', 'produccion'] as const;
 
 const toBool = (value: string | undefined, fallback: boolean): boolean => {
   if (value === undefined || value === '') return fallback;
@@ -111,16 +118,17 @@ export const configuration = (): AppConfig => {
       limit: toInt(process.env.THROTTLE_LIMIT, 240),
     },
     senasa: {
-      mode: (['MANUAL', 'SIMULADO', 'SIGSA'].includes(process.env.SENASA_MODE?.toUpperCase() ?? '')
-        ? process.env.SENASA_MODE!.toUpperCase()
-        : 'SIMULADO') as 'MANUAL' | 'SIMULADO' | 'SIGSA',
-      apiUrl: process.env.SENASA_API_URL ?? 'https://api-sem.senasa.gob.ar/v1',
-      apiKey: process.env.SENASA_API_KEY ?? '',
+      mode: (process.env.SENASA_MODE ?? 'manual').trim().toLowerCase() as AppConfig['senasa']['mode'],
+      environment: (process.env.SENASA_ENV ?? 'homologacion')
+        .trim()
+        .toLowerCase() as AppConfig['senasa']['environment'],
+      sigsaBaseUrl: process.env.SENASA_SIGSA_URL?.trim() || null,
+      platformTaxId: process.env.SENASA_PLATFORM_CUIT?.replace(/-/g, '').trim() || null,
       timeoutMs: toInt(process.env.SENASA_TIMEOUT_MS, 15000),
     },
     dteLifecycle: {
       enabled: toBool(process.env.DTE_LIFECYCLE_ENABLED, true),
-      intervalMs: toInt(process.env.DTE_LIFECYCLE_INTERVAL_MS, 60000),
+      intervalMs: toInt(process.env.DTE_LIFECYCLE_INTERVAL_MS, 600_000),
     },
   };
 };
@@ -143,6 +151,15 @@ export const validateConfig = (config: AppConfig): AppConfig => {
   }
   if (config.jwt.accessSecret && config.jwt.accessSecret === config.jwt.refreshSecret) {
     errors.push('JWT_ACCESS_SECRET y JWT_REFRESH_SECRET deben ser distintas.');
+  }
+  if (!SENASA_MODES.includes(config.senasa.mode)) {
+    errors.push(`SENASA_MODE debe ser uno de: ${SENASA_MODES.join(', ')}.`);
+  }
+  if (!SENASA_ENVIRONMENTS.includes(config.senasa.environment)) {
+    errors.push(`SENASA_ENV debe ser uno de: ${SENASA_ENVIRONMENTS.join(', ')}.`);
+  }
+  if (config.senasa.mode === 'sigsa' && !config.senasa.platformTaxId) {
+    errors.push('SENASA_MODE=sigsa requiere SENASA_PLATFORM_CUIT (CUIT del representante).');
   }
 
   if (errors.length > 0) {

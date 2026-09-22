@@ -8,15 +8,18 @@ import {
 } from '@nestjs/common';
 import { and, desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../database/database.module';
-import { apiary, dte, establishment, movement, reception } from '../../database/schema';
-import { DomainRuleException } from '../../common/exceptions/domain-rule.exception';
+import { apiary, dte, movement, reception } from '../../database/schema';
 import { AccessControlService } from '../../common/services/access-control.service';
 import { CodeService } from '../../common/services/code.service';
 import { DomainEvents, EventsService } from '../../common/services/events.service';
+import { DomainRuleException } from '../../common/exceptions/domain-rule.exception';
+import type { DbExecutor } from '../../common/services/types';
 import { quantitiesDiffer, toNumber } from '../../common/utils/numbers';
 import { EstablishmentService } from '../establishment/establishment.service';
 import { MovementRuleService } from './movement-rule.service';
-import { getTransitSemaphore } from './dte.rules';
+import { DteQueries } from './dte.queries';
+import { presentDte } from './dte.presenter';
+import { DTE_RULES, effectiveStatus, isVoid, validateConfirmedQuantity } from './dte.rules';
 import type { AuthenticatedUser } from '../../common/types';
 import type { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import type {
@@ -46,10 +49,19 @@ export class MovementService {
     private readonly codes: CodeService,
     private readonly establishments: EstablishmentService,
     private readonly rules: MovementRuleService,
+    private readonly dtes: DteQueries,
   ) {}
 
-  /** CU-09. */
-  async create(dto: CreateMovementDto, actor: AuthenticatedUser, correlationId?: string) {
+  /**
+   * CU-09. Con `executor` corre dentro de una transaccion ajena: la solicitud
+   * de DT-e crea el movimiento y el documento en una sola transaccion.
+   */
+  async create(
+    dto: CreateMovementDto,
+    actor: AuthenticatedUser,
+    correlationId?: string,
+    executor?: DbExecutor,
+  ) {
     this.access.assertCanWrite(actor);
 
     if (dto.originEstablishmentId === dto.destinationEstablishmentId) {
@@ -97,7 +109,7 @@ export class MovementService {
       at: scheduledAt,
     });
 
-    return this.db.transaction(async (tx) => {
+    const run = async (tx: DbExecutor) => {
       const code = await this.codes.next('MOV', tx, scheduledAt);
       const [created] = await tx
         .insert(movement)
@@ -149,7 +161,9 @@ export class MovementService {
       );
 
       return { ...created, appliedRule: decision };
-    });
+    };
+
+    return executor ? run(executor) : this.db.transaction((tx) => run(tx));
   }
 
   async list(
@@ -210,19 +224,21 @@ export class MovementService {
       destination?.organizationId ?? null,
     );
 
-    const [document] = await this.db
-      .select()
-      .from(dte)
-      .where(eq(dte.movementId, id))
-      .orderBy(desc(dte.createdAt))
-      .limit(1);
+    // Puede haber varios DT-e (anulado y reemitido): el que importa es el que esta en juego.
+    const current = await this.dtes.currentForMovement(id);
     const [received] = await this.db
       .select()
       .from(reception)
       .where(eq(reception.movementId, id))
       .limit(1);
 
-    return { ...record, origin, destination, dte: document ?? null, reception: received ?? null };
+    return {
+      ...record,
+      origin,
+      destination,
+      dte: current ? presentDte(current, actor) : null,
+      reception: received ?? null,
+    };
   }
 
   /** Uso interno (extraccion, trazabilidad): sin control de acceso. */
@@ -254,26 +270,35 @@ export class MovementService {
     const dispatchedAt = dto.dispatchedAt ? new Date(dto.dispatchedAt) : new Date();
 
     if (record.requiresDocument) {
-      if (!record.dte) {
+      const document = await this.dtes.currentForMovement(id);
+      if (!document || isVoid(document.status)) {
         throw new DomainRuleException(
-          HttpStatus.BAD_REQUEST,
-          'DTE_REQUERIDO',
-          `Este movimiento requiere ${record.requiredDocumentType ?? 'un DT-e'} antes de despacharse. Genere el DT-e con POST /dte/draft.`,
+          HttpStatus.CONFLICT,
+          'DOCUMENTO_REQUERIDO',
+          `Este movimiento requiere ${record.requiredDocumentType ?? 'un documento'} antes de despacharse. Genere el DT-e con POST /movements/${id}/dte.`,
         );
       }
-      const semaphore = getTransitSemaphore({
-        status: record.dte.status,
-        loadDate: record.dte.loadDate,
-        expiryDate: record.dte.expiryDate,
-        now: dispatchedAt,
-      });
-
-      if (!semaphore.canTransit) {
+      if (document.movementTypeCode === DTE_RULES.movementTypeCode) {
+        // Semaforo de transito (checklist 9): solo un DT-e VIGENTE en el
+        // momento de la salida habilita la ruta.
+        const status = effectiveStatus(document.status, document, dispatchedAt);
+        if (status !== 'VIGENTE') {
+          throw new DomainRuleException(
+            HttpStatus.CONFLICT,
+            'DTE_NO_VIGENTE',
+            status === 'EMITIDO'
+              ? `El DT-e se habilita el ${document.loadDate} a las 00:00: antes no se puede transitar.`
+              : ['BORRADOR', 'SOLICITADO'].includes(status)
+                ? 'El DT-e todavia no fue emitido: no ampara el traslado.'
+                : `El DT-e esta ${status}: no ampara el traslado. Anulalo (si corresponde) y emiti uno nuevo.`,
+            { dteStatus: status, loadDate: document.loadDate, expiryDate: document.expiryDate },
+          );
+        }
+      } else if (!['EMITIDO', 'VIGENTE'].includes(document.status)) {
         throw new DomainRuleException(
-          HttpStatus.BAD_REQUEST,
-          'TRANSITO_NO_AUTORIZADO',
-          `El semáforo de tránsito prohíbe el despacho (${semaphore.semaphore}): ${semaphore.reason}`,
-          { dteStatus: record.dte.status, semaphore: semaphore.semaphore, reason: semaphore.reason },
+          HttpStatus.CONFLICT,
+          'DOCUMENTO_NO_EMITIDO',
+          `El documento asociado esta en estado ${document.status}; debe estar EMITIDO para despachar.`,
         );
       }
     }
@@ -332,15 +357,32 @@ export class MovementService {
     const expected = toNumber(record.quantity);
     const receivedQuantity = dto.receivedQuantity;
 
-    if (record.dte?.declaredQuantity) {
-      const declared = Number(record.dte.declaredQuantity);
-      if (receivedQuantity > declared) {
+    // Con DT-e exigido, la descarga necesita un documento en juego y, si se
+    // cuenta en alzas, no puede superar lo declarado (especificacion 5.2).
+    if (record.requiresDocument && record.requiredDocumentType === 'DTE') {
+      const document = await this.dtes.currentForMovement(id);
+      if (!document || isVoid(document.status)) {
         throw new DomainRuleException(
-          HttpStatus.BAD_REQUEST,
-          'EXCESO_CANTIDAD_DECLARADA',
-          `La cantidad recibida (${receivedQuantity}) supera la declarada en el DT-e (${declared}). La normativa de SENASA no permite recibir alzas o miel en exceso sin un DT-e complementario.`,
-          { declaredQuantity: declared, receivedQuantity },
+          HttpStatus.CONFLICT,
+          'DTE_REQUERIDO',
+          'El movimiento no tiene un DT-e en juego: emiti uno nuevo antes de descargar.',
         );
+      }
+      if ((dto.unit ?? record.unit) === 'ALZA') {
+        const violation = validateConfirmedQuantity(document.declaredQuantity, receivedQuantity);
+        if (violation) {
+          throw new DomainRuleException(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            violation.code,
+            violation.message,
+            {
+              dteId: document.id,
+              declaredQuantity: document.declaredQuantity,
+              confirmedQuantity: receivedQuantity,
+              minimumToDeclare: Math.ceil(receivedQuantity),
+            },
+          );
+        }
       }
     }
 
@@ -428,11 +470,50 @@ export class MovementService {
         .where(eq(movement.id, id))
         .returning();
 
-      if (record.dte && !['CLOSED', 'CANCELLED'].includes(record.dte.status)) {
-        await tx
+      // Un DT-e que todavia no transito se da de baja con el movimiento. Sin
+      // dato del arancel, la baja es ELIMINADO; si se abono, anular desde /dte.
+      const document = await this.dtes.currentForMovement(id, tx);
+      const now = new Date();
+      const documentStatus = document ? effectiveStatus(document.status, document, now) : null;
+      if (
+        document &&
+        documentStatus &&
+        ['BORRADOR', 'SOLICITADO', 'EMITIDO', 'VIGENTE'].includes(documentStatus)
+      ) {
+        const reason = `Movimiento cancelado: ${dto.reason}`.slice(0, 600);
+        const [voided] = await tx
           .update(dte)
-          .set({ status: 'CANCELLED', updatedAt: new Date() })
-          .where(eq(dte.movementId, id));
+          .set({ status: 'ELIMINADO', voidedAt: now, voidReason: reason, updatedAt: now })
+          .where(and(eq(dte.id, document.id), eq(dte.status, document.status)))
+          .returning();
+        if (voided) {
+          await this.dtes.recordTransition(tx, {
+            dteId: document.id,
+            from: document.status,
+            to: 'ELIMINADO',
+            source: 'USUARIO',
+            reason,
+            actorUserId: actor.id,
+            correlationId,
+          });
+          await this.events.publish(
+            {
+              eventType: DomainEvents.DteVoided,
+              entityType: 'movement',
+              entityId: id,
+              actorUserId: actor.id,
+              correlationId,
+              payload: {
+                dteId: document.id,
+                number: document.number,
+                status: 'ELIMINADO',
+                reason,
+                feePaid: false,
+              },
+            },
+            tx,
+          );
+        }
       }
 
       await this.events.publish(

@@ -99,8 +99,8 @@ describe('ApiTrace - columna vertebral CU-04 a CU-18 (e2e)', () => {
         name: 'DT-e obligatorio material melario apiario -> sala',
         movementType: 'MATERIAL_MELARIO',
         materialType: 'MATERIAL_MELARIO',
-        sourceEstablishmentType: 'APIARIO_BASE',
-        destinationEstablishmentType: 'SALA_EXTRACCION',
+        originType: 'APIARIO_BASE',
+        destinationType: 'SALA_EXTRACCION',
         requiresDocument: true,
         requiredDocumentType: 'DTE',
         effectiveFrom: new Date('2026-08-01T00:00:00Z'),
@@ -163,6 +163,37 @@ describe('ApiTrace - columna vertebral CU-04 a CU-18 (e2e)', () => {
         .send({ email: 'noexiste@test.local', password: 'incorrecta' })
         .expect(401);
       expect(unknown.body.message).toBe(response.body.message);
+    });
+
+    it('solo acepta la contrasena guardada, tambien en cuentas del dominio de la plataforma', async () => {
+      // Antes se aceptaban contrasenas genericas para cualquier cuenta @apitrace
+      // o .test: en produccion era una puerta abierta (docs/plan-dte/09, S-01).
+      await createUser('demo@apitrace.test', 'Cuenta de demostracion', 'AUDITOR', null);
+      for (const password of ['123456', 'password', 'admin', 'apitrace2026!']) {
+        await request(http)
+          .post(`${PREFIX}/auth/login`)
+          .send({ email: 'demo@apitrace.test', password })
+          .expect(401);
+        await request(http)
+          .post(`${PREFIX}/auth/login`)
+          .send({ email: 'demo', password })
+          .expect(401);
+      }
+      await login('demo@apitrace.test');
+    });
+
+    it('un correo completo abre solo su propia cuenta; el nombre corto es un atajo de demostracion', async () => {
+      // Antes "demo@cualquier.dominio" se resolvia a demo@apitrace.test si existia:
+      // el correo escrito no identificaba la cuenta (docs/plan-dte/09, S-01).
+      await request(http)
+        .post(`${PREFIX}/auth/login`)
+        .send({ email: 'demo@otro-dominio.com', password: PASSWORD })
+        .expect(401);
+      const shortcut = await request(http)
+        .post(`${PREFIX}/auth/login`)
+        .send({ email: 'demo', password: PASSWORD })
+        .expect(200);
+      expect(shortcut.body.user.email).toBe('demo@apitrace.test');
     });
   });
 
@@ -356,7 +387,8 @@ describe('ApiTrace - columna vertebral CU-04 a CU-18 (e2e)', () => {
         .set(auth(productorUser))
         .send({ number: 'DTE-TEST-0001' })
         .expect(201);
-      expect(dte.body.status).toBe('ISSUED');
+      // Estado oficial SENASA: emitido y todavia no vigente (la carga es el 10/11).
+      expect(dte.body.status).toBe('EMITIDO');
       expect(dte.body.syncStatus).toBe('PENDING_SYNC');
       expect(dte.body.originRenspa).toBe('01.001.0.00001/01');
 
@@ -408,10 +440,11 @@ describe('ApiTrace - columna vertebral CU-04 a CU-18 (e2e)', () => {
         .set(auth(productorUser))
         .send({ number: 'DTE-TEST-0002' })
         .expect(201);
+      // Semaforo de transito: la salida tiene que caer dentro de la vigencia del DT-e.
       await request(http)
         .post(`${PREFIX}/movements/${otro.body.id}/dispatch`)
         .set(auth(productorUser))
-        .send({})
+        .send({ dispatchedAt: '2026-11-11T10:00:00.000Z' })
         .expect(200);
 
       await request(http)
@@ -427,7 +460,7 @@ describe('ApiTrace - columna vertebral CU-04 a CU-18 (e2e)', () => {
         .set(auth(salaUser))
         .send({ closedAt: '2026-11-10T15:00:00.000Z' })
         .expect(200);
-      expect(response.body.status).toBe('CLOSED');
+      expect(response.body.status).toBe('CERRADO');
       expect(response.body.closedAt).toBeTruthy();
     });
 

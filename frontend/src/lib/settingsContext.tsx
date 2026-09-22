@@ -1,212 +1,100 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useState,
-  type ReactNode,
-} from 'react';
-import type { UserRole } from './types';
+import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 
-export interface AdminRoleSettings {
-  senasaDefaultMode: 'SIGSA' | 'MANUAL' | 'SIMULADO';
-  overestimateMelariosPercent: number;
-  strictPreflightValidation: boolean;
-  autoRefreshMinutes: number;
+/**
+ * Preferencias que se guardan en este dispositivo.
+ *
+ * Solo se guarda lo que la aplicación usa de verdad: una preferencia que no
+ * cambia nada confunde más de lo que ayuda. Las reglas del DT-e (vigencia,
+ * gracia, canal de emisión) no son preferencias: las fija la norma y el
+ * servidor, y la pantalla de Configuración las muestra de solo lectura.
+ */
+export interface DevicePreferences {
+  /** Patente habitual del vehículo (chasis). Precarga el paso «Transporte» del DT-e. */
+  vehiclePlate: string;
+  /** Patente habitual del acoplado, si lo hay. */
+  trailerPlate: string;
 }
 
-export interface ProducerRoleSettings {
-  defaultRenapaNumber: string;
-  defaultPlateVehicle: string;
-  defaultPlateTrailer: string;
-  notifyDteExpiryHours: number;
-}
-
-export interface SalaRoleSettings {
-  defaultDrumTareKg: number;
-  minYieldKgPerMelario: number;
-  maxYieldKgPerMelario: number;
-  requireVerificationCodeOnClose: boolean;
-}
-
-export interface AcopiadorRoleSettings {
-  maxMoisturePercent: number;
-  preferredLotUnit: 'KG' | 'TAMBOR';
-  alertOnDiscrepancyPercent: number;
-}
-
-export interface TransportistaRoleSettings {
-  defaultPlateVehicle: string;
-  defaultPlateTrailer: string;
-  highContrastSemaphore: boolean;
-}
-
-export interface AuditorRoleSettings {
-  maxMoistureAlert: number;
-  maxHmfMgKg: number;
-  defaultExportFormat: 'PDF' | 'CSV' | 'JSON';
-  showTechnicalCodes: boolean;
-}
-
-export interface SystemSettingsState {
-  admin: AdminRoleSettings;
-  productor: ProducerRoleSettings;
-  sala: SalaRoleSettings;
-  acopiador: AcopiadorRoleSettings;
-  transportista: TransportistaRoleSettings;
-  auditor: AuditorRoleSettings;
-}
-
-const DEFAULT_SETTINGS: SystemSettingsState = {
-  admin: {
-    senasaDefaultMode: 'SIGSA',
-    overestimateMelariosPercent: 15,
-    strictPreflightValidation: true,
-    autoRefreshMinutes: 5,
-  },
-  productor: {
-    defaultRenapaNumber: 'BA-09241',
-    defaultPlateVehicle: 'AF-123-CD',
-    defaultPlateTrailer: 'AD-456-EF',
-    notifyDteExpiryHours: 24,
-  },
-  sala: {
-    defaultDrumTareKg: 18.5,
-    minYieldKgPerMelario: 15,
-    maxYieldKgPerMelario: 32,
-    requireVerificationCodeOnClose: true,
-  },
-  acopiador: {
-    maxMoisturePercent: 18.0,
-    preferredLotUnit: 'KG',
-    alertOnDiscrepancyPercent: 1.0,
-  },
-  transportista: {
-    defaultPlateVehicle: 'AF-123-CD',
-    defaultPlateTrailer: 'AD-456-EF',
-    highContrastSemaphore: false,
-  },
-  auditor: {
-    maxMoistureAlert: 18.0,
-    maxHmfMgKg: 40.0,
-    defaultExportFormat: 'PDF',
-    showTechnicalCodes: true,
-  },
+const DEFAULT_PREFERENCES: DevicePreferences = {
+  vehiclePlate: '',
+  trailerPlate: '',
 };
 
-const STORAGE_KEY = 'apitrace.role_settings';
+const STORAGE_KEY = 'apitrace.preferencias';
+/** Clave de la versión anterior de esta pantalla; se lee una vez para no perder patentes. */
+const LEGACY_KEY = 'apitrace.role_settings';
+/** Valores de ejemplo que la versión anterior guardaba por defecto: no son datos del usuario. */
+const LEGACY_PLACEHOLDERS = new Set(['AF-123-CD', 'AD-456-EF']);
 
-const readStoredSettings = (): SystemSettingsState => {
+const clean = (value: unknown): string =>
+  typeof value === 'string' && !LEGACY_PLACEHOLDERS.has(value.trim()) ? value.trim() : '';
+
+const readStored = (): DevicePreferences => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw);
-    return {
-      admin: { ...DEFAULT_SETTINGS.admin, ...parsed.admin },
-      productor: { ...DEFAULT_SETTINGS.productor, ...parsed.productor },
-      sala: { ...DEFAULT_SETTINGS.sala, ...parsed.sala },
-      acopiador: { ...DEFAULT_SETTINGS.acopiador, ...parsed.acopiador },
-      transportista: { ...DEFAULT_SETTINGS.transportista, ...parsed.transportista },
-      auditor: { ...DEFAULT_SETTINGS.auditor, ...parsed.auditor },
-    };
+    if (raw) return { ...DEFAULT_PREFERENCES, ...(JSON.parse(raw) as Partial<DevicePreferences>) };
+    const legacy = localStorage.getItem(LEGACY_KEY);
+    if (legacy) {
+      const parsed = JSON.parse(legacy) as Record<string, Record<string, unknown> | undefined>;
+      const source = parsed.productor ?? parsed.transportista ?? {};
+      return {
+        vehiclePlate: clean(source.defaultPlateVehicle),
+        trailerPlate: clean(source.defaultPlateTrailer),
+      };
+    }
   } catch {
-    return DEFAULT_SETTINGS;
+    // Almacenamiento bloqueado o dato corrupto: se usan los valores vacíos.
+  }
+  return DEFAULT_PREFERENCES;
+};
+
+interface PreferencesContextValue {
+  preferences: DevicePreferences;
+  updatePreferences: (updates: Partial<DevicePreferences>) => void;
+  resetPreferences: () => void;
+}
+
+const PreferencesContext = createContext<PreferencesContextValue | null>(null);
+
+const persist = (value: DevicePreferences) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+  } catch {
+    // Sin almacenamiento la preferencia dura hasta cerrar la pestaña.
   }
 };
 
-interface SettingsContextValue {
-  settings: SystemSettingsState;
-  updateRoleSettings: <K extends keyof SystemSettingsState>(
-    section: K,
-    updates: Partial<SystemSettingsState[K]>,
-  ) => void;
-  resetRoleSettings: (section: keyof SystemSettingsState) => void;
-  getRoleSettingsKey: (role: UserRole) => keyof SystemSettingsState;
-}
-
-const SettingsContext = createContext<SettingsContextValue | null>(null);
-
 export const SettingsProvider = ({ children }: { children: ReactNode }) => {
-  const [settings, setSettings] = useState<SystemSettingsState>(readStoredSettings);
+  const [preferences, setPreferences] = useState<DevicePreferences>(readStored);
 
-  const updateRoleSettings = useCallback(
-    <K extends keyof SystemSettingsState>(
-      section: K,
-      updates: Partial<SystemSettingsState[K]>,
-    ) => {
-      setSettings((prev) => {
-        const next = {
-          ...prev,
-          [section]: {
-            ...prev[section],
-            ...updates,
-          },
-        };
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-        } catch {
-          // LocalStorage no disponible
-        }
-        return next;
-      });
-    },
-    [],
-  );
-
-  const resetRoleSettings = useCallback((section: keyof SystemSettingsState) => {
-    setSettings((prev) => {
-      const next = {
-        ...prev,
-        [section]: DEFAULT_SETTINGS[section],
-      };
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        // Ignorar
-      }
+  const updatePreferences = useCallback((updates: Partial<DevicePreferences>) => {
+    setPreferences((previous) => {
+      const next = { ...previous, ...updates };
+      persist(next);
       return next;
     });
   }, []);
 
-  const getRoleSettingsKey = useCallback((role: UserRole): keyof SystemSettingsState => {
-    switch (role) {
-      case 'ADMIN':
-        return 'admin';
-      case 'PRODUCTOR':
-        return 'productor';
-      case 'SALA':
-        return 'sala';
-      case 'ACOPIADOR':
-      case 'FRACCIONADOR':
-      case 'EXPORTADOR':
-        return 'acopiador';
-      case 'TRANSPORTISTA':
-        return 'transportista';
-      case 'AUDITOR':
-      case 'LABORATORIO':
-      case 'CONSULTA':
-      default:
-        return 'auditor';
-    }
+  const resetPreferences = useCallback(() => {
+    persist(DEFAULT_PREFERENCES);
+    setPreferences(DEFAULT_PREFERENCES);
   }, []);
 
   return (
-    <SettingsContext.Provider
-      value={{ settings, updateRoleSettings, resetRoleSettings, getRoleSettingsKey }}
-    >
+    <PreferencesContext.Provider value={{ preferences, updatePreferences, resetPreferences }}>
       {children}
-    </SettingsContext.Provider>
+    </PreferencesContext.Provider>
   );
 };
 
-export const useRoleSettings = (): SettingsContextValue => {
-  const ctx = useContext(SettingsContext);
-  if (!ctx) {
+export const usePreferences = (): PreferencesContextValue => {
+  const context = useContext(PreferencesContext);
+  if (!context) {
     return {
-      settings: DEFAULT_SETTINGS,
-      updateRoleSettings: () => {},
-      resetRoleSettings: () => {},
-      getRoleSettingsKey: () => 'admin',
+      preferences: DEFAULT_PREFERENCES,
+      updatePreferences: () => {},
+      resetPreferences: () => {},
     };
   }
-  return ctx;
+  return context;
 };

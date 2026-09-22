@@ -3,9 +3,11 @@ import {
   Controller,
   Get,
   Param,
+  ParseEnumPipe,
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -13,6 +15,7 @@ import { ProducerService } from './producer.service';
 import {
   AssociateRenapaDto,
   CreateProducerDto,
+  SENASA_SERVICES,
   UpdateProducerDto,
   UpsertSenasaDelegationDto,
 } from './dto/producer.dto';
@@ -93,20 +96,29 @@ export class ProducerController {
   }
 
   @Get(':id/senasa-delegations')
-  @ApiOperation({ summary: 'Consultar delegaciones de clave fiscal ARCA para servicios SENASA (F3283/E)' })
+  @ApiOperation({
+    summary: 'Delegaciones SENASA del titular',
+    description:
+      'Estado de la delegacion de SIGSA (emitir DT-e) y SITA (cerrar en sala) en la CUIT de ApiTrace.',
+  })
   listDelegations(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: AuthenticatedUser) {
     return this.producers.listDelegations(id, actor);
   }
 
-  @Post(':id/senasa-delegations')
-  @Roles('ADMIN', 'PRODUCTOR')
+  @Put(':id/senasa-delegations/:service')
+  @Roles('ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR')
   @Audit('SENASA_DELEGATION_UPDATED', 'senasa_delegation')
-  @ApiOperation({ summary: 'Actualizar o registrar delegacion ARCA para SIGSA / SITA' })
+  @ApiOperation({
+    summary: 'Registrar el estado de una delegacion',
+    description:
+      'La delegacion se realiza en ARCA (Administrador de Relaciones, F3283/E); aca se registra su estado.',
+  })
   upsertDelegation(
     @Param('id', ParseUUIDPipe) id: string,
+    @Param('service', new ParseEnumPipe(SENASA_SERVICES)) service: (typeof SENASA_SERVICES)[number],
     @Body() dto: UpsertSenasaDelegationDto,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
-    return this.producers.upsertDelegation(id, dto, actor);
+    return this.producers.upsertDelegation(id, service, dto, actor);
   }
 }

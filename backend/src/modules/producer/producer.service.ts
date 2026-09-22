@@ -6,11 +6,12 @@ import { AccessControlService } from '../../common/services/access-control.servi
 import { DomainEvents, EventsService } from '../../common/services/events.service';
 import type { AuthenticatedUser } from '../../common/types';
 import type { PaginationQueryDto } from '../../common/dto/pagination.dto';
-import type {
-  AssociateRenapaDto,
-  CreateProducerDto,
-  UpdateProducerDto,
-  UpsertSenasaDelegationDto,
+import {
+  SENASA_SERVICES,
+  type AssociateRenapaDto,
+  type CreateProducerDto,
+  type UpdateProducerDto,
+  type UpsertSenasaDelegationDto,
 } from './dto/producer.dto';
 
 const normalizeTaxId = (value?: string | null): string | null =>
@@ -215,72 +216,71 @@ export class ProducerService {
       .orderBy(asc(renapaRegistration.createdAt));
   }
 
+  /**
+   * Delegaciones SENASA del titular, una por servicio. Los servicios sin
+   * registro se informan como NO_INICIADA para que la pantalla muestre siempre
+   * el cuadro completo.
+   */
   async listDelegations(producerId: string, actor: AuthenticatedUser) {
     await this.findOne(producerId, actor);
-    return this.db
+    const rows = await this.db
       .select()
       .from(senasaDelegation)
-      .where(eq(senasaDelegation.producerId, producerId))
-      .orderBy(asc(senasaDelegation.createdAt));
+      .where(eq(senasaDelegation.producerId, producerId));
+    return SENASA_SERVICES.map(
+      (service) =>
+        rows.find((row) => row.service === service) ?? {
+          id: null,
+          producerId,
+          service,
+          status: 'NO_INICIADA' as const,
+          delegatedToTaxId: null,
+          formNumber: null,
+          requestedAt: null,
+          acceptedAt: null,
+          revokedAt: null,
+          notes: null,
+          updatedById: null,
+          createdAt: null,
+          updatedAt: null,
+        },
+    );
   }
 
   async upsertDelegation(
     producerId: string,
+    service: (typeof SENASA_SERVICES)[number],
     dto: UpsertSenasaDelegationDto,
     actor: AuthenticatedUser,
   ) {
     this.access.assertCanWrite(actor);
     await this.findOne(producerId, actor);
-
-    const [existing] = await this.db
-      .select()
-      .from(senasaDelegation)
-      .where(
-        and(
-          eq(senasaDelegation.producerId, producerId),
-          eq(senasaDelegation.service, dto.service),
-        ),
-      )
-      .limit(1);
-
     const now = new Date();
-    const acceptedAt = dto.status === 'ACEPTADA' ? now : null;
-    const revokedAt = dto.status === 'REVOCADA' ? now : null;
+    const stamps = {
+      requestedAt: dto.status === 'PENDIENTE' ? now : undefined,
+      acceptedAt: dto.status === 'ACEPTADA' ? now : undefined,
+      revokedAt: dto.status === 'REVOCADA' ? now : undefined,
+    };
+    const values = {
+      status: dto.status,
+      formNumber: dto.formNumber ?? null,
+      delegatedToTaxId: dto.delegatedToTaxId?.replace(/-/g, '') ?? null,
+      notes: dto.notes ?? null,
+      updatedById: actor.id,
+      updatedAt: now,
+    };
 
-    if (existing) {
-      const [updated] = await this.db
-        .update(senasaDelegation)
-        .set({
-          status: dto.status,
-          delegatedToTaxId: dto.delegatedToTaxId ? normalizeTaxId(dto.delegatedToTaxId) : existing.delegatedToTaxId,
-          formNumber: dto.formNumber ?? existing.formNumber,
-          acceptedAt: acceptedAt ?? existing.acceptedAt,
-          revokedAt: revokedAt ?? existing.revokedAt,
-          notes: dto.notes ?? existing.notes,
-          updatedById: actor.id,
-          updatedAt: now,
-        })
-        .where(eq(senasaDelegation.id, existing.id))
-        .returning();
-      return updated;
-    }
-
-    const [created] = await this.db
+    const [saved] = await this.db
       .insert(senasaDelegation)
-      .values({
-        producerId,
-        service: dto.service,
-        status: dto.status,
-        delegatedToTaxId: dto.delegatedToTaxId ? normalizeTaxId(dto.delegatedToTaxId) : null,
-        formNumber: dto.formNumber ?? null,
-        requestedAt: now,
-        acceptedAt,
-        revokedAt,
-        notes: dto.notes ?? null,
-        updatedById: actor.id,
+      .values({ producerId, service, ...values, ...stamps })
+      .onConflictDoUpdate({
+        target: [senasaDelegation.producerId, senasaDelegation.service],
+        set: {
+          ...values,
+          ...Object.fromEntries(Object.entries(stamps).filter(([, value]) => value !== undefined)),
+        },
       })
       .returning();
-
-    return created;
+    return saved;
   }
 }

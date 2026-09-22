@@ -1,0 +1,513 @@
+# =============================================================================
+# openapi-apitrace-senasa.yaml
+#
+# Contrato que ApiTrace necesita del servicio de DT-e apicola (movimiento
+# API-SEM) de SENASA. NO es una API existente: es la propuesta concreta que
+# acompana al documento 10-API-Integracion-SENASA-ApiTrace.md, para que la
+# conversacion tecnica con SENASA empiece sobre algo escrito.
+#
+# Si el servicio real es SOAP, o usa otros nombres, ApiTrace adapta su cliente:
+# lo que importa son las operaciones, los datos y los errores distinguibles.
+# =============================================================================
+openapi: 3.1.0
+info:
+  title: DT-e apicola (API-SEM) — contrato requerido por ApiTrace
+  version: 1.0.0
+  summary: Emision, anulacion, cierre y consulta del Documento de Transito electronico apicola.
+  description: |
+    Propuesta de contrato para que un tercero autorizado (plataforma de software) opere
+    el tramite API-SEM en nombre del productor apicola que lo delego.
+
+    Convenciones:
+      * Fechas de tramite: dia calendario argentino (`YYYY-MM-DD`). No llevan hora.
+      * Instantes: ISO 8601 con offset `-03:00`.
+      * Idempotencia: la cabecera `Idempotency-Key` lleva el identificador propio del
+        DT-e en el sistema llamante; repetirla devuelve el mismo resultado y no genera
+        un segundo tramite ni un segundo arancel.
+      * Errores: cuerpo `Error` con `codigo` estable, para poder distinguir un rechazo
+        definitivo (no se reintenta) de una falla tecnica (se reintenta con espera).
+  contact:
+    name: ApiTrace
+    url: https://apitrace.onrender.com
+servers:
+  - url: https://{host}/api-sem/v1
+    description: Produccion
+    variables:
+      host:
+        default: servicios.senasa.gob.ar
+  - url: https://{host}/api-sem/v1
+    description: Homologacion
+    variables:
+      host:
+        default: servicios-homologacion.senasa.gob.ar
+
+security:
+  - ticketWsaa: []
+
+tags:
+  - name: Padrones
+    description: Verificacion previa de origen y destino.
+  - name: DT-e
+    description: Emision, anulacion, consulta y representacion imprimible.
+  - name: SITA
+    description: Cierre en sala de extraccion y declaracion de sin arribo.
+
+paths:
+  /padrones/renapa/apiarios/{codigo}:
+    get:
+      tags: [Padrones]
+      operationId: consultarApiario
+      summary: Estado del apiario en RENAPA.
+      description: |
+        ApiTrace lo consulta antes de preparar el DT-e, para no solicitar un tramite que
+        SIGSA va a rechazar con el camion ya cargado.
+      parameters:
+        - name: codigo
+          in: path
+          required: true
+          description: RENAPA del apiario, formato `Letra-Renapa-Apiario`.
+          schema: { type: string, pattern: '^[A-Z][0-9]{1,7}-[0-9]{1,4}$', examples: ['B53999-2'] }
+      responses:
+        '200':
+          description: Registro encontrado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegistroPadron' }
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+        '503':
+          $ref: '#/components/responses/NoDisponible'
+
+  /padrones/salas-extraccion/{codigo}:
+    get:
+      tags: [Padrones]
+      operationId: consultarSala
+      summary: Estado de la sala de extraccion.
+      parameters:
+        - name: codigo
+          in: path
+          required: true
+          description: Codigo de sala, formato `SEF-Letra-Numero`.
+          schema: { type: string, pattern: '^SEF-[A-Z]-[0-9]{1,7}$', examples: ['SEF-B-20010'] }
+      responses:
+        '200':
+          description: Registro encontrado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegistroPadron' }
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+        '503':
+          $ref: '#/components/responses/NoDisponible'
+
+  /dte/api-sem:
+    post:
+      tags: [DT-e]
+      operationId: emitirDte
+      summary: Emitir un DT-e para el movimiento API-SEM.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CuitRepresentada'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SolicitudDte' }
+      responses:
+        '201':
+          description: DT-e emitido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dte' }
+        '202':
+          description: |
+            Solicitud aceptada y en proceso (si la emision no es sincronica). ApiTrace deja
+            el DT-e en estado SOLICITADO y consulta el resultado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tramiteId, estado]
+                properties:
+                  tramiteId: { type: string, examples: ['job_sigsa_884920'] }
+                  estado: { type: string, const: EN_PROCESO }
+        '400':
+          $ref: '#/components/responses/DatoInvalido'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+        '403':
+          $ref: '#/components/responses/DelegacionInvalida'
+        '422':
+          description: |
+            Rechazo del organismo por una regla del tramite. Codigos esperados:
+            `ORIGEN_NO_HABILITADO`, `DESTINO_NO_HABILITADO`, `TITULAR_BLOQUEADO`,
+            `VIGENCIA_FUERA_DE_RANGO`, `ANTICIPACION_EXCEDIDA`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          $ref: '#/components/responses/NoDisponible'
+
+  /dte/{numero}:
+    get:
+      tags: [DT-e]
+      operationId: consultarDte
+      summary: Estado actual de un DT-e.
+      parameters:
+        - $ref: '#/components/parameters/NumeroDte'
+        - $ref: '#/components/parameters/CuitRepresentada'
+      responses:
+        '200':
+          description: DT-e encontrado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dte' }
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '401':
+          $ref: '#/components/responses/NoAutorizado'
+
+  /dte/{numero}/representacion:
+    get:
+      tags: [DT-e]
+      operationId: descargarRepresentacion
+      summary: Representacion imprimible del DT-e.
+      description: |
+        La normativa exige llevar el DT-e impreso en la cabina del vehiculo. Si ApiTrace
+        puede descargar el documento, el productor lo imprime desde el mismo sistema donde
+        cargo los datos.
+      parameters:
+        - $ref: '#/components/parameters/NumeroDte'
+        - $ref: '#/components/parameters/CuitRepresentada'
+      responses:
+        '200':
+          description: Documento imprimible.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+  /dte/{numero}/anulacion:
+    post:
+      tags: [DT-e]
+      operationId: anularDte
+      summary: Anular (con arancel) o eliminar (sin arancel) un DT-e.
+      description: |
+        Es la salida obligatoria de la regla de exceso de carga: si la sala cuenta mas
+        alzas que las declaradas, el DT-e se anula y se emite uno nuevo.
+      parameters:
+        - $ref: '#/components/parameters/NumeroDte'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CuitRepresentada'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo, arancelPagado]
+              properties:
+                motivo: { type: string, maxLength: 600 }
+                arancelPagado:
+                  type: boolean
+                  description: true -> ANULADO; false -> ELIMINADO.
+      responses:
+        '200':
+          description: DT-e anulado o eliminado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dte' }
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: El DT-e ya transito, esta cerrado o ya fue anulado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /sita/dte/{numero}/cierre:
+    post:
+      tags: [SITA]
+      operationId: cerrarDte
+      summary: Cerrar el DT-e en la sala de extraccion.
+      parameters:
+        - $ref: '#/components/parameters/NumeroDte'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CuitRepresentada'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [codigoCierre, fechaArribo, alzasConfirmadas]
+              properties:
+                codigoCierre:
+                  type: string
+                  maxLength: 20
+                  description: Codigo impreso en el DT-e que presenta el transportista.
+                  examples: ['790112']
+                fechaArribo: { type: string, format: date, examples: ['2026-11-12'] }
+                alzasConfirmadas:
+                  type: integer
+                  minimum: 1
+                  description: Conteo fisico. Debe ser menor o igual a la cantidad declarada.
+                  examples: [65]
+      responses:
+        '200':
+          description: DT-e cerrado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  numero: { type: string }
+                  estado: { type: string, const: CERRADO }
+                  habilitaExtraccion: { type: boolean }
+        '403':
+          description: La sala que cierra no es la del DT-e.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '422':
+          description: |
+            Rechazo por regla del tramite. Codigos esperados:
+            `EXCESO_CANTIDAD_DECLARADA` (con `cantidadDeclarada` y `cantidadIntentada` en
+            `detalle`), `CODIGO_CIERRE_INVALIDO`, `ESTADO_INVALIDO_PARA_CIERRE`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /sita/dte/{numero}/sin-arribo:
+    post:
+      tags: [SITA]
+      operationId: declararSinArribo
+      summary: Declarar que la carga nunca llego a la planta.
+      parameters:
+        - $ref: '#/components/parameters/NumeroDte'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CuitRepresentada'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string, maxLength: 600 }
+                fecha: { type: string, format: date }
+      responses:
+        '200':
+          description: Declaracion registrada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dte' }
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+components:
+  securitySchemes:
+    ticketWsaa:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        Ticket de acceso de WSAA (ARCA): `SENASA token="<token>", sign="<sign>"`.
+        Se obtiene firmando un LoginTicketRequest con el certificado X.509 de la
+        plataforma y tiene 12 horas de validez. A confirmar con SENASA el nombre del
+        servicio a solicitar en WSAA.
+
+  parameters:
+    NumeroDte:
+      name: numero
+      in: path
+      required: true
+      description: Numero completo del DT-e, con prefijo de oficina y digito verificador.
+      schema: { type: string, examples: ['022440451-4'] }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Identificador propio e inmutable de la operacion (UUID del DT-e en ApiTrace).
+      schema: { type: string, format: uuid }
+    CuitRepresentada:
+      name: X-Cuit-Representada
+      in: header
+      required: true
+      description: CUIT del productor en cuyo nombre se opera, que delego el servicio.
+      schema: { type: string, pattern: '^[0-9]{11}$', examples: ['20123456789'] }
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: Identificador de la operacion en el sistema llamante, devuelto en la respuesta.
+      schema: { type: string, maxLength: 80 }
+
+  responses:
+    NoEncontrado:
+      description: El recurso no existe.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NoAutorizado:
+      description: Ticket ausente, vencido o invalido (`TICKET_VENCIDO`).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    DelegacionInvalida:
+      description: El productor no delego el servicio, o la delegacion fue revocada.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    DatoInvalido:
+      description: Falta un dato o tiene un formato invalido.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NoDisponible:
+      description: Servicio no disponible. ApiTrace reintenta con espera creciente.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    RegistroPadron:
+      type: object
+      required: [codigo, estado]
+      properties:
+        codigo: { type: string, examples: ['B53999-2'] }
+        estado:
+          type: string
+          enum: [ACTIVO, SUSPENDIDO, VENCIDO, DADO_DE_BAJA, NO_ENCONTRADO]
+        vigenteHasta: { type: [string, 'null'], format: date }
+        cuitTitular: { type: [string, 'null'], pattern: '^[0-9]{11}$' }
+        denominacion: { type: [string, 'null'] }
+        provincia: { type: [string, 'null'] }
+
+    Establecimiento:
+      type: object
+      required: [tipo, codigo]
+      properties:
+        tipo: { type: string, enum: [RENAPA_APIARIO, SALA_EXTRACCION] }
+        codigo: { type: string }
+
+    Producto:
+      type: object
+      required: [codigo, unidad, cantidadDeclarada]
+      properties:
+        codigo: { type: string, const: '24.45' }
+        descripcion: { type: string, const: 'Alzas melarias' }
+        unidad: { type: string, const: 'UNIDAD' }
+        cantidadDeclarada:
+          type: integer
+          minimum: 1
+          description: |
+            Alzas declaradas. La sala solo puede confirmar una cantidad menor o igual, por
+            lo que el productor declara una cantidad holgada.
+
+    Transporte:
+      type: object
+      required: [tipo, patenteChasis]
+      properties:
+        tipo: { type: string, enum: [CAMION, CAMIONETA, FURGON, UTILITARIO, OTRO] }
+        patenteChasis: { type: string, maxLength: 15, examples: ['AF123BC'] }
+        patenteAcoplado:
+          type: [string, 'null']
+          maxLength: 15
+          description: Nulo cuando no hay acoplado. Nunca un texto como "NO".
+
+    SolicitudDte:
+      type: object
+      required: [referenciaExterna, cuitTitular, origen, destino, producto, fechaCarga, fechaVencimiento, transporte]
+      properties:
+        referenciaExterna: { type: string, format: uuid }
+        cuitTitular: { type: string, pattern: '^[0-9]{11}$' }
+        tipoMovimiento: { type: string, const: 'API-SEM' }
+        motivoTransito: { type: string, const: 'Extracción de miel' }
+        origen: { $ref: '#/components/schemas/Establecimiento' }
+        destino: { $ref: '#/components/schemas/Establecimiento' }
+        producto: { $ref: '#/components/schemas/Producto' }
+        fechaCarga:
+          type: string
+          format: date
+          description: Dia calendario argentino. Hasta 4 dias posteriores a la fecha de solicitud.
+        fechaVencimiento:
+          type: string
+          format: date
+          description: Entre 2 y 4 dias posteriores a la fecha de carga.
+        transporte: { $ref: '#/components/schemas/Transporte' }
+        observaciones: { type: [string, 'null'], maxLength: 600 }
+
+    Dte:
+      type: object
+      required: [numero, estado]
+      properties:
+        numero: { type: string, examples: ['022440451-4'] }
+        codigoCierre:
+          type: [string, 'null']
+          maxLength: 20
+          description: Codigo impreso en el documento, necesario para cerrarlo en la sala.
+          examples: ['790112']
+        estado:
+          type: string
+          enum: [SOLICITADO, EMITIDO, VIGENTE, CERRADO, VENCIDO, CADUCADO, SIN_ARRIBO, ANULADO, ELIMINADO, RECHAZADO]
+        fechaEmision: { type: string, format: date-time }
+        vigenteDesde: { type: string, format: date }
+        vigenteHasta: { type: string, format: date }
+        cantidadDeclarada: { type: integer }
+        cantidadConfirmada: { type: [integer, 'null'] }
+        arancel:
+          type: object
+          properties:
+            importe: { type: number }
+            moneda: { type: string, examples: ['ARS'] }
+            estado: { type: string, enum: [NO_APLICA, PENDIENTE, PAGADO] }
+        representacionUrl: { type: [string, 'null'], format: uri }
+
+    Error:
+      type: object
+      required: [codigo, mensaje]
+      properties:
+        codigo:
+          type: string
+          description: Codigo estable, para decidir si se reintenta o se informa al usuario.
+          examples: ['ORIGEN_NO_HABILITADO']
+        mensaje:
+          type: string
+          description: Texto para mostrar al usuario final.
+        detalle:
+          type: object
+          additionalProperties: true
+        correlationId: { type: [string, 'null'] }
+
+webhooks:
+  cambioEstadoDte:
+    post:
+      summary: Aviso de cambio de estado de un DT-e (deseable).
+      description: |
+        Evita que ApiTrace tenga que consultar periodicamente. Con firma o secreto
+        compartido para verificar el origen. Si no existe, ApiTrace consulta
+        `GET /dte/{numero}` con la frecuencia que SENASA indique.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [numero, estado, ocurridoEn]
+              properties:
+                numero: { type: string }
+                estadoAnterior: { type: [string, 'null'] }
+                estado: { type: string }
+                ocurridoEn: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Aviso recibido.

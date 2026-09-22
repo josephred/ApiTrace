@@ -55,20 +55,6 @@ export interface Producer {
   locality: string | null;
   createdAt: string;
   renapa?: RenapaRegistration[];
-  delegations?: SenasaDelegation[];
-}
-
-export interface SenasaDelegation {
-  id: string;
-  producerId: string;
-  service: string; // 'SIGSA_DTE' | 'SITA'
-  status: string; // 'NO_INICIADA' | 'PENDIENTE' | 'ACEPTADA' | 'REVOCADA' | 'RECHAZADA'
-  delegatedToTaxId: string | null;
-  formNumber: string | null;
-  requestedAt: string | null;
-  acceptedAt: string | null;
-  revokedAt: string | null;
-  notes: string | null;
 }
 
 export interface RenapaRegistration {
@@ -93,10 +79,25 @@ export interface Establishment {
   longitude: string | null;
   status: string;
   rne: string | null;
+  /** Codigo SENASA del establecimiento habilitado (sala: SEF-B-20010). */
   senasaCode?: string | null;
   senasaStatus?: string;
   senasaValidTo?: string | null;
   renspa?: RenspaRegistration[];
+}
+
+/** Destino posible de un traslado, de cualquier organizacion (GET /establishments/receivers). */
+export interface Receiver {
+  id: string;
+  name: string;
+  type: string;
+  locality: string | null;
+  province: string | null;
+  senasaCode: string | null;
+  senasaStatus: string;
+  senasaValidTo: string | null;
+  organizationId: string;
+  organizationName: string;
 }
 
 export interface RenspaRegistration {
@@ -121,10 +122,11 @@ export interface Apiary {
   province: string | null;
   hiveCount: number;
   status: string;
+  registeredAt: string | null;
+  /** Codigo RENAPA oficial del apiario (B53999-2): origen del DT-e. */
   renapaCode?: string | null;
   renapaStatus?: string;
   renapaValidTo?: string | null;
-  registeredAt: string | null;
 }
 
 export interface Hive {
@@ -175,78 +177,209 @@ export interface Movement {
   reception?: Reception | null;
 }
 
-export interface DteStatusHistory {
+export type DteStatus =
+  | 'BORRADOR'
+  | 'SOLICITADO'
+  | 'EMITIDO'
+  | 'VIGENTE'
+  | 'CERRADO'
+  | 'VENCIDO'
+  | 'CADUCADO'
+  | 'SIN_ARRIBO'
+  | 'RECHAZADO'
+  | 'ANULADO'
+  | 'ELIMINADO';
+
+export type DteIssueMode = 'MANUAL' | 'SIMULADO' | 'SIGSA';
+
+export interface DteAlert {
+  code: string;
+  severity: 'info' | 'success' | 'warning' | 'danger';
+  message: string;
+}
+
+/** DT-e tal como lo devuelve la API: el estado ya contempla la vigencia. */
+export interface Dte {
   id: string;
-  dteId: string;
-  fromStatus: string | null;
-  toStatus: string;
-  source: string;
+  movementId: string;
+  number: string | null;
+  status: DteStatus;
+  storedStatus?: DteStatus;
+  issueMode: DteIssueMode;
+  issuedAt: string | null;
+  closedAt: string | null;
+  originRenspa: string | null;
+  destinationRenspa: string | null;
+  syncStatus: string;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  isApiSem?: boolean;
+  aptForTransit?: boolean;
+  movementTypeCode?: string | null;
+  transitReason?: string | null;
+  productCode?: string | null;
+  productName?: string | null;
+  unit?: string | null;
+  estimatedQuantity?: number | null;
+  declaredQuantity?: number | null;
+  confirmedQuantity?: number | null;
+  loadDate?: string | null;
+  expiryDate?: string | null;
+  originCode?: string | null;
+  destinationCode?: string | null;
+  holderTaxId?: string | null;
+  holderProducerId?: string | null;
+  issuerOrganizationId?: string | null;
+  destinationOrganizationId?: string | null;
+  requestedById?: string | null;
+  transportType?: string | null;
+  transportPlate?: string | null;
+  transportTrailerPlate?: string | null;
+  /** Solo lo recibe quien emite: la sala lo copia del DT-e impreso. */
+  verificationCode?: string | null;
+  hasVerificationCode?: boolean;
+  arrivalAt?: string | null;
+  voidedAt?: string | null;
+  voidReason?: string | null;
+  feePaid?: boolean;
+  regularizedAt?: string | null;
+  pdfUrl?: string | null;
+  window?: { validFrom: string; validTo: string; lapsesAt: string; lastClosingDate: string } | null;
+  alerts?: DteAlert[];
+  createdAt?: string;
+}
+
+export interface DteListItem extends Dte {
+  movementCode: string;
+  movementStatus: string;
+  apiaryCode: string | null;
+  apiaryName: string | null;
+  originName: string;
+  destinationName: string;
+  holderName: string | null;
+  perspective: 'emisor' | 'destino' | 'global';
+}
+
+export type DteAction =
+  | 'edit'
+  | 'issueManual'
+  | 'requestEmission'
+  | 'void'
+  | 'close'
+  | 'noArrival'
+  | 'regularize'
+  | 'print';
+
+export interface DteHistoryEntry {
+  id: string;
+  fromStatus: DteStatus | null;
+  toStatus: DteStatus;
+  source: 'USUARIO' | 'SISTEMA' | 'SENASA';
   reason: string | null;
   actorUserId: string | null;
   occurredAt: string;
 }
 
-export interface DtePreflightCheck {
-  key: string;
-  label: string;
-  passed: boolean;
-  message: string;
-  severity: 'ERROR' | 'WARNING' | 'INFO';
-}
-
-export interface DtePreflightResult {
-  ready: boolean;
-  movementId: string;
-  checks: DtePreflightCheck[];
-  suggestedDeclaredQuantity: number;
-  defaultDates: {
-    loadDate: string;
-    expiryDate: string;
+export interface DteIntegration {
+  mode: 'manual' | 'simulado' | 'sigsa';
+  environment: string;
+  description: string;
+  capabilities: { emit: boolean; void: boolean; close: boolean; registryLookup: boolean };
+  rules: {
+    defaultValidityDays: number;
+    maxValidityDays: number;
+    maxAnticipationDays: number;
+    graceDays: number;
+    overestimationFactor: number;
   };
 }
 
-export interface Dte {
-  id: string;
-  movementId: string;
-  number: string | null;
-  status: string;
-  issueMode?: string;
-  movementTypeCode?: string;
-  transitReason?: string;
-  productCode?: string;
-  productName?: string;
-  unit?: string;
-  loadDate?: string | null;
-  expiryDate?: string | null;
-  declaredQuantity?: number | string | null;
-  estimatedQuantity?: number | string | null;
-  confirmedQuantity?: number | string | null;
-  arrivalAt?: string | null;
-  issuedAt?: string | null;
-  closedAt?: string | null;
-  verificationCode?: string | null;
-  canSeeVerificationCode?: boolean;
-  pdfUrl?: string | null;
-  transportType?: string | null;
-  transportPlate?: string | null;
-  transportTrailerPlate?: string | null;
-  voidedAt?: string | null;
-  voidReason?: string | null;
-  regularizedAt?: string | null;
-  regularizationNote?: string | null;
-  feePaid?: boolean;
-  originRenspa?: string | null;
-  destinationRenspa?: string | null;
-  originCode?: string | null;
-  destinationCode?: string | null;
-  issuerOrganizationId?: string | null;
-  destinationOrganizationId?: string | null;
-  holderProducerId?: string | null;
-  syncStatus?: string;
-  transitSemaphore?: 'VERDE' | 'AMARILLO' | 'ROJO' | 'AZUL' | 'GRIS';
-  transitReasonText?: string;
-  canTransit?: boolean;
-  history?: DteStatusHistory[];
+export interface DteDetail extends Dte {
+  perspective: 'emisor' | 'destino' | 'global';
+  movement: {
+    id: string;
+    code: string;
+    status: MovementStatus;
+    scheduledAt: string;
+    dispatchedAt: string | null;
+    receivedAt: string | null;
+    quantity: string;
+    unit: string;
+    requiresDocument: boolean;
+    driverName: string | null;
+  };
+  reception: { receivedAt: string; receivedQuantity: string; unit: string; result: string } | null;
+  origin: { id: string; name: string; type: string };
+  apiary: {
+    id: string;
+    code: string;
+    name: string | null;
+    renapaCode: string | null;
+    renapaStatus: string;
+    locality: string | null;
+    province: string | null;
+  } | null;
+  destination: {
+    id: string;
+    name: string;
+    type: string;
+    senasaCode: string | null;
+    senasaStatus: string;
+    locality: string | null;
+    province: string | null;
+  };
+  holder: { id: string; businessName: string; taxId: string | null } | null;
+  history: DteHistoryEntry[];
+  related: { id: string; number: string | null; status: DteStatus; createdAt: string; voidReason: string | null }[];
+  allowedActions: DteAction[];
+  integration: DteIntegration;
+}
+
+export interface DteCheck {
+  code: string;
+  label: string;
+  status: 'ok' | 'info' | 'warning' | 'error';
+  message: string;
+}
+
+export interface DtePreflight {
+  ok: boolean;
+  mode: DteIntegration['mode'];
+  checks: DteCheck[];
+  suggestion: {
+    declaredQuantity: number | null;
+    expiryDate: string;
+    maxExpiryDate: string;
+    earliestRequestDate: string;
+  };
+}
+
+export interface DteSummary {
+  issued: Partial<Record<DteStatus, number>>;
+  received: Partial<Record<DteStatus, number>>;
+  tasks: {
+    draftsToIssue: number;
+    requestErrors: number;
+    expiringToday: number;
+    expired: number;
+    lapsed: number;
+    pendingClosure: number;
+    receivedExpired: number;
+  };
+  blockedHolders: { id: string; businessName: string }[];
+  integration: DteIntegration;
+  generatedAt: string;
+}
+
+export interface SenasaDelegation {
+  id: string | null;
+  producerId: string;
+  service: 'SIGSA_DTE' | 'SITA';
+  status: 'NO_INICIADA' | 'PENDIENTE' | 'ACEPTADA' | 'REVOCADA' | 'RECHAZADA';
+  formNumber: string | null;
+  delegatedToTaxId: string | null;
+  notes: string | null;
+  updatedAt: string | null;
 }
 
 export interface Reception {

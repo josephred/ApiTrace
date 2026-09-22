@@ -7,7 +7,7 @@ Este manual está diseñado para los **jefes de planta, encargados de báscula y
 ## 1. Tu Rol en la Sala de Extracción
 
 La sala de extracción es el **centro de transformación física** de la cadena apícola. En tus instalaciones ocurren tres momentos críticos de la trazabilidad:
-1. **Recepción y Conformidad**: Recibís los melarios del camión, pesás la carga y **cerrás el DT-e oficial de SENASA** para liberar el transporte.
+1. **Recepción y Conformidad**: Recibís los melarios del camión, pesás la carga, **cerrás el DT-e en SITA/SIGSA** con el código impreso y registrás ese cierre en ApiTrace.
 2. **Proceso de Extracción**: Desoperculás y centrifugás los cuadros para convertir los melarios en miel líquida decantada.
 3. **Loteado y Envasado en Tambores**: Creás el lote de producción, pesás cada tambor en báscula (descontando la tara del envase) y colocás el **precinto de seguridad inviolable**.
 
@@ -36,7 +36,7 @@ Al ingresar al sistema con el perfil de Sala, tu pantalla de inicio te muestra l
 
 ---
 
-## 3. Recepción de Cargas y Cierre del DT-e Oficial
+## 3. Recepción de Cargas y Cierre del DT-e
 
 Cuando el camión llega a la rampa de descarga de la sala:
 
@@ -49,10 +49,10 @@ Cuando el camión llega a la rampa de descarga de la sala:
    * **¿Hay diferencia?**: Si salieron 80 alzas del campo pero llegaron 75 (por ejemplo, por rotura o conteo erróneo en origen), tildá la opción y explicá el motivo. ApiTrace registrará la merma técnica de forma transparente.
 5. Presioná **"Confirmar recepción"**.
 
-### B. Cierre Oficial del DT-e ante SENASA
+### B. Cierre del DT-e
 Para que el transportista quede liberado y el documento sanitario concluya formalmente:
 1. En la tarjeta de **Documento Sanitario Oficial**, presioná **"Cerrar en sala"**.
-2. **Código de Verificación SENASA**: Solicitale al chofer el código alfanumérico de 12 caracteres que figura impreso al pie de su DT-e (ej: `V4K9-2P8M-7X1Q`).
+2. **Código de cierre**: Solicitale al chofer el código que figura impreso al pie de su DT-e (ej: `790112`). Es el mismo que pide SITA para cerrar el documento.
 3. Ingresá el código y presioná **"Confirmar cierre"**. El estado del DT-e pasará inmediatamente a 🟢 **CERRADO**.
 
 ---

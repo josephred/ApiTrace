@@ -1,60 +1,63 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { DRIZZLE, type Database } from '../../database/database.module';
 import { integrationEvent } from '../../database/schema';
-import type { DbExecutor } from './types';
 
-export interface RecordIntegrationInput {
-  system:
-    | 'MANUAL'
-    | 'SENASA_SIGSA'
-    | 'SENASA_RENSPA'
-    | 'SENASA_RENAPA'
-    | 'ARCA'
-    | 'SIFEGA'
-    | 'LABORATORIO';
+export interface IntegrationLogInput {
+  system: 'SENASA_SIGSA' | 'SENASA_RENSPA' | 'SENASA_RENAPA' | 'ARCA' | 'SIFEGA' | 'LABORATORIO';
   operation: string;
+  status: 'SUCCESS' | 'ERROR' | 'TIMEOUT' | 'SKIPPED';
   requestId?: string | null;
   externalId?: string | null;
-  requestPayload?: unknown;
-  responsePayload?: unknown;
-  status: 'SUCCESS' | 'ERROR' | 'TIMEOUT' | 'SKIPPED';
+  request?: unknown;
+  response?: unknown;
   httpStatus?: number | null;
   latencyMs?: number | null;
   errorCode?: string | null;
   errorMessage?: string | null;
   correlationId?: string | null;
-  occurredAt?: Date;
 }
 
+/**
+ * Bitacora de comunicaciones con organismos (arquitectura, seccion 50).
+ *
+ * Guarda hashes del pedido y la respuesta, no su contenido: alcanza para probar
+ * que se envio y que se recibio sin copiar datos personales a otra tabla. Igual
+ * que la auditoria, nunca hace fallar la operacion que registra.
+ */
 @Injectable()
 export class IntegrationLogService {
+  private readonly logger = new Logger(IntegrationLogService.name);
+
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  hash(data: unknown): string | undefined {
-    if (data === undefined || data === null) return undefined;
-    const str = typeof data === 'string' ? data : JSON.stringify(data);
-    return createHash('sha256').update(str).digest('hex');
+  async record(input: IntegrationLogInput): Promise<void> {
+    try {
+      await this.db.insert(integrationEvent).values({
+        system: input.system,
+        operation: input.operation.slice(0, 120),
+        requestId: input.requestId ?? null,
+        externalId: input.externalId ?? null,
+        requestHash: input.request === undefined ? null : this.hash(input.request),
+        responseHash: input.response === undefined ? null : this.hash(input.response),
+        status: input.status,
+        httpStatus: input.httpStatus ?? null,
+        latencyMs: input.latencyMs ?? null,
+        errorCode: input.errorCode?.slice(0, 80) ?? null,
+        errorMessage: input.errorMessage?.slice(0, 1000) ?? null,
+        correlationId: input.correlationId ?? null,
+      });
+    } catch (error) {
+      this.logger.error(
+        `No se pudo registrar la integracion ${input.system}/${input.operation}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
-  async record(input: RecordIntegrationInput, executor: DbExecutor = this.db): Promise<void> {
-    const requestHash = this.hash(input.requestPayload);
-    const responseHash = this.hash(input.responsePayload);
-
-    await executor.insert(integrationEvent).values({
-      system: input.system,
-      operation: input.operation,
-      requestId: input.requestId ?? null,
-      externalId: input.externalId ?? null,
-      requestHash: requestHash ?? null,
-      responseHash: responseHash ?? null,
-      status: input.status,
-      httpStatus: input.httpStatus ?? null,
-      latencyMs: input.latencyMs ?? null,
-      errorCode: input.errorCode ?? null,
-      errorMessage: input.errorMessage ? input.errorMessage.slice(0, 1000) : null,
-      correlationId: input.correlationId ?? null,
-      occurredAt: input.occurredAt ?? new Date(),
-    });
+  private hash(value: unknown): string {
+    return createHash('sha256')
+      .update(JSON.stringify(value ?? null))
+      .digest('hex');
   }
 }

@@ -40,6 +40,7 @@ export class ApiaryService {
     }
 
     const code = dto.code.trim().toUpperCase();
+    const renapaCode = await this.assertRenapaCodeAvailable(dto.renapaCode);
     const duplicate = await this.db
       .select({ id: apiary.id })
       .from(apiary)
@@ -62,7 +63,7 @@ export class ApiaryService {
           province: dto.province ?? parent.province,
           hiveCount: dto.hiveCount ?? 0,
           registeredAt: dto.registeredAt ? new Date(dto.registeredAt) : new Date(),
-          renapaCode: dto.renapaCode ?? null,
+          renapaCode,
           renapaStatus: dto.renapaStatus ?? 'PENDING_VERIFICATION',
           renapaValidTo: dto.renapaValidTo ?? null,
           notes: dto.notes ?? null,
@@ -117,6 +118,9 @@ export class ApiaryService {
           hiveCount: apiary.hiveCount,
           status: apiary.status,
           registeredAt: apiary.registeredAt,
+          renapaCode: apiary.renapaCode,
+          renapaStatus: apiary.renapaStatus,
+          renapaValidTo: apiary.renapaValidTo,
           createdAt: apiary.createdAt,
         })
         .from(apiary)
@@ -145,10 +149,13 @@ export class ApiaryService {
   async update(id: string, dto: UpdateApiaryDto, actor: AuthenticatedUser) {
     this.access.assertCanWrite(actor);
     await this.findOne(id, actor);
+    const renapaCode =
+      dto.renapaCode !== undefined ? await this.assertRenapaCodeAvailable(dto.renapaCode, id) : undefined;
     const [updated] = await this.db
       .update(apiary)
       .set({
         ...dto,
+        renapaCode,
         latitude: dto.latitude !== undefined ? String(dto.latitude) : undefined,
         longitude: dto.longitude !== undefined ? String(dto.longitude) : undefined,
         updatedAt: new Date(),
@@ -156,6 +163,27 @@ export class ApiaryService {
       .where(eq(apiary.id, id))
       .returning();
     return updated;
+  }
+
+  /**
+   * El RENAPA de un apiario lo identifica ante SENASA: dos apiarios no pueden
+   * compartirlo. Se guarda en mayusculas y sin espacios.
+   */
+  private async assertRenapaCodeAvailable(
+    value: string | undefined | null,
+    exceptId?: string,
+  ): Promise<string | null> {
+    const code = value?.trim().toUpperCase().replace(/\s+/g, '') || null;
+    if (!code) return null;
+    const rows = await this.db
+      .select({ id: apiary.id })
+      .from(apiary)
+      .where(eq(apiary.renapaCode, code))
+      .limit(2);
+    if (rows.some((row) => row.id !== exceptId)) {
+      throw new ConflictException(`El RENAPA ${code} ya esta asignado a otro apiario.`);
+    }
+    return code;
   }
 
   /** CU-08. */

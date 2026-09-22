@@ -51,13 +51,10 @@ export class MovementRuleService {
             isNull(movementRule.materialType),
             eq(movementRule.materialType, query.materialType as never),
           ),
+          or(isNull(movementRule.originType), eq(movementRule.originType, query.originType as never)),
           or(
-            isNull(movementRule.sourceEstablishmentType),
-            eq(movementRule.sourceEstablishmentType, query.originType as never),
-          ),
-          or(
-            isNull(movementRule.destinationEstablishmentType),
-            eq(movementRule.destinationEstablishmentType, query.destinationType as never),
+            isNull(movementRule.destinationType),
+            eq(movementRule.destinationType, query.destinationType as never),
           ),
         ),
       )
@@ -80,7 +77,7 @@ export class MovementRuleService {
       requiredDocumentType: rule.requiredDocumentType,
       ruleId: rule.id,
       ruleName: rule.name,
-      legalReference: rule.legalBasis,
+      legalReference: rule.legalReference,
     };
   }
 

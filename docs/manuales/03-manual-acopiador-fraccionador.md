@@ -110,7 +110,7 @@ flowchart TD
 ![Alta de lote con origen](../capturas/escritorio/71-lote-alta-origen.png)
 
 > [!NOTE]
-> **Integridad de Trazabilidad Garantizada**: ApiTrace guarda de manera inalterable los identificadores de todos los tambores originales que entraron a la mezcla. Si un comprador internacional o SENASA audita el frasco final, el sistema desplegará el árbol completo hasta llegar a las colmenas de origen de cada apicultor.
+> **Trazabilidad de la mezcla**: ApiTrace guarda los identificadores de todos los tambores originales que entraron a la mezcla. Si un comprador internacional o SENASA audita el frasco final, el sistema desplegará el árbol completo hasta llegar a las colmenas de origen de cada apicultor.
 
 ---
 

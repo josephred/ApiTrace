@@ -10,8 +10,6 @@
  *             -> EXTRACCION -> LOTE -> TAMBOR -> MOVIMIENTO -> ACOPIO -> LOTE MEZCLA
  */
 import 'dotenv/config';
-process.env.DTE_LIFECYCLE_ENABLED = 'false';
-process.env.OUTBOX_ENABLED = 'false';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
@@ -25,6 +23,7 @@ import { EstablishmentService } from '../modules/establishment/establishment.ser
 import { ApiaryService } from '../modules/apiary/apiary.service';
 import { MovementService } from '../modules/movement/movement.service';
 import { DteService } from '../modules/movement/dte.service';
+import { addDays, toArDate } from '../modules/movement/dte.rules';
 import { ExtractionService } from '../modules/production/extraction.service';
 import { LotService } from '../modules/production/lot.service';
 import { DrumService } from '../modules/production/drum.service';
@@ -45,45 +44,45 @@ const MOVEMENT_RULES = [
     name: 'Regla general: movimientos sin documento sanitario obligatorio',
     movementType: null,
     materialType: null,
-    sourceEstablishmentType: null,
-    destinationEstablishmentType: null,
+    originType: null,
+    destinationType: null,
     requiresDocument: false,
     requiredDocumentType: null,
     effectiveFrom: new Date('2020-01-01T00:00:00Z'),
     effectiveTo: null,
     priority: 900,
-    legalBasis: null,
-    description: 'Comodin de menor prioridad: se aplica cuando ninguna regla especifica coincide.',
+    legalReference: null,
+    notes: 'Comodin de menor prioridad: se aplica cuando ninguna regla especifica coincide.',
   },
   {
     name: 'DT-e obligatorio: material melario de apiario a sala de extraccion',
     movementType: 'MATERIAL_MELARIO' as const,
     materialType: 'MATERIAL_MELARIO' as const,
-    sourceEstablishmentType: 'APIARIO_BASE' as const,
-    destinationEstablishmentType: 'SALA_EXTRACCION' as const,
+    originType: 'APIARIO_BASE' as const,
+    destinationType: 'SALA_EXTRACCION' as const,
     requiresDocument: true,
     requiredDocumentType: 'DTE' as const,
     effectiveFrom: new Date('2026-08-01T00:00:00Z'),
     effectiveTo: null,
     priority: 10,
-    legalBasis:
+    legalReference:
       'SENASA - Optimizacion de controles de movimientos de material apicola desde apiarios a salas de extraccion (vigencia 01/08/2026). Gestion en SIGSA; cierre por la sala.',
-    description:
+    notes:
       'Antes del 01/08/2026 este mismo traslado no exigia DT-e: por eso la regla tiene vigencia y no esta hardcodeada.',
   },
   {
     name: 'Documento de respaldo: miel a granel entre establecimientos',
     movementType: 'MIEL_A_GRANEL' as const,
     materialType: 'MIEL' as const,
-    sourceEstablishmentType: null,
-    destinationEstablishmentType: null,
+    originType: null,
+    destinationType: null,
     requiresDocument: true,
     requiredDocumentType: 'REMITO' as const,
     effectiveFrom: new Date('2020-01-01T00:00:00Z'),
     effectiveTo: null,
     priority: 100,
-    legalBasis: null,
-    description: 'Remito comercial. Ajustar segun la operatoria real de cada jurisdiccion.',
+    legalReference: null,
+    notes: 'Remito comercial. Ajustar segun la operatoria real de cada jurisdiccion.',
   },
 ];
 
@@ -228,18 +227,6 @@ async function main(): Promise<void> {
       userProductor,
     );
 
-    await producers.upsertDelegation(
-      productor.id,
-      {
-        service: 'SIGSA_DTE',
-        status: 'ACEPTADA',
-        delegatedToTaxId: '30-71999888-9',
-        formNumber: 'F3283-99884',
-        notes: 'Delegacion F3283/E aceptada en ARCA',
-      },
-      userProductor,
-    );
-
     const estApiario = await establishments.create(
       {
         name: 'Predio Los Talas',
@@ -272,11 +259,12 @@ async function main(): Promise<void> {
         name: 'Apiario Monte Grande',
         latitude: -34.5721,
         longitude: -59.1099,
-        renapaCode: '02.045.123',
-        renapaStatus: 'ACTIVE',
-        renapaValidTo: '2027-12-31',
         hiveCount: 0,
         registeredAt: '2024-09-01T00:00:00.000Z',
+        // Identificacion oficial en RENAPA: origen del DT-e API-SEM.
+        renapaCode: 'B4512-1',
+        renapaStatus: 'ACTIVE',
+        renapaValidTo: '2027-12-31',
       },
       userProductor,
     );
@@ -301,7 +289,8 @@ async function main(): Promise<void> {
         locality: 'Mercedes',
         province: 'Buenos Aires',
         rne: 'RNE-02-045678',
-        senasaCode: 'SEF-B-008',
+        // Codigo SENASA de la sala habilitada: destino del DT-e API-SEM.
+        senasaCode: 'SEF-B-20010',
         senasaStatus: 'ACTIVE',
         senasaValidTo: '2027-12-31',
       },
@@ -404,11 +393,19 @@ async function main(): Promise<void> {
       `Movimiento ${movimiento.code} creado. Requiere documento: ${movimiento.requiresDocument} (${movimiento.appliedRule.ruleName ?? 'sin regla'})`,
     );
 
-    await dteService.create(
+    // DT-e emitido en SIGSA y registrado en ApiTrace (modo manual): numero y
+    // codigo de cierre tal como figuran impresos.
+    await dteService.createForMovement(
       movimiento.id,
       {
-        number: 'DTE-2026-00087654',
-        issuedAt: '2026-11-12T08:30:00.000Z',
+        number: '022440451-4',
+        verificationCode: '790112',
+        issuedAt: '2026-11-11T20:30:00.000Z',
+        estimatedQuantity: 45,
+        declaredQuantity: 60,
+        loadDate: '2026-11-12',
+        expiryDate: '2026-11-14',
+        transport: { type: 'CAMION', plate: 'AF123BC' },
         fromExternalSystem: false,
       },
       userProductor,
@@ -430,9 +427,17 @@ async function main(): Promise<void> {
       userSala,
     );
 
-    await dteService.close(
+    // Cierre en sala (SITA): numero, codigo de cierre y alzas reales (44 <= 60 declaradas).
+    await dteService.closeForMovement(
       movimiento.id,
-      { closedAt: '2026-11-12T13:00:00.000Z', notes: 'Cierre por la sala receptora.' },
+      {
+        closedAt: '2026-11-12T13:00:00.000Z',
+        arrivalAt: '2026-11-12T12:40:00.000Z',
+        number: '022440451-4',
+        verificationCode: '790112',
+        confirmedQuantity: 44,
+        notes: 'Cierre por la sala receptora.',
+      },
       userSala,
     );
 
@@ -508,7 +513,8 @@ async function main(): Promise<void> {
       userSala,
     );
 
-    await dteService.create(
+    // El remito se registra por la misma via: es un documento generico, sin reglas API-SEM.
+    await dteService.createForMovement(
       movimientoAcopio.id,
       { number: 'REM-2026-000341' },
       userSala,
@@ -544,11 +550,38 @@ async function main(): Promise<void> {
       userAcopio,
     );
 
+    // ------------------------------------------ DT-e por usuario (demostracion)
+    // Delegacion del servicio SIGSA en ApiTrace: iniciada, todavia sin aceptar.
+    await producers.upsertDelegation(
+      productor.id,
+      'SIGSA_DTE',
+      { status: 'PENDIENTE', notes: 'Delegacion iniciada en ARCA (demostracion).' },
+      userProductor,
+    );
+
+    // Un borrador listo para emitir. No se siembran DT-e emitidos con fechas
+    // relativas a hoy: el reloj los venceria y caducaria, y el productor de
+    // demostracion quedaria bloqueado para emitir.
+    const today = toArDate(new Date());
+    const borrador = await dteService.create(
+      {
+        apiaryId: apiario.id,
+        destinationEstablishmentId: estSala.id,
+        estimatedQuantity: 40,
+        declaredQuantity: 60,
+        loadDate: addDays(today, 2),
+        transport: { type: 'CAMIONETA', plate: 'AB123CD' },
+        notes: 'Cosecha de otono (borrador de demostracion).',
+      },
+      userProductor,
+    );
+
     logger.log('----------------------------------------------------------------');
     logger.log('Seed completado. Cadena de demostracion:');
     logger.log(`  Productor        ${productor.businessName}`);
     logger.log(`  Apiario          ${apiario.code}`);
-    logger.log(`  Movimiento       ${movimiento.code} (DT-e cerrado)`);
+    logger.log(`  Movimiento       ${movimiento.code} (DT-e 022440451-4 cerrado: 44 de 60 alzas)`);
+    logger.log(`  DT-e borrador    carga ${borrador.loadDate}, 60 alzas declaradas`);
     logger.log(`  Extraccion       ${extraccion.code}`);
     logger.log(`  Lote de sala     ${loteSala.code}  -> ${loteSala.id}`);
     logger.log(`  Tambores         ${tambores.map((t) => t.code).join(', ')}`);

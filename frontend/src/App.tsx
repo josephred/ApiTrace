@@ -48,6 +48,7 @@ const OPERATION_ROLES: UserRole[] = [
   'AUDITOR',
 ];
 const LOT_ROLES: UserRole[] = ['ADMIN', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'LABORATORIO', 'AUDITOR'];
+const DTE_ROLES: UserRole[] = ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'AUDITOR'];
 
 const Booting = () => (
   <div style={{ display: 'grid', placeItems: 'center', minHeight: '100dvh', gap: 'var(--sp-4)' }}>
@@ -130,7 +131,7 @@ export const App = () => {
           <Route
             path="dte"
             element={
-              <RoleRoute allowedRoles={['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'AUDITOR']}>
+              <RoleRoute allowedRoles={DTE_ROLES}>
                 <Suspense fallback={<SkeletonList />}>
                   <DtePage />
                 </Suspense>
@@ -140,7 +141,7 @@ export const App = () => {
           <Route
             path="dte/:id"
             element={
-              <RoleRoute allowedRoles={['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'AUDITOR']}>
+              <RoleRoute allowedRoles={DTE_ROLES}>
                 <Suspense fallback={<SkeletonList />}>
                   <DteDetailPage />
                 </Suspense>

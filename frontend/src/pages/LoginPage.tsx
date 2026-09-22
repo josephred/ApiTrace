@@ -7,15 +7,23 @@ import { Logo } from '../components/Icon';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { Button, Card, Notice } from '../components/ui';
 
-/** Usuarios de prueba del seed. Solo existen durante el desarrollo. */
+/** Usuarios de prueba del seed (npm run db:seed). */
 const DEMO_USERS = [
-  { label: 'Administrador', email: 'admin@apitrace.test' },
-  { label: 'Productor', email: 'productor@apitrace.test' },
-  { label: 'Sala', email: 'sala@apitrace.test' },
-  { label: 'Acopiador', email: 'acopio@apitrace.test' },
-  { label: 'Auditor', email: 'auditor@apitrace.test' },
-  { label: 'Laboratorio', email: 'laboratorio@apitrace.test' },
+  { label: 'Administrador', email: 'admin@apitrace' },
+  { label: 'Productor', email: 'productor@apitrace' },
+  { label: 'Sala', email: 'sala@apitrace' },
+  { label: 'Acopiador', email: 'acopio@apitrace' },
+  { label: 'Auditor', email: 'auditor@apitrace' },
+  { label: 'Laboratorio', email: 'laboratorio@apitrace' },
 ];
+
+/**
+ * El acceso rápido existe para probar roles sin recordar seis contraseñas. Se
+ * muestra en desarrollo o en una instancia de demostración declarada como tal
+ * (VITE_DEMO_ACCESS=true al compilar), nunca en la instancia con datos reales:
+ * cualquiera que abra la pantalla entraría con cualquier rol.
+ */
+const DEMO_ACCESS = import.meta.env.DEV || import.meta.env.VITE_DEMO_ACCESS === 'true';
 
 export const LoginPage = () => {
   const { login } = useAuth();
@@ -148,30 +156,31 @@ export const LoginPage = () => {
             </Button>
           </form>
 
-          {/* Acceso rápido para pruebas de demostración y evaluación de perfiles */}
-          <details className="disclosure" style={{ marginTop: 'var(--sp-5)' }}>
-            <summary>Acceso rápido para pruebas (Cuentas demo)</summary>
-            <div className="disclosure-body" style={{ paddingBottom: 'var(--sp-4)' }}>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                  gap: 'var(--sp-2)',
-                }}
-              >
-                {DEMO_USERS.map((demo) => (
-                  <Button
-                    key={demo.email}
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => void attempt(demo.email, 'ApiTrace2026!')}
-                  >
-                    {demo.label}
-                  </Button>
-                ))}
+          {DEMO_ACCESS && (
+            <details className="disclosure" style={{ marginTop: 'var(--sp-5)' }}>
+              <summary>Acceso rápido para pruebas (Cuentas demo)</summary>
+              <div className="disclosure-body" style={{ paddingBottom: 'var(--sp-4)' }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                    gap: 'var(--sp-2)',
+                  }}
+                >
+                  {DEMO_USERS.map((demo) => (
+                    <Button
+                      key={demo.email}
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void attempt(demo.email, 'ApiTrace2026!')}
+                    >
+                      {demo.label}
+                    </Button>
+                  ))}
+                </div>
               </div>
-            </div>
-          </details>
+            </details>
+          )}
         </Card>
 
         <div

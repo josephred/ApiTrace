@@ -18,6 +18,119 @@ export interface UserMessage {
 }
 
 /**
+ * Reglas del DT-e con codigo estable (`code` en la respuesta del backend). Se
+ * resuelven por codigo y no por texto: la redaccion del backend puede cambiar.
+ * `detail: null` significa "usar el mensaje del backend", que en estos casos
+ * trae los datos concretos (cantidades, fechas).
+ */
+const BY_CODE: Record<string, Omit<UserMessage, 'detail'> & { detail: string | null }> = {
+  EXCESO_CANTIDAD_DECLARADA: {
+    title: 'Llegaron más alzas de las declaradas',
+    detail: null,
+    tone: 'warning',
+    retryable: false,
+  },
+  DTE_NO_VIGENTE: {
+    title: 'El DT-e no habilita el tránsito en ese momento',
+    detail: null,
+    tone: 'warning',
+    retryable: false,
+  },
+  DTE_CADUCADO: { title: 'El DT-e caducó', detail: null, tone: 'danger', retryable: false },
+  DTE_SIN_CERRAR: {
+    title: 'Falta cerrar el DT-e',
+    detail: null,
+    tone: 'warning',
+    retryable: false,
+  },
+  CODIGO_CIERRE_INVALIDO: {
+    title: 'El código de cierre no coincide',
+    detail: 'Copialo tal como figura impreso en el DT-e.',
+    tone: 'warning',
+    retryable: false,
+  },
+  CODIGO_CIERRE_REQUERIDO: {
+    title: 'Falta el código de cierre',
+    detail: 'Está impreso en el DT-e que trae el transportista.',
+    tone: 'warning',
+    retryable: false,
+  },
+  NUMERO_DTE_NO_COINCIDE: {
+    title: 'El número no coincide con el del DT-e',
+    detail: null,
+    tone: 'warning',
+    retryable: false,
+  },
+  DTE_VERIFICACION_PREVIA: {
+    title: 'SIGSA rechazaría esta solicitud',
+    detail: null,
+    tone: 'warning',
+    retryable: false,
+  },
+  EMISION_API_NO_DISPONIBLE: {
+    title: 'La emisión por API no está habilitada',
+    detail: 'Emití el DT-e en SIGSA y registrá acá su número y código de cierre.',
+    tone: 'info',
+    retryable: false,
+  },
+  DTE_ACTIVO_EXISTENTE: {
+    title: 'El traslado ya tiene un DT-e en juego',
+    detail: 'Para reemplazarlo, anulalo primero.',
+    tone: 'warning',
+    retryable: false,
+  },
+  NUMERO_DTE_DUPLICADO: {
+    title: 'Ese número de DT-e ya está registrado',
+    detail: null,
+    tone: 'warning',
+    retryable: false,
+  },
+  VIGENCIA_FUERA_DE_RANGO: {
+    title: 'La fecha de vencimiento no es válida',
+    detail: null,
+    tone: 'warning',
+    retryable: false,
+  },
+  DECLARADA_MENOR_A_ESTIMADA: {
+    title: 'Declaraste menos alzas de las que estimás',
+    detail: null,
+    tone: 'warning',
+    retryable: false,
+  },
+  DTE_NO_ANULABLE: { title: 'Este DT-e ya no se puede anular', detail: null, tone: 'warning', retryable: false },
+  DOCUMENTO_REQUERIDO: {
+    title: 'Falta el documento del traslado',
+    detail: 'Registrá el DT-e antes de despachar este movimiento.',
+    tone: 'warning',
+    retryable: false,
+  },
+  DTE_REQUERIDO: {
+    title: 'El traslado no tiene un DT-e en juego',
+    detail: 'Emití uno nuevo antes de descargar.',
+    tone: 'warning',
+    retryable: false,
+  },
+  SOLO_EMISOR: {
+    title: 'Solo quien emite gestiona este DT-e',
+    detail: null,
+    tone: 'warning',
+    retryable: false,
+  },
+  SOLO_DESTINO: {
+    title: 'Solo la sala de destino puede hacer esto',
+    detail: null,
+    tone: 'warning',
+    retryable: false,
+  },
+  CAMBIO_CONCURRENTE: {
+    title: 'El DT-e cambió mientras trabajabas',
+    detail: 'Actualizá la pantalla y volvé a intentar.',
+    tone: 'warning',
+    retryable: true,
+  },
+};
+
+/**
  * Casos del backend que merecen una redaccion propia porque el mensaje tecnico
  * no le dice nada al usuario o, peor, lo confunde.
  */
@@ -173,69 +286,6 @@ const UNKNOWN: UserMessage = {
   retryable: true,
 };
 
-const CODE_MESSAGES: Record<string, UserMessage> = {
-  EXCESO_CANTIDAD_DECLARADA: {
-    title: 'La cantidad recibida supera la declarada',
-    detail: 'No podés recibir más alzas o tambores de los declarados en el DT-e oficial. Verificá el conteo físico.',
-    tone: 'danger',
-    retryable: false,
-  },
-  DTE_NO_VIGENTE: {
-    title: 'El DT-e no está vigente',
-    detail: 'El documento está fuera de su período de validez o en un estado que no autoriza el tránsito.',
-    tone: 'danger',
-    retryable: false,
-  },
-  DTE_TRANSITO_EXPIRADO: {
-    title: 'Plazo de tránsito expirado',
-    detail: 'El DT-e superó las 72 horas desde la salida sin confirmación de arribo en la sala.',
-    tone: 'danger',
-    retryable: false,
-  },
-  CODIGO_VERIFICACION_INVALIDO: {
-    title: 'Código de verificación incorrecto',
-    detail: 'El código ingresado no coincide con el emitido oficialmente por SENASA.',
-    tone: 'danger',
-    retryable: true,
-  },
-  DTE_NO_CERRADO: {
-    title: 'El DT-e debe estar cerrado',
-    detail: 'La sala de extracción debe confirmar la recepción y cerrar el DT-e antes de iniciar el extractado.',
-    tone: 'warning',
-    retryable: false,
-  },
-  TRANSITO_NO_AUTORIZADO: {
-    title: 'Tránsito no autorizado',
-    detail: 'El semáforo o estado del DT-e no autoriza el despacho en este momento.',
-    tone: 'danger',
-    retryable: false,
-  },
-  ORGANIZACION_NO_AUTORIZADA: {
-    title: 'Operación no permitida para tu organización',
-    detail: 'Solo la organización titular o el receptor autorizado pueden realizar esta acción.',
-    tone: 'warning',
-    retryable: false,
-  },
-  DTE_YA_CERRADO: {
-    title: 'El DT-e ya fue cerrado',
-    detail: 'Este documento sanitario ya completó su ciclo de vida.',
-    tone: 'info',
-    retryable: false,
-  },
-  DTE_NO_ANULABLE: {
-    title: 'No se puede anular el DT-e',
-    detail: 'El documento ya está en tránsito o fue cerrado en destino.',
-    tone: 'warning',
-    retryable: false,
-  },
-  FALTA_DELEGACION_SENASA: {
-    title: 'Falta delegación de servicios SENASA',
-    detail: 'El CUIT del productor debe delegar el servicio en AFIP/ARCA a ApiTrace.',
-    tone: 'warning',
-    retryable: false,
-  },
-};
-
 /**
  * Convierte cualquier fallo en algo que se pueda mostrar tal cual.
  *
@@ -247,11 +297,12 @@ export const toUserMessage = (cause: unknown, kind: 'read' | 'write' = 'read'): 
   if (cause instanceof NetworkError) return kind === 'write' ? OFFLINE_WRITE : OFFLINE_READ;
 
   if (cause instanceof ApiError) {
-    if (cause.code && CODE_MESSAGES[cause.code]) {
-      return CODE_MESSAGES[cause.code];
-    }
-
     const text = String(cause.message ?? '');
+    const code = errorCode(cause);
+    const byCode = code ? BY_CODE[code] : undefined;
+    if (byCode) {
+      return { ...byCode, detail: byCode.detail ?? (isReadable(text, 400) ? text : undefined) };
+    }
     const known = KNOWN.find((entry) => entry.match.test(text));
     if (known) return known.message;
 
@@ -325,10 +376,26 @@ const translateValidation = (line: string, field: string): string => {
   return 'Revisá este dato.';
 };
 
+/** Codigo estable de la regla violada, si el backend lo informa. */
+export const errorCode = (cause: unknown): string | undefined => {
+  if (!(cause instanceof ApiError)) return undefined;
+  const detail = cause.detail as { code?: unknown } | null;
+  return typeof detail?.code === 'string' ? detail.code : undefined;
+};
+
+/** Datos adicionales de la regla violada (p. ej. cantidades en conflicto). */
+export const errorDetails = (cause: unknown): Record<string, unknown> | undefined => {
+  if (!(cause instanceof ApiError)) return undefined;
+  const detail = cause.detail as { details?: unknown } | null;
+  return detail?.details && typeof detail.details === 'object'
+    ? (detail.details as Record<string, unknown>)
+    : undefined;
+};
+
 /** Descarta volcados tecnicos que no deberian llegar a la pantalla. */
-const isReadable = (text: string): boolean =>
+const isReadable = (text: string, max = 180): boolean =>
   Boolean(text) &&
-  text.length < 180 &&
+  text.length < max &&
   !/^[A-Z][a-z]+Error\b/.test(text) &&
   !/\bat\s+\w+\s*\(/.test(text) &&
   !/^(Internal Server Error|Bad Request|Forbidden|Unauthorized|Not Found)$/i.test(text);

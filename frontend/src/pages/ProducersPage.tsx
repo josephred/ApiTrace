@@ -4,17 +4,15 @@ import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
 import { useDebounced } from '../lib/useDebounced';
 import { fieldErrors, toUserMessage } from '../lib/errors';
+import { DELEGATION_STATUSES, PERSON_TYPES, SENASA_SERVICES } from '../lib/vocabulary';
 import { formatDateTime } from '../lib/format';
-import { PERSON_TYPES } from '../lib/vocabulary';
 import { Icon } from '../components/Icon';
 import {
   Button,
   Card,
   EmptyState,
-  ErrorNotice,
   Notice,
   PageHeader,
-  Pill,
   SkeletonList,
   StatusPill,
   Sheet,
@@ -90,7 +88,7 @@ export const ProducersPage = () => {
   const [pageSize, setPageSize] = useState(25);
   const [creating, setCreating] = useState(false);
   const [renapaFor, setRenapaFor] = useState<Producer | null>(null);
-  const [delegationsFor, setDelegationsFor] = useState<Producer | null>(null);
+  const [delegationFor, setDelegationFor] = useState<Producer | null>(null);
 
   const query = useDebounced(search);
   const list = useResource<Paginated<Producer>>(
@@ -168,20 +166,18 @@ export const ProducersPage = () => {
           total={list.data?.meta.total}
           onLoadMore={() => setPageSize((size) => size + 25)}
           loadingMore={list.loading}
-          rowActions={
-            canWrite
-              ? (item) => (
-                  <div className="row row-tight">
-                    <Button size="sm" onClick={() => setRenapaFor(item)}>
-                      RENAPA
-                    </Button>
-                    <Button size="sm" variant="secondary" onClick={() => setDelegationsFor(item)}>
-                      Delegación SENASA
-                    </Button>
-                  </div>
-                )
-              : undefined
-          }
+          rowActions={(item) => (
+            <>
+              {canWrite && (
+                <Button size="sm" onClick={() => setRenapaFor(item)}>
+                  Asociar RENAPA
+                </Button>
+              )}
+              <Button size="sm" onClick={() => setDelegationFor(item)}>
+                Delegación SENASA
+              </Button>
+            </>
+          )}
           empty={
             query ? (
               <EmptyState
@@ -222,23 +218,20 @@ export const ProducersPage = () => {
         />
       )}
 
+      {delegationFor && (
+        <DelegationSheet
+          producer={delegationFor}
+          canWrite={canWrite}
+          onClose={() => setDelegationFor(null)}
+        />
+      )}
+
       {renapaFor && (
         <RenapaSheet
           producer={renapaFor}
           onClose={() => setRenapaFor(null)}
           onDone={() => {
             setRenapaFor(null);
-            list.reload();
-          }}
-        />
-      )}
-
-      {delegationsFor && (
-        <SenasaDelegationSheet
-          producer={delegationsFor}
-          onClose={() => setDelegationsFor(null)}
-          onDone={() => {
-            setDelegationsFor(null);
             list.reload();
           }}
         />
@@ -386,253 +379,169 @@ const RenapaSheet = ({
 };
 
 /* =========================================================================
-   Delegación de servicios SENASA / ARCA (Formulario 3283/E)
+   Delegacion de servicios SENASA en ApiTrace
    ========================================================================= */
 
-const SenasaDelegationSheet = ({
+/**
+ * Para que ApiTrace emita (SIGSA) o cierre (SITA) DT-e en nombre del titular,
+ * el titular delega el servicio en ARCA. ApiTrace no puede verificarlo por su
+ * cuenta: aca se registra el estado para saber a quien se le puede emitir.
+ */
+const DelegationSheet = ({
   producer,
+  canWrite,
   onClose,
+}: {
+  producer: Producer;
+  canWrite: boolean;
+  onClose: () => void;
+}) => {
+  const delegations = useResource<SenasaDelegation[]>(
+    `/producers/${producer.id}/senasa-delegations`,
+  );
+  const [editing, setEditing] = useState<SenasaDelegation['service'] | null>(null);
+
+  return (
+    <Sheet
+      title="Delegación en ApiTrace"
+      subtitle={producer.businessName}
+      help="delegation"
+      onClose={onClose}
+    >
+      <Notice tone="info" title="Se delega en ARCA">
+        Desde ARCA, en el Administrador de Relaciones de Clave Fiscal (formulario F3283/E), el
+        titular delega el servicio de SENASA en la CUIT de ApiTrace. Acá se registra el estado para
+        saber si ApiTrace puede operar en su nombre.
+      </Notice>
+
+      {delegations.loading && <SkeletonList rows={2} />}
+      <ResourceNotices resource={delegations} />
+
+      {(delegations.data ?? []).map((item) =>
+        editing === item.service ? (
+          <DelegationForm
+            key={item.service}
+            producer={producer}
+            delegation={item}
+            onCancel={() => setEditing(null)}
+            onDone={() => {
+              setEditing(null);
+              delegations.reload();
+            }}
+          />
+        ) : (
+          <div className="dl-card" key={item.service} style={{ marginTop: 'var(--sp-3)' }}>
+            <div className="dl-card-top">
+              <span className="dl-card-title">{SENASA_SERVICES.label(item.service)}</span>
+              <StatusPill status={item.status} />
+            </div>
+            <div className="small muted">
+              {item.formNumber ? `Constancia ${item.formNumber}` : 'Sin constancia registrada'}
+              {item.updatedAt ? ` · actualizado ${formatDateTime(item.updatedAt)}` : ''}
+            </div>
+            {item.notes && <div className="small">{item.notes}</div>}
+            {canWrite && (
+              <div style={{ marginTop: 'var(--sp-2)' }}>
+                <Button size="sm" onClick={() => setEditing(item.service)}>
+                  Actualizar estado
+                </Button>
+              </div>
+            )}
+          </div>
+        ),
+      )}
+    </Sheet>
+  );
+};
+
+const DelegationForm = ({
+  producer,
+  delegation,
+  onCancel,
   onDone,
 }: {
   producer: Producer;
-  onClose: () => void;
+  delegation: SenasaDelegation;
+  onCancel: () => void;
   onDone: () => void;
 }) => {
-  const feedback = useWriteFeedback();
-  const delegationsRes = useResource<SenasaDelegation[]>(
-    `/producers/${producer.id}/senasa-delegations`,
-  );
-
-  const [service, setService] = useState<'SIGSA_DTE' | 'SITA'>('SIGSA_DTE');
-  const [status, setStatus] = useState<
-    'NO_INICIADA' | 'PENDIENTE' | 'ACEPTADA' | 'REVOCADA' | 'RECHAZADA'
-  >('ACEPTADA');
-  const [delegatedToTaxId, setDelegatedToTaxId] = useState('30-71829384-5');
-  const [formNumber, setFormNumber] = useState('F3283-99481');
-  const [notes, setNotes] = useState('');
-
+  const fields: FieldSpec[] = [
+    {
+      name: 'status',
+      label: 'Estado',
+      type: 'select',
+      required: true,
+      defaultValue: delegation.status,
+      options: DELEGATION_STATUSES.options,
+    },
+    {
+      name: 'formNumber',
+      label: 'N° de constancia (F3283/E)',
+      defaultValue: delegation.formNumber ?? '',
+    },
+    {
+      name: 'delegatedToTaxId',
+      label: 'CUIT del representante',
+      placeholder: '30-71234567-9',
+      inputMode: 'numeric',
+      defaultValue: delegation.delegatedToTaxId ?? '',
+    },
+    {
+      name: 'notes',
+      label: 'Notas',
+      type: 'textarea',
+      full: true,
+      defaultValue: delegation.notes ?? '',
+    },
+  ];
+  const { values, set, blur, errors, setErrors, validateAll } = useForm(fields);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown | null>(null);
+  const [failure, setFailure] = useState<{ title: string; detail?: string } | null>(null);
+  const feedback = useWriteFeedback();
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!validateAll()) return;
     setBusy(true);
-    setError(null);
-
+    setFailure(null);
     try {
-      await apiSend(
-        'POST',
-        `/producers/${producer.id}/senasa-delegations`,
+      const result = await apiSend(
+        'PUT',
+        `/producers/${producer.id}/senasa-delegations/${delegation.service}`,
+        buildBody(values, fields),
         {
-          service,
-          status,
-          delegatedToTaxId: delegatedToTaxId.trim() || undefined,
-          formNumber: formNumber.trim() || undefined,
-          notes: notes.trim() || undefined,
-        },
-        {
-          label: `Delegación ${service} de ${producer.businessName}`,
+          label: `Delegación ${SENASA_SERVICES.label(delegation.service)} de ${producer.businessName}`,
           entity: '/producers',
         },
       );
-
-      feedback.saved(
-        'Delegación SENASA guardada',
-        `Servicio ${service} configurado para el CUIT ${producer.taxId ?? producer.businessName}.`,
-      );
-      delegationsRes.reload();
+      if (result.queued) feedback.queued('El cambio');
+      else feedback.saved('Delegación actualizada', SENASA_SERVICES.label(delegation.service));
       onDone();
-    } catch (err) {
-      setError(err);
+    } catch (cause) {
+      const perField = fieldErrors(cause, fields.map((field) => field.name));
+      if (Object.keys(perField).length > 0) setErrors((current) => ({ ...current, ...perField }));
+      else {
+        const message = toUserMessage(cause, 'write');
+        setFailure({ title: message.title, detail: message.detail });
+      }
     } finally {
       setBusy(false);
     }
   };
 
-  const delegations = delegationsRes.data ?? [];
-
   return (
-    <Sheet
-      title="Delegaciones SENASA / ARCA"
-      subtitle={`Gestión de clave fiscal F3283/E para ${producer.businessName}`}
-      help="senasaDelegation"
-      onClose={onClose}
-    >
-      <div className="stack" style={{ gap: 'var(--sp-4)' }}>
-        <Notice tone="info">
-          Para que ApiTrace pueda solicitar y validar DT-e ante SENASA, el CUIT del productor debe delegar
-          el servicio <strong>SIGSA_DTE</strong> en la web de AFIP/ARCA mediante el formulario 3283/E.
-        </Notice>
-
-        <Card title="Delegaciones vigentes" flush>
-          {delegationsRes.loading ? (
-            <SkeletonList rows={2} />
-          ) : delegations.length > 0 ? (
-            <div style={{ padding: 'var(--sp-3)' }}>
-              <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
-                {delegations.map((del) => (
-                  <li
-                    key={del.id}
-                    style={{
-                      padding: 'var(--sp-3)',
-                      borderRadius: 'var(--radius-md)',
-                      background: 'var(--bg-subtle, rgba(0,0,0,0.02))',
-                      border: '1px solid var(--border)',
-                    }}
-                  >
-                    <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className="font-medium">
-                        {del.service === 'SIGSA_DTE' ? 'DT-e Apícola (API-SEM)' : del.service}
-                      </span>
-                      <Pill
-                        tone={
-                          del.status === 'ACEPTADA'
-                            ? 'success'
-                            : del.status === 'PENDIENTE'
-                              ? 'warning'
-                              : 'danger'
-                        }
-                      >
-                        {del.status}
-                      </Pill>
-                    </div>
-                    <div className="stack small muted" style={{ marginTop: 'var(--sp-2)', gap: 2 }}>
-                      {del.delegatedToTaxId && (
-                        <span>
-                          <strong>CUIT delegado:</strong> {del.delegatedToTaxId}
-                        </span>
-                      )}
-                      {del.formNumber && (
-                        <span>
-                          <strong>Formulario:</strong> {del.formNumber}
-                        </span>
-                      )}
-                      {del.acceptedAt && (
-                        <span>
-                          <strong>Aceptada el:</strong> {formatDateTime(del.acceptedAt)}
-                        </span>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <div style={{ padding: 'var(--sp-4)' }}>
-              <EmptyState
-                icon="rules"
-                title="Sin delegaciones registradas"
-                description="Registrá la delegación una vez asignado el servicio en AFIP/ARCA."
-              />
-            </div>
-          )}
-        </Card>
-
-        <Card title="Actualizar o registrar delegación">
-          <form onSubmit={handleSubmit} className="stack">
-            {error ? <ErrorNotice message={toUserMessage(error, 'write')} /> : null}
-
-            <div className="field">
-              <label className="field-label" htmlFor="del-service">
-                Servicio a delegar *
-              </label>
-              <select
-                id="del-service"
-                className="field-input"
-                value={service}
-                onChange={(e) => setService(e.target.value as 'SIGSA_DTE' | 'SITA')}
-                disabled={busy}
-              >
-                <option value="SIGSA_DTE">DT-e Apícola (SIGSA_DTE)</option>
-                <option value="SITA">Trazabilidad Apícola (SITA)</option>
-              </select>
-            </div>
-
-            <div className="field">
-              <label className="field-label" htmlFor="del-status">
-                Estado del trámite en ARCA *
-              </label>
-              <select
-                id="del-status"
-                className="field-input"
-                value={status}
-                onChange={(e) =>
-                  setStatus(
-                    e.target.value as
-                      | 'NO_INICIADA'
-                      | 'PENDIENTE'
-                      | 'ACEPTADA'
-                      | 'REVOCADA'
-                      | 'RECHAZADA',
-                  )
-                }
-                disabled={busy}
-              >
-                <option value="ACEPTADA">Aceptada / Vigente</option>
-                <option value="PENDIENTE">Pendiente de confirmación</option>
-                <option value="NO_INICIADA">No iniciada</option>
-                <option value="REVOCADA">Revocada</option>
-                <option value="RECHAZADA">Rechazada</option>
-              </select>
-            </div>
-
-            <div className="row" style={{ gap: 'var(--sp-3)' }}>
-              <div className="field grow">
-                <label className="field-label" htmlFor="del-cuit">
-                  CUIT de la entidad delegada
-                </label>
-                <input
-                  id="del-cuit"
-                  type="text"
-                  className="field-input mono"
-                  placeholder="30-71829384-5"
-                  value={delegatedToTaxId}
-                  onChange={(e) => setDelegatedToTaxId(e.target.value)}
-                  disabled={busy}
-                />
-              </div>
-
-              <div className="field grow">
-                <label className="field-label" htmlFor="del-form">
-                  N° Formulario 3283/E
-                </label>
-                <input
-                  id="del-form"
-                  type="text"
-                  className="field-input mono"
-                  placeholder="F3283-99481"
-                  value={formNumber}
-                  onChange={(e) => setFormNumber(e.target.value)}
-                  disabled={busy}
-                />
-              </div>
-            </div>
-
-            <div className="field">
-              <label className="field-label" htmlFor="del-notes">
-                Notas adicionales (opcional)
-              </label>
-              <textarea
-                id="del-notes"
-                className="field-input"
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                disabled={busy}
-              />
-            </div>
-
-            <div className="form-actions">
-              <Button variant="ghost" onClick={onClose} disabled={busy}>
-                Cerrar
-              </Button>
-              <Button type="submit" variant="primary" busy={busy} busyLabel="Guardando…">
-                Guardar delegación
-              </Button>
-            </div>
-          </form>
-        </Card>
-      </div>
-    </Sheet>
+    <div className="card" style={{ marginTop: 'var(--sp-3)', padding: 'var(--sp-4)' }}>
+      <div className="form-section-title">{SENASA_SERVICES.label(delegation.service)}</div>
+      <Form
+        onSubmit={submit}
+        error={failure && <FormError title={failure.title} detail={failure.detail} />}
+        submitLabel="Guardar"
+        busyLabel="Guardando…"
+        onCancel={onCancel}
+        busy={busy}
+      >
+        <Fields fields={fields} values={values} errors={errors} onChange={set} onBlur={blur} />
+      </Form>
+    </div>
   );
 };

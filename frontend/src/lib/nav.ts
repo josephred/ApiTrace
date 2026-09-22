@@ -42,7 +42,7 @@ export const NAV: NavGroup[] = [
       },
       {
         to: '/dte',
-        label: 'DT-e SENASA',
+        label: (role) => (role === 'SALA' || role === 'ACOPIADOR' ? 'DT-e recibidos' : 'Mis DT-e'),
         icon: 'document',
         roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'AUDITOR'],
       },
@@ -125,9 +125,10 @@ export const navFor = (role: UserRole): NavGroup[] =>
  * un auditor, en consultar y revisar, no en cargar.
  */
 const QUICK: Partial<Record<UserRole, string[]>> = {
-  ADMIN: ['/', '/movements', '/lots', '/trace'],
-  PRODUCTOR: ['/', '/movements', '/apiaries', '/trace'],
-  SALA: ['/', '/movements', '/extractions', '/lots'],
+  ADMIN: ['/', '/movements', '/dte', '/trace'],
+  // El DT-e es lo que el productor gestiona a diario desde el 01/08/2026.
+  PRODUCTOR: ['/', '/dte', '/movements', '/apiaries'],
+  SALA: ['/', '/dte', '/movements', '/extractions'],
   ACOPIADOR: ['/', '/movements', '/lots', '/drums'],
   FRACCIONADOR: ['/', '/movements', '/lots', '/drums'],
   EXPORTADOR: ['/', '/drums', '/lots', '/trace'],

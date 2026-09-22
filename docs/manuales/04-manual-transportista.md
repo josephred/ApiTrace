@@ -25,13 +25,13 @@ Antes de poner primera y salir a la ruta, abrí la aplicación ApiTrace en tu ce
 ```mermaid
 flowchart TD
     A["📱 Abrir ApiTrace en el celular"] --> B{"Estado del Semáforo DT-e"}
-    B -- "🟢 VERDE (Autorizado)" --> C["🚛 SALIR A LA RUTA\nTenés permiso legal oficial vigente de SENASA."]
+    B -- "🟢 VERDE (Vigente)" --> C["🚛 SALIR A LA RUTA\nEl DT-e está vigente: llevá el papel impreso."]
     B -- "🟡 AMARILLO (En trámite)" --> D["⏳ ESPERAR EN EL LUGAR\nSENASA está procesando el trámite.\nNo arranques hasta que cambie a verde."]
     B -- "🔴 ROJO (No autorizado / Vencido)" --> E["🛑 PROHIBIDO CIRCULAR\nEl DT-e fue rechazado, venció o fue anulado.\nSi salís, la patrulla te incautará el camión."]
 ```
 
 ### ¿Qué significa cada color?
-* 🟢 **AUTORIZADO (Verde)**: El DT-e fue aprobado por los servidores de SENASA. Tenés un número oficial de documento y estás plenamente amparado para circular durante el período de vigencia asignado.
+* 🟢 **VIGENTE (Verde)**: El DT-e tiene número y está dentro de su período de vigencia (desde la fecha de carga hasta la de vencimiento). Es el único estado que ampara el tránsito, y siempre con la representación impresa del DT-e en la cabina.
 * 🟡 **EN TRÁMITE / PREFLIGHT (Amarillo)**: El productor o la sala cargaron los datos, pero SENASA aún está validando las CUITs o el pago de aranceles. Si arrancás en este estado y te para un control, figurás como infractor.
 * 🔴 **NO AUTORIZADO / VENCIDO (Rojo)**: La operación no tiene validez legal. Ocurre si el establecimiento de destino está clausurado sanitariamente, si el productor tiene el RENSPA vencido, o si pasaron los días de vigencia del viaje sin haber arribado a destino.
 
@@ -67,7 +67,7 @@ sequenceDiagram
     C->>C: Inicia viaje por caminos y rutas
     opt Control en Ruta
         S->>C: Solicita documentación sanitaria
-        C->>App: Muestra pantalla de DT-e con QR y Código Oficial
+        C->>App: Muestra la pantalla del DT-e con número y vigencia
         S->>C: Permite continuar viaje
     end
     C->>E: Llega a la sala de extracción
@@ -83,19 +83,19 @@ sequenceDiagram
 ### Paso 2: Si te detiene un control de tránsito o SENASA
 Cuando los inspectores de ruta te pidan la guía o documento de amparo:
 1. Abrí ApiTrace en tu celular y mostrales la pantalla del **Detalle del Movimiento**:
-   * **Número de DT-e oficial** (ej: `26-004-9281740-1`).
+   * **Número de DT-e** (ej: `022440451-4`).
    * **Vigencia**: Fecha y hora límite de validez.
    * **Origen y Destino**: Nombres de los establecimientos y números de RENSPA.
    * **Código de Verificación**: Serie alfanumérica de seguridad para que el inspector valide la autenticidad en el sistema central de SENASA.
-2. Si el oficial prefiere papel, podés exhibir el comprobante impreso que te entregó el productor antes de salir.
+2. El documento que vale en el control es el **DT-e impreso** que te entregó el productor antes de salir: SENASA exige llevarlo en la cabina. La app sirve para consultar los datos, no lo reemplaza.
 
 > [!TIP]
 > **¿Qué pasa si no hay señal 4G en el control de ruta?**
-> No te preocupes: Si abriste el movimiento en tu celular antes de salir del pueblo o del campo con señal, **ApiTrace guarda la información en la memoria de tu teléfono**. La pantalla del DT-e se abrirá con todos los datos y sellos oficiales aunque no tengas ni una raya de señal en el medio del campo.
+> No te preocupes: Si abriste el movimiento en tu celular antes de salir del pueblo o del campo con señal, **ApiTrace guarda la información en la memoria de tu teléfono**. La pantalla del DT-e se abrirá con el número, la vigencia y los datos de la carga aunque no tengas ni una raya de señal. El documento que se exhibe en un control sigue siendo el impreso.
 
 ### Paso 3: Al llegar a la Sala de Extracción o Acopio
 1. Acercá el camión a la báscula de pesaje.
-2. Entregale al encargado de la planta tu número de movimiento y el **Código de Verificación SENASA** (los 12 caracteres que figuran al pie de tu DT-e).
+2. Entregale al encargado de la planta tu número de movimiento y el **código de cierre** que figura impreso al pie de tu DT-e.
 3. El encargado ingresará ese código en su computadora para cerrar el DT-e en el sistema nacional.
 4. Una vez cerrado el documento, tu camión queda legalmente libre de esa carga para emprender el siguiente flete.
 

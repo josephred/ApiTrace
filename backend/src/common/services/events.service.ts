@@ -21,17 +21,21 @@ export const DomainEvents = {
   MovementRejected: 'MovementRejected',
   MovementCancelled: 'MovementCancelled',
   DteCreated: 'DteCreated',
+  /** Solicitud de emision encolada hacia SIGSA: la consume DteSyncWorker. */
   DteRequested: 'DteRequested',
   DteIssued: 'DteIssued',
   DteApproved: 'DteApproved',
+  /** Paso del tiempo: 00:00 de la fecha de carga. */
   DteBecameValid: 'DteBecameValid',
+  /** Paso del tiempo: 23:59 de la fecha de vencimiento sin cierre. */
   DteExpired: 'DteExpired',
+  /** Paso del tiempo: fin del periodo de gracia sin cierre. Bloquea al titular. */
   DteLapsed: 'DteLapsed',
   DteClosed: 'DteClosed',
+  DteRejected: 'DteRejected',
   DteVoided: 'DteVoided',
   DteNoArrival: 'DteNoArrival',
   DteRegularized: 'DteRegularized',
-  DteRejected: 'DteRejected',
   ExtractionRegistered: 'ExtractionRegistered',
   ExtractionCompleted: 'ExtractionCompleted',
   LotCreated: 'LotCreated',
@@ -55,6 +59,12 @@ export interface DomainEventInput {
   correlationId?: string | null;
   occurredAt?: Date;
   payload?: Record<string, unknown>;
+  /**
+   * false: solo se entrega por el outbox, sin entrar al historial de la entidad
+   * (CU-19). Se usa para hechos derivados del reloj, como el vencimiento de un
+   * DT-e, que ya quedan en su propio historial y no deben mezclarse con las
+   * acciones de las personas.
+   */
   recordInTimeline?: boolean;
 }
 

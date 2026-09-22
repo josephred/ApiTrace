@@ -86,7 +86,7 @@ A la izquierda tenés la **Barra Lateral de Navegación** dividida por tareas cl
 * **Principal**: Panel de resumen y Gráfico de Trazabilidad.
 * **Operación**: Movimientos, DT-e oficial, Extracciones, Lotes y Tambores.
 * **Registros**: Productores, Establecimientos y Apiarios.
-* **Control**: Reglas normativas y Auditoría inmutable.
+* **Control**: Reglas documentales y libro de auditoría.
 * **Sistema**: Configuración general y Operaciones pendientes fuera de línea.
 
 ### En el Celular (Móvil)

@@ -19,6 +19,7 @@ import {
 } from '../../database/schema';
 import { AccessControlService } from '../../common/services/access-control.service';
 import type { AuthenticatedUser } from '../../common/types';
+import { effectiveStatus, isVoid } from '../movement/dte.rules';
 import { nodeKey, type TraceEdge, type TraceGap, type TraceNode, type TraceResult } from './traceability.types';
 
 /** Corta ciclos y cadenas patologicas de lotes derivados. */
@@ -310,31 +311,75 @@ export class TraceabilityService {
         );
       }
 
-      const document = dteRows.find((d) => d.movementId === row.id);
+      // Un movimiento puede tener DT-e anulados y uno reemitido: la cadena la
+      // ampara el que esta en juego (o, si todos fueron dados de baja, ninguno).
+      const documents = dteRows
+        .filter((d) => d.movementId === row.id)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const document = documents.find((d) => !isVoid(d.status)) ?? null;
       if (document) {
         const dteKey = nodeKey('dte', document.id);
+        const status = effectiveStatus(document.status, document, new Date());
         addNode({
           key: dteKey,
           type: 'dte',
           id: document.id,
           label: document.number ?? 'DT-e sin numero',
           attributes: {
-            status: document.status,
+            status,
             syncStatus: document.syncStatus,
+            issueMode: document.issueMode,
             issuedAt: document.issuedAt,
             closedAt: document.closedAt,
+            originCode: document.originCode,
+            destinationCode: document.destinationCode,
+            declaredQuantity: document.declaredQuantity,
+            confirmedQuantity: document.confirmedQuantity,
+            loadDate: document.loadDate,
+            expiryDate: document.expiryDate,
             originRenspa: document.originRenspa,
             destinationRenspa: document.destinationRenspa,
+            replacedDocuments: documents.filter((d) => d.id !== document.id).length,
           },
         });
         addEdge(key, dteKey, 'esta amparado por');
 
-        if (document.syncStatus === 'PENDING_SYNC') {
+        const entity = { type: 'movement' as const, id: row.id, label: row.code };
+        if (document.issueMode === 'SIMULADO') {
+          gaps.push({
+            severity: 'WARNING',
+            code: 'DTE_SIMULADO',
+            message: `El DT-e del movimiento ${row.code} es una simulacion: no tiene validez oficial.`,
+            entity,
+          });
+        } else if (document.syncStatus === 'PENDING_SYNC') {
           gaps.push({
             severity: 'WARNING',
             code: 'DTE_PENDING_SYNC',
             message: `El DT-e del movimiento ${row.code} no esta sincronizado con SIGSA.`,
-            entity: { type: 'movement', id: row.id, label: row.code },
+            entity,
+          });
+        }
+        if (status === 'VENCIDO') {
+          gaps.push({
+            severity: 'WARNING',
+            code: 'DTE_VENCIDO_SIN_CIERRE',
+            message: `El DT-e del movimiento ${row.code} vencio sin cierre de la sala.`,
+            entity,
+          });
+        } else if (status === 'CADUCADO') {
+          gaps.push({
+            severity: 'ERROR',
+            code: 'DTE_CADUCADO',
+            message: `El DT-e del movimiento ${row.code} caduco sin cierre: el traslado no quedo amparado.`,
+            entity,
+          });
+        } else if (status === 'SIN_ARRIBO') {
+          gaps.push({
+            severity: 'ERROR',
+            code: 'DTE_SIN_ARRIBO',
+            message: `La sala declaro que la carga del movimiento ${row.code} nunca arribo.`,
+            entity,
           });
         }
       } else if (row.requiresDocument) {
@@ -394,6 +439,8 @@ export class TraceabilityService {
           locality: row.locality,
           province: row.province,
           status: row.status,
+          renapaCode: row.renapaCode,
+          renapaStatus: row.renapaStatus,
         },
       });
       addEdge(
@@ -433,6 +480,8 @@ export class TraceabilityService {
           longitude: row.longitude,
           status: row.status,
           rne: row.rne,
+          senasaCode: row.senasaCode,
+          senasaStatus: row.senasaStatus,
           organizationId: row.organizationId,
         },
       });
@@ -621,7 +670,12 @@ export class TraceabilityService {
           type: 'apiary',
           id: entityId,
           label: rows[0].code,
-          attributes: { name: rows[0].name, hiveCount: rows[0].hiveCount },
+          attributes: {
+            name: rows[0].name,
+            hiveCount: rows[0].hiveCount,
+            renapaCode: rows[0].renapaCode,
+            renapaStatus: rows[0].renapaStatus,
+          },
         };
         const rowsMov = await this.db
           .select({ id: movement.id })

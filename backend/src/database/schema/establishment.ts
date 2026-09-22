@@ -1,4 +1,13 @@
-import { index, numeric, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import {
+  date,
+  index,
+  numeric,
+  pgTable,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import {
   entityStatusEnum,
   establishmentTypeEnum,
@@ -29,11 +38,16 @@ export const establishment = pgTable(
     latitude: numeric('latitude', { precision: 9, scale: 6 }),
     longitude: numeric('longitude', { precision: 9, scale: 6 }),
     status: entityStatusEnum('status').notNull().default('ACTIVE'),
-    senasaCode: varchar('senasa_code', { length: 40 }),
-    senasaStatus: varchar('senasa_status', { length: 40 }).notNull().default('PENDING_VERIFICATION'),
-    senasaValidTo: varchar('senasa_valid_to', { length: 10 }),
     /** RNE: identificador SIFeGA del establecimiento alimentario (referencia externa). */
     rne: varchar('rne', { length: 60 }),
+    /**
+     * Codigo del establecimiento habilitado por SENASA. Para una sala de extraccion
+     * es el destino del DT-e API-SEM (formato SEF-Letra-N°, ej. SEF-B-20010).
+     */
+    senasaCode: varchar('senasa_code', { length: 40 }),
+    /** Habilitacion vigente en SENASA. SIGSA rechaza el DT-e si la sala no esta habilitada. */
+    senasaStatus: registrationStatusEnum('senasa_status').notNull().default('PENDING_VERIFICATION'),
+    senasaValidTo: date('senasa_valid_to', { mode: 'string' }),
     createdById: uuid('created_by_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -41,7 +55,7 @@ export const establishment = pgTable(
   (t) => [
     index('establishment_org_status_idx').on(t.organizationId, t.status),
     index('establishment_type_status_idx').on(t.type, t.status),
-    index('establishment_senasa_code_idx').on(t.senasaCode),
+    uniqueIndex('establishment_senasa_code_uq').on(t.senasaCode),
   ],
 );
 

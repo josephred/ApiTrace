@@ -1,22 +1,39 @@
-import { Provider } from '@nestjs/common';
+import { Logger, type Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { IntegrationLogService } from '../../../common/services/integration-log.service';
+import type { AppConfig } from '../../../config/configuration';
 import { ManualSenasaGateway } from './manual.gateway';
-import { SENASA_GATEWAY } from './senasa.gateway';
+import { SENASA_GATEWAY, type SenasaGateway } from './senasa.gateway';
 import { SigsaSenasaGateway } from './sigsa.gateway';
 import { SimulatedSenasaGateway } from './simulated.gateway';
 
-export const SenasaGatewayProvider: Provider = {
+/** Elige el adaptador segun SENASA_MODE. El dominio solo conoce SENASA_GATEWAY. */
+export const senasaGatewayProvider: Provider = {
   provide: SENASA_GATEWAY,
-  useFactory: (config: ConfigService, integrationLog: IntegrationLogService) => {
-    const mode = (config.get('senasa')?.mode ?? 'SIMULADO').toUpperCase();
-    if (mode === 'SIGSA') {
-      return new SigsaSenasaGateway(config, integrationLog);
+  inject: [ConfigService],
+  useFactory: (config: ConfigService): SenasaGateway => {
+    const senasa = config.getOrThrow<AppConfig['senasa']>('senasa');
+    const logger = new Logger('SenasaGateway');
+
+    switch (senasa.mode) {
+      case 'simulado':
+        if (config.get<string>('nodeEnv') === 'production') {
+          logger.warn(
+            'SENASA_MODE=simulado en produccion: los DT-e emitidos no tienen validez oficial.',
+          );
+        }
+        logger.log('Integracion SENASA en modo SIMULADO.');
+        return new SimulatedSenasaGateway();
+      case 'sigsa':
+        logger.log(`Integracion SENASA en modo SIGSA (${senasa.environment}).`);
+        return new SigsaSenasaGateway({
+          environment: senasa.environment,
+          baseUrl: senasa.sigsaBaseUrl,
+          platformTaxId: senasa.platformTaxId,
+          timeoutMs: senasa.timeoutMs,
+        });
+      default:
+        logger.log('Integracion SENASA en modo MANUAL (sin API).');
+        return new ManualSenasaGateway();
     }
-    if (mode === 'MANUAL') {
-      return new ManualSenasaGateway();
-    }
-    return new SimulatedSenasaGateway();
   },
-  inject: [ConfigService, IntegrationLogService],
 };

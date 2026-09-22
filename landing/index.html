@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ApiTrace | Trazabilidad Apícola Integral</title>
-  <meta name="description" content="Plataforma digital para la trazabilidad integral de la miel argentina. Conecta a productores, salas de extracción, acopiadores y auditores con cumplimiento SENASA y funcionamiento offline." />
+  <meta name="description" content="Plataforma digital para la trazabilidad integral de la miel argentina. Conecta a productores, salas de extracción, acopiadores y auditores sobre el circuito DT-e de SENASA, y funciona sin señal en el campo." />
   <meta name="keywords" content="trazabilidad apicola, miel argentina, SENASA, DTE apicola, RENAPA, RENSPA, sala de extraccion, acopio de miel" />
   <meta property="og:title" content="ApiTrace | Trazabilidad Apícola Integral" />
-  <meta property="og:description" content="Del apiario al frasco: el hilo digital de la miel argentina con trazabilidad garantizada y modo offline." />
+  <meta property="og:description" content="Del apiario al frasco: el hilo digital de la miel argentina, con trazabilidad de punta a punta y modo sin conexión." />
   <meta property="og:type" content="website" />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   
@@ -58,7 +58,10 @@
       </nav>
 
       <div class="nav-actions">
-        <a href="https://apitrace.onrender.com" target="_blank" rel="noopener noreferrer" class="btn btn-primary" id="btnAccederNav">
+        <a href="#manuales" class="btn btn-secondary btn-sm" id="btnManualesNav">
+          <span>Manuales PDF</span>
+        </a>
+        <a href="https://apitrace-web.onrender.com/login" target="_blank" rel="noopener noreferrer" class="btn btn-primary" id="btnAccederNav">
           <span>Ingresar a la App</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
         </a>
@@ -74,7 +77,7 @@
     <div class="container hero-container">
       <div class="hero-badge">
         <span class="badge-dot"></span>
-        <span>Integración SENASA API-SEM DT-e • Plataforma Homologable 2026</span>
+        <span>Circuito DT-e API-SEM • Integración con SENASA en preparación</span>
       </div>
 
       <h1 class="hero-title">
@@ -83,16 +86,16 @@
       </h1>
 
       <p class="hero-subtitle">
-        Conectamos a <strong>Productores, Salas de Extracción, Transportistas, Acopiadores y Fraccionadores</strong> en una sola plataforma. Control de origen, validación automática de <strong>DT-e de SENASA con Semáforo de Tránsito</strong>, funcionamiento 100% offline y auditoría inmutable.
+        Conectamos a <strong>Productores, Salas de Extracción, Transportistas, Acopiadores y Fraccionadores</strong> en una sola plataforma. Control de origen, gestión del <strong>DT-e API-SEM con semáforo de tránsito</strong>, trabajo sin señal en el campo y registro de auditoría de cada operación.
       </p>
 
       <div class="hero-cta-group">
-        <a href="https://apitrace.onrender.com" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-lg" id="btnHeroDemo">
+        <a href="https://apitrace-web.onrender.com/login" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-lg" id="btnHeroDemo">
           <span>Probar Demostración en Vivo</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
         </a>
         <a href="#manuales" class="btn btn-secondary btn-lg">
-          <span>Descargar Manuales Oficiales (PDF)</span>
+          <span>Descargar Manuales de Usuario (PDF)</span>
         </a>
       </div>
 
@@ -111,7 +114,7 @@
         <div class="metric-card">
           <div class="metric-value">SENASA</div>
           <div class="metric-label">API-SEM & Semáforo DT-e</div>
-          <div class="metric-desc">Emisión en apiario, control en ruta y cierre formal en sala</div>
+          <div class="metric-desc">Alta del DT-e en el apiario, semáforo en ruta y registro del cierre en sala</div>
         </div>
         <div class="metric-card">
           <div class="metric-value">6 Roles</div>
@@ -138,7 +141,7 @@
         <button class="tab-btn" data-actor="transportista">🚛 Transportista</button>
         <button class="tab-btn" data-actor="acopio">📦 Acopiador</button>
         <button class="tab-btn" data-actor="fraccionador">🍯 Fraccionador</button>
-        <button class="tab-btn" data-actor="auditor">🔍 Auditor / SENASA</button>
+        <button class="tab-btn" data-actor="auditor">🔍 Auditoría e inspección</button>
         <button class="tab-btn" data-actor="admin">👑 Administrador</button>
       </div>
 
@@ -152,7 +155,7 @@
               <h3>El Productor Apícola</h3>
               <p class="lead-text">Controla sus predios, apiarios y cosechas sin preocuparse por la falta de conectividad.</p>
               <ul class="feature-checklist">
-                <li><strong>Registro de RENAPA y RENSPA:</strong> Gestión directa de sus credenciales y certificados oficiales.</li>
+                <li><strong>Registro de RENAPA y RENSPA:</strong> Carga y seguimiento de los registros oficiales del productor y de sus predios.</li>
                 <li><strong>Mapeo de Apiarios y Colmenas:</strong> Registro georreferenciado de unidades productivas y estado sanitario.</li>
                 <li><strong>Despacho con DT-e:</strong> Generación del movimiento de alzas melarias hacia la sala de extracción habilitada.</li>
                 <li><strong>Carga Offline:</strong> Anotaciones en el colmenar que se envían solas al volver a tener señal.</li>
@@ -193,9 +196,9 @@
               <p class="lead-text">Recibe el material melario, valida el DT-e y genera los tambores con precinto y lote.</p>
               <ul class="feature-checklist">
                 <li><strong>Recepción con Acta de Diferencia:</strong> Control de alzas recibidas vs despachadas y registro de mermas.</li>
-                <li><strong>Cierre de DT-e en SIGSA:</strong> Validación del cumplimiento del transporte sanitario.</li>
+                <li><strong>Cierre del DT-e:</strong> La sala cierra el documento en SITA/SIGSA con el código impreso y ApiTrace registra el cierre y las alzas recibidas.</li>
                 <li><strong>Procesamiento y Lote de Extracción:</strong> Registro de fecha, operario y rendimiento en kilogramos.</li>
-                <li><strong>Identificación de Tambores:</strong> Asignación de tara, peso neto, número de precinto y rotulado QR.</li>
+                <li><strong>Identificación de Tambores:</strong> Asignación de tara, peso neto, número de precinto y código de tambor.</li>
               </ul>
             </div>
             <div class="actor-mockup">
@@ -230,11 +233,11 @@
             <div class="actor-info">
               <span class="actor-tag indigo">Logística & Tránsito en Ruta</span>
               <h3>El Transportista en Ruta</h3>
-              <p class="lead-text">Viaja amparado por el DT-e oficial de SENASA directamente desde su teléfono celular, sin depender de papeles o señal en ruta.</p>
+              <p class="lead-text">Viaja con el DT-e impreso, como exige SENASA, y consulta en el celular el estado del documento y los datos del viaje aunque no haya señal.</p>
               <ul class="feature-checklist">
                 <li><strong>Semáforo de Tránsito (Verde / Amarillo / Rojo):</strong> Certeza absoluta antes de arrancar. Solo sale a la ruta con DT-e aprobado y vigente.</li>
-                <li><strong>Operación 100% Offline en Ruta:</strong> En controles de Gendarmería y patrullas de SENASA, exhibe el QR y certificado aún sin señal 4G.</li>
-                <li><strong>Entrega de Código de Verificación:</strong> Entrega el código oficial de 12 caracteres al operario de báscula para el cierre formal del viaje.</li>
+                <li><strong>Consulta sin señal en ruta:</strong> En un control, el chofer ve en la app el número de DT-e, la vigencia y los datos de la carga; el documento que se exhibe es el impreso.</li>
+                <li><strong>Entrega del código de cierre:</strong> Entrega al operario de báscula el código de cierre impreso en el DT-e, con el que la sala cierra el documento.</li>
                 <li><strong>Control de Precintos Inviolables:</strong> Verificación de precintos plásticos y metálicos en traslados de tambores a puerto.</li>
               </ul>
             </div>
@@ -314,7 +317,7 @@
               <ul class="feature-checklist">
                 <li><strong>Consumo de Tambores:</strong> Cierre de tambores origen y balance de envasado en frascos.</li>
                 <li><strong>Lotes de Fraccionamiento:</strong> Vinculación del lote comercial con RNE, RNPA y fecha de vencimiento.</li>
-                <li><strong>QR de Transparencia:</strong> El comprador final puede escanear el frasco y ver la región apícola de origen.</li>
+                <li><strong>Trazabilidad del frasco (en desarrollo):</strong> El objetivo es que el comprador final escanee el envase; hoy la consulta la hace el equipo desde la aplicación.</li>
               </ul>
             </div>
             <div class="actor-mockup">
@@ -327,7 +330,7 @@
                   <div class="mockup-stat-row">
                     <div class="m-stat"><span>Frascos 500g</span><strong>4.800</strong></div>
                     <div class="m-stat"><span>Tambores Usados</span><strong>8</strong></div>
-                    <div class="m-stat"><span>QR Público</span><strong>Activo</strong></div>
+                    <div class="m-stat"><span>Consulta pública</span><strong>En desarrollo</strong></div>
                   </div>
                   <div class="mockup-item">
                     <div class="m-badge ok">Lote Comercial</div>
@@ -343,8 +346,8 @@
         <div class="actor-content" id="content-auditor">
           <div class="actor-grid">
             <div class="actor-info">
-              <span class="actor-tag gray">Fiscalización & Control Oficial</span>
-              <h3>Auditor / Inspector SENASA</h3>
+              <span class="actor-tag gray">Fiscalización y control</span>
+              <h3>Auditor o inspector</h3>
               <p class="lead-text">Auditoría integral transversal de cualquier evento ocurrido en la cadena apícola.</p>
               <ul class="feature-checklist">
                 <li><strong>Vista Retrospectiva y Prospectiva:</strong> Reconstrucción instantánea del árbol completo de cualquier tambor.</li>
@@ -381,10 +384,10 @@
             <div class="actor-info">
               <span class="actor-tag rose">Gobernanza & Configuración</span>
               <h3>Administrador de Plataforma</h3>
-              <p class="lead-text">Controla la infraestructura multi-tenant, gobierna las reglas documentales dinámicas y supervisa las pasarelas con SENASA y AFIP.</p>
+              <p class="lead-text">Controla la infraestructura multi-tenant, gobierna las reglas documentales y define el canal de emisión del DT-e.</p>
               <ul class="feature-checklist">
                 <li><strong>Reglas Documentales Dinámicas:</strong> Modifica tolerancias de báscula (3%), humedad crítica (18%) y vigencia de DT-e sin tocar código.</li>
-                <li><strong>Pasarela SENASA / SIGSA:</strong> Conmuta ágilmente entre modo Simulado (capacitación), Homologación y Producción real en vivo.</li>
+                <li><strong>Canal de emisión del DT-e:</strong> Hoy el DT-e se emite en SIGSA y su número se registra en ApiTrace (modo manual); el modo simulado sirve para capacitar. La emisión por API queda a la espera del contrato técnico de SENASA.</li>
                 <li><strong>Aislamiento Multi-Tenant (RBAC):</strong> Gestión segura de permisos por cooperativa, sala o empresa exportadora.</li>
                 <li><strong>Monitoreo de Sincronización:</strong> Supervisión de colas locales con claves de idempotencia UUID v4 y backups automáticos cifrados.</li>
               </ul>
@@ -397,7 +400,7 @@
                 </div>
                 <div class="mockup-body">
                   <div class="mockup-stat-row">
-                    <div class="m-stat"><span>Pasarela</span><strong>SIGSA PROD</strong></div>
+                    <div class="m-stat"><span>Canal</span><strong>Manual</strong></div>
                     <div class="m-stat"><span>Reglas</span><strong>4 Activas</strong></div>
                     <div class="m-stat"><span>Integridad</span><strong>99.99%</strong></div>
                   </div>
@@ -406,8 +409,8 @@
                     <div><strong>DTE_MAX_DAYS = 5</strong> · Tolerancia báscula: 3.0% · Humedad máx: 18.0%</div>
                   </div>
                   <div class="mockup-item">
-                    <div class="m-badge info">Certificado AFIP</div>
-                    <div><strong>Nivel 3 Activo</strong> · Servicio SIGSA Formulario 3283/E verificado</div>
+                    <div class="m-badge info">Delegación SIGSA</div>
+                    <div><strong>F. 3283/E</strong> · Estado de la delegación declarado por el productor</div>
                   </div>
                 </div>
               </div>
@@ -484,26 +487,26 @@
       <div class="features-grid">
         <div class="feature-card">
           <div class="feature-icon">📡</div>
-          <h3>100% Offline-First PWA</h3>
+          <h3>Trabajo sin señal (PWA)</h3>
           <p>La miel se produce en el campo donde no hay 4G. Registra colmenas, apiarios y cosechas sin señal; la app sincroniza sola con claves de idempotencia UUID v4 cuando recuperas cobertura.</p>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon">🚦</div>
           <h3>Semáforo DT-e & API-SEM</h3>
-          <p>Validación sanitaria instantánea: 🟢 Verde para circular amparado, 🟡 Amarillo en trámite, 🔴 Rojo no autorizado. Previene retenciones y multas viales.</p>
+          <p>El estado del DT-e a la vista: 🟢 verde cuando está vigente, 🟡 amarillo cuando todavía no empieza o está por vencer, 🔴 rojo cuando no ampara el tránsito. El dato sale del DT-e registrado en ApiTrace.</p>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon">💡</div>
           <h3>Ayudas Pedagógicas en Pantalla</h3>
-          <p>Más de 35 ventanas emergentes didácticas que explican conceptos técnicos, dan ejemplos reales con números y citan la resolución legal de SENASA.</p>
+          <p>Ventanas de ayuda en cada pantalla que explican los conceptos del oficio con ejemplos concretos y citan la norma cuando corresponde.</p>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon">⚙️</div>
           <h3>Módulo de Configuración Integral</h3>
-          <p>Personalización adaptada a cada rol en <code>/settings</code>: selector de tema Claro/Oscuro, tolerancias de pesaje, alertas de vencimiento y preferencias visuales.</p>
+          <p>En <code>/settings</code>: tema claro u oscuro, ayudas en pantalla, patente habitual del vehículo y el canal de emisión del DT-e que informa el servidor.</p>
         </div>
 
         <div class="feature-card">
@@ -515,19 +518,19 @@
         <div class="feature-card">
           <div class="feature-icon">🔒</div>
           <h3>Aislamiento Multi-Tenant (RBAC)</h3>
-          <p>Cada productor o cooperativa solo accede a sus propios datos. Los inspectores de SENASA cuentan con visibilidad transversal sin capacidad de edición.</p>
+          <p>Cada productor o cooperativa solo accede a sus propios datos. El rol de auditoría ve toda la cadena, sin poder editarla.</p>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon">🔬</div>
           <h3>Muestreo y Calidad</h3>
-          <p>Asocia protocolos fisicoquímicos (humedad &lt;18%, HMF, color Pfund) y análisis de contaminantes o azúcares C4 a lotes específicos con certificados adjuntos.</p>
+          <p>Registra muestras y resultados fisicoquímicos (humedad, HMF, color Pfund) y análisis de contaminantes o azúcares C4 asociados al lote que corresponde.</p>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon">📜</div>
-          <h3>Libro Inmutable de Auditoría</h3>
-          <p>Registro criptográfico inalterable de cada clic, pesaje y cambio de estado con timestamp ISO 8601, IP y usuario responsable para valor probatorio legal.</p>
+          <h3>Libro de auditoría</h3>
+          <p>Cada operación queda registrada con fecha y hora, usuario, IP y el detalle de lo que cambió. Las entradas se agregan y no se editan desde la aplicación.</p>
         </div>
       </div>
     </div>
@@ -538,7 +541,7 @@
     <div class="container">
       <div class="section-header text-center">
         <span class="pill-label">Marco Legal Obligatorio</span>
-        <h2>Cumplimiento Estricto de la Normativa SENASA 2026</h2>
+        <h2>El circuito del DT-e API-SEM, tal como lo pide SENASA</h2>
         <p class="section-lead">ApiTrace incorpora de manera nativa las resoluciones y exigencias que rigen la apicultura nacional.</p>
       </div>
 
@@ -547,20 +550,20 @@
           <div class="normativa-icon">📄</div>
           <h3>DT-e Obligatorio en Apiario</h3>
           <p>Todo traslado de material melario desde el colmenar hacia la sala de extracción debe contar con Documento de Tránsito electrónico emitido previo al viaje.</p>
-          <div class="normativa-legal">Resolución SENASA API-SEM</div>
+          <div class="normativa-legal">Movimiento API-SEM en SIGSA</div>
         </div>
 
         <div class="normativa-card">
           <div class="normativa-icon">🔒</div>
           <h3>Cierre Formal con Código</h3>
-          <p>Al recibir los melarios, la sala habilitada debe ingresar el Código de Verificación de 12 caracteres para cerrar formalmente el DT-e y liberar el transporte en SIGSA.</p>
+          <p>Al recibir los melarios, la sala habilitada ingresa el código de cierre impreso en el DT-e para cerrarlo en SITA/SIGSA. ApiTrace registra ese cierre junto con las alzas efectivamente recibidas.</p>
           <div class="normativa-legal">Sistema SIGSA / SENASA</div>
         </div>
 
         <div class="normativa-card">
           <div class="normativa-icon">🏛️</div>
           <h3>Delegación Electrónica ARCA</h3>
-          <p>ApiTrace valida el estado de delegación del servicio SIGSA mediante Formulario 3283/E de Clave Fiscal, permitiendo la emisión automática en nombre del productor.</p>
+          <p>ApiTrace registra el estado de la delegación del servicio SIGSA (Formulario 3283/E de Clave Fiscal). Emitir en nombre del productor es el paso siguiente y depende del contrato técnico que SENASA provea.</p>
           <div class="normativa-legal">ARCA / AFIP Nivel 3</div>
         </div>
 
@@ -578,7 +581,7 @@
   <section class="section manuals-section" id="manuales">
     <div class="container">
       <div class="section-header text-center">
-        <span class="pill-label">Capacitación y Guías Oficiales</span>
+        <span class="pill-label">Capacitación y guías de uso</span>
         <h2>Centro de Documentación y Manuales de Usuario</h2>
         <p class="section-lead">Documentos didácticos paso a paso, ilustrados con diagramas de flujo y capturas reales de pantalla para cada rol.</p>
       </div>
@@ -586,7 +589,7 @@
       <!-- Master Book Consolidated Banner -->
       <div class="master-book-banner">
         <div class="master-book-content">
-          <div class="master-book-badge">📘 Edición Oficial Unificada 2026</div>
+          <div class="master-book-badge">📘 Edición unificada 2026</div>
           <h3>ApiTrace — Manual Maestro Completo</h3>
           <p>Los 7 manuales de usuario reunidos en un único libro editorial en alta resolución. Incluye glosario apícola ilustrado, diagramas Mermaid de todos los procesos, capturas de pantalla de la app y cuentas de prueba para capacitación.</p>
           <div class="master-book-meta">
@@ -774,7 +777,7 @@
             <span class="accordion-icon">+</span>
           </button>
           <div class="accordion-body">
-            <p>Antes de salir a la ruta, la app muestra un indicador visual inmediato: 🟢 <strong>VERDE (Autorizado)</strong> significa que el DT-e fue aprobado por SENASA y el transportista puede circular legalmente. En caso de control caminero (Gendarmería o Patrulla Sanitaria), el chofer abre la app en su celular y muestra el código QR y la constancia oficial, la cual se visualiza incluso sin señal de internet.</p>
+            <p>Antes de salir a la ruta, la app muestra el estado del DT-e: 🟢 <strong>verde</strong> cuando está vigente, es decir cuando llegó la fecha de carga y no venció. SENASA exige llevar la representación impresa del DT-e en la cabina: en un control caminero se exhibe ese papel, y la app sirve para consultar el número, la vigencia y los datos de la carga, incluso sin señal.</p>
           </div>
         </div>
 
@@ -784,7 +787,7 @@
             <span class="accordion-icon">+</span>
           </button>
           <div class="accordion-body">
-            <p>Al llegar el camión a la sala receptora, el transportista entrega al encargado de báscula el <strong>Código de Verificación SENASA</strong> (12 caracteres alfanuméricos impresos en el DT-e). El encargado ingresa ese código en ApiTrace para dar cierre oficial al documento sanitario en SIGSA y liberar el vehículo.</p>
+            <p>Al llegar el camión a la sala receptora, el transportista entrega al encargado de báscula el <strong>código de cierre</strong> impreso en el DT-e. La sala cierra el documento en SITA/SIGSA con ese código, la fecha de arribo y las alzas contadas, y registra el cierre en ApiTrace, que verifica que la cantidad recibida no supere la declarada.</p>
           </div>
         </div>
 
@@ -804,7 +807,7 @@
             <span class="accordion-icon">+</span>
           </button>
           <div class="accordion-body">
-            <p>Sí, la plataforma cuenta con un entorno de demostración activo con usuarios precargados para todos los perfiles de la cadena. Puedes ingresar libremente con cualquiera de las cuentas indicadas debajo.</p>
+            <p>Sí. La demostración usa datos ficticios y tiene una cuenta por perfil. Puedes ingresar con cualquiera de las cuentas indicadas debajo; no cargues datos reales de tu explotación en ese entorno.</p>
           </div>
         </div>
       </div>
@@ -815,37 +818,37 @@
           <span>🔑 Cuentas de Acceso para Demostración y Ensayos</span>
         </div>
         <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
-          Contraseña universal para todas las cuentas de prueba: <strong style="color: #fbbf24; font-family: monospace; background: rgba(245, 158, 11, 0.15); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.3);">ApiTrace2026!</strong>
+          Contraseña de las cuentas de demostración: <strong style="color: #fbbf24; font-family: monospace; background: rgba(245, 158, 11, 0.15); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.3);">ApiTrace2026!</strong> — son cuentas de prueba con datos ficticios, no sirven para operar de verdad.
         </p>
         <div class="demo-grid">
           <div class="demo-card">
             <div class="demo-role">Productor Apícola</div>
-            <div class="demo-email">productor.rodriguez@apitrace.ar</div>
+            <div class="demo-email">productor@apitrace</div>
             <div class="demo-pass">Colmenas, apiarios y despacho</div>
           </div>
           <div class="demo-card">
             <div class="demo-role">Sala de Extracción</div>
-            <div class="demo-email">sala.tandil@apitrace.ar</div>
+            <div class="demo-email">sala@apitrace</div>
             <div class="demo-pass">Báscula, cierre DT-e y tambores</div>
           </div>
           <div class="demo-card">
-            <div class="demo-role">Transportista en Ruta</div>
-            <div class="demo-email">chofer.gomez@apitrace.ar</div>
-            <div class="demo-pass">PWA móvil y semáforo DT-e</div>
+            <div class="demo-role">Laboratorio</div>
+            <div class="demo-email">laboratorio@apitrace</div>
+            <div class="demo-pass">Muestras y resultados de análisis</div>
           </div>
           <div class="demo-card">
             <div class="demo-role">Acopiador / Fraccionador</div>
-            <div class="demo-email">acopio.pampa@apitrace.ar</div>
+            <div class="demo-email">acopio@apitrace</div>
             <div class="demo-pass">Stock tambores, humedad y mezcla</div>
           </div>
           <div class="demo-card">
-            <div class="demo-role">Auditor / SENASA</div>
-            <div class="demo-email">auditor.senasa@apitrace.ar</div>
+            <div class="demo-role">Auditor</div>
+            <div class="demo-email">auditor@apitrace</div>
             <div class="demo-pass">Grafo de trazabilidad y huecos</div>
           </div>
           <div class="demo-card">
             <div class="demo-role">Administrador Sistema</div>
-            <div class="demo-email">admin@apitrace.ar</div>
+            <div class="demo-email">admin@apitrace</div>
             <div class="demo-pass">Control global y reglas dinámicas</div>
           </div>
         </div>
@@ -859,9 +862,9 @@
       <div class="cta-banner">
         <div class="cta-content">
           <h2>Comienza a digitalizar la trazabilidad de tu miel</h2>
-          <p>Pruébalo gratis hoy mismo con nuestra demo interactiva o capacita a tu equipo con los manuales oficiales.</p>
+          <p>Probalo hoy mismo con la demostración interactiva o capacitá a tu equipo con los manuales de usuario.</p>
           <div class="cta-btns" style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;">
-            <a href="https://apitrace.onrender.com" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-lg" id="btnCtaFinal">
+            <a href="https://apitrace-web.onrender.com/login" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-lg" id="btnCtaFinal">
               <span>Ingresar a la Plataforma</span>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
             </a>
@@ -890,17 +893,17 @@
           </svg>
           <span class="brand-text">ApiTrace</span>
         </div>
-        <p class="footer-desc">Plataforma integral de trazabilidad apícola para la República Argentina. Preparada para integración oficial con SENASA API-SEM DT-e y estándares internacionales de exportación.</p>
+        <p class="footer-desc">Plataforma integral de trazabilidad apícola para la República Argentina, construida sobre el circuito DT-e API-SEM de SENASA.</p>
       </div>
 
       <div class="footer-links-group">
         <h4>Plataforma & Circuito</h4>
         <ul>
-          <li><a href="https://apitrace.onrender.com" target="_blank" rel="noopener noreferrer">Iniciar Sesión en Vivo</a></li>
+          <li><a href="https://apitrace-web.onrender.com/login" target="_blank" rel="noopener noreferrer">Iniciar Sesión en Vivo</a></li>
           <li><a href="#circuito">Roles de la Cadena</a></li>
           <li><a href="#trazabilidad">Grafo de Trazabilidad</a></li>
           <li><a href="#normativa">Normativa SENASA 2026</a></li>
-          <li><a href="#manuales">Manuales Oficiales PDF</a></li>
+          <li><a href="#manuales">Manuales de usuario (PDF)</a></li>
         </ul>
       </div>
 

@@ -1,1092 +1,1162 @@
-import { ForbiddenException, HttpStatus, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
+import {
+  ForbiddenException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { and, eq, ne, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../database/database.module';
-import {
-  apiary,
-  dte,
-  dteStatusHistory,
-  establishment,
-  movement,
-  organization,
-  producer,
-  renapaRegistration,
-  renspaRegistration,
-  senasaDelegation,
-} from '../../database/schema';
-import { DomainRuleException } from '../../common/exceptions/domain-rule.exception';
+import { document, dte, movement, reception } from '../../database/schema';
+import { AccessControlService } from '../../common/services/access-control.service';
 import { DomainEvents, EventsService } from '../../common/services/events.service';
+import { DomainRuleException } from '../../common/exceptions/domain-rule.exception';
+import type { DbExecutor } from '../../common/services/types';
+import type { AuthenticatedUser } from '../../common/types';
+import { EstablishmentService } from '../establishment/establishment.service';
+import { MovementService } from './movement.service';
+import { DteQueries, type DteRow } from './dte.queries';
+import { DteLifecycleService } from './dte-lifecycle.service';
+import { DteChecksService } from './dte-checks.service';
+import { DteQueryService } from './dte-query.service';
+import { presentDte } from './dte.presenter';
+import { assertIssuer, assertReceiver } from './dte.access';
 import {
-  CloseDteDto,
-  CreateDteDraftDto,
-  DteFilterDto,
-  IssueManualDteDto,
+  apiSemDefaults,
+  assertDraftRules,
+  draftColumns,
+  draftOf,
+  normalizeDraft,
+  officialSnapshot,
+  scheduledAtFor,
+  transportOf,
+} from './dte.draft';
+import {
+  DTE_RULES,
+  effectiveStatus,
+  isVoid,
+  normalizeCode,
+  toArDate,
+  validateConfirmedQuantity,
+  type DteStatus,
+} from './dte.rules';
+import { SENASA_GATEWAY, type SenasaGateway } from './senasa/senasa.gateway';
+import type { DraftData, DteContext, MovementRow } from './dte.types';
+import type { CloseDteDto, CreateDteDto, UpdateDteStatusDto } from './dto/movement.dto';
+import type {
+  CloseDteRequestDto,
+  CreateDteRequestDto,
+  IssueDteDto,
   NoArrivalDteDto,
-  PreflightCheckDto,
   RegularizeDteDto,
+  UpdateDteDraftDto,
   VoidDteDto,
 } from './dto/dte.dto';
-import {
-  addDaysIso,
-  daysBetweenIso,
-  DEFAULT_VALIDITY_DAYS,
-  DteStatuses,
-  isValidPlate,
-  MAX_VALIDITY_DAYS,
-  MIN_VALIDITY_DAYS,
-  normalizePlate,
-  suggestDeclaredQuantity,
-  toArgentinaDateString,
-} from './dte.rules';
-import { presentDte, presentDteList } from './dte.presenter';
-import { findDteById, findDteByMovementId, getDteHistory, recordStatusHistory } from './dte.queries';
-import { SENASA_GATEWAY, type SenasaGateway } from './senasa/senasa.gateway';
 
-export interface CurrentUserContext {
-  id: string;
-  email: string;
-  role: string;
-  organizationId: string | null;
-}
+const OPEN_FOR_VOID: DteStatus[] = ['BORRADOR', 'SOLICITADO', 'EMITIDO', 'VIGENTE'];
+const OPEN_FOR_CLOSE: DteStatus[] = ['VIGENTE', 'VENCIDO'];
 
+/**
+ * Gestion del DT-e API-SEM por usuario (CU-10, CU-12; especificacion DT-e 4 a 6).
+ *
+ * El titular del apiario prepara, emite, anula y reemite sus DT-e; la sala de
+ * destino los cierra (o declara que no arribaron). Cada organizacion ve los
+ * DT-e que emite y los que recibe, nunca los de terceros.
+ *
+ * La emision pasa por SENASA_GATEWAY: en modo manual se registra el numero
+ * obtenido en SIGSA; en modo simulado y sigsa se pide por API de forma
+ * asincrona (outbox -> DteSyncWorker), porque SIGSA puede demorar o no
+ * responder y la operacion no debe perderse.
+ *
+ * Las lecturas viven en DteQueryService y las verificaciones en DteChecksService.
+ */
 @Injectable()
 export class DteService {
-  private readonly logger = new Logger(DteService.name);
-
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
-    @Inject(SENASA_GATEWAY) private readonly senasaGateway: SenasaGateway,
+    private readonly access: AccessControlService,
     private readonly events: EventsService,
+    private readonly movements: MovementService,
+    private readonly establishments: EstablishmentService,
+    private readonly queries: DteQueries,
+    private readonly lifecycle: DteLifecycleService,
+    private readonly checks: DteChecksService,
+    private readonly reads: DteQueryService,
+    @Inject(SENASA_GATEWAY) private readonly gateway: SenasaGateway,
   ) {}
 
-  /**
-   * Preflight: evalua exhaustivamente si un movimiento cumple las condiciones
-   * para emitir un DT-e segun la normativa SENASA.
-   */
-  async preflight(dto: PreflightCheckDto, _user: CurrentUserContext) {
-    const [mov] = await this.db.select().from(movement).where(eq(movement.id, dto.movementId)).limit(1);
-    if (!mov) throw new NotFoundException('Movimiento no encontrado.');
-
-    const checks: Array<{
-      key: string;
-      label: string;
-      passed: boolean;
-      message: string;
-      severity: 'ERROR' | 'WARNING' | 'INFO';
-    }> = [];
-
-    // 1. Origen: establecimiento y RENSPA
-    const [originEst] = await this.db.select().from(establishment).where(eq(establishment.id, mov.originEstablishmentId)).limit(1);
-    const [originRenspa] = await this.db.select().from(renspaRegistration).where(eq(renspaRegistration.establishmentId, mov.originEstablishmentId)).limit(1);
-
-    if (originRenspa?.number) {
-      checks.push({
-        key: 'origin_renspa',
-        label: 'RENSPA de Origen',
-        passed: true,
-        message: `Establecimiento de origen habilitado: ${originRenspa.number}`,
-        severity: 'INFO',
-      });
-    } else {
-      checks.push({
-        key: 'origin_renspa',
-        label: 'RENSPA de Origen',
-        passed: false,
-        message: 'El establecimiento de origen no tiene un RENSPA registrado.',
-        severity: 'ERROR',
-      });
-    }
-
-    // 2. Apiario de origen y RENAPA
-    if (mov.originApiaryId) {
-      const [apiaryRecord] = await this.db.select().from(apiary).where(eq(apiary.id, mov.originApiaryId)).limit(1);
-      if (apiaryRecord?.renapaCode) {
-        checks.push({
-          key: 'origin_renapa',
-          label: 'RENAPA del Apiario',
-          passed: true,
-          message: `Apiario con registro oficial RENAPA: ${apiaryRecord.renapaCode}`,
-          severity: 'INFO',
-        });
-      } else {
-        checks.push({
-          key: 'origin_renapa',
-          label: 'RENAPA del Apiario',
-          passed: false,
-          message: 'El apiario de origen no tiene cargado el codigo RENAPA.',
-          severity: 'WARNING',
-        });
-      }
-    }
-
-    // 3. Destino: sala habilitada y codigo SENASA
-    const [destEst] = await this.db.select().from(establishment).where(eq(establishment.id, mov.destinationEstablishmentId)).limit(1);
-    const [destRenspa] = await this.db.select().from(renspaRegistration).where(eq(renspaRegistration.establishmentId, mov.destinationEstablishmentId)).limit(1);
-
-    if (destEst?.senasaCode) {
-      checks.push({
-        key: 'dest_senasa_code',
-        label: 'Habilitacion SENASA Destino',
-        passed: true,
-        message: `Sala de destino con registro oficial: ${destEst.senasaCode}`,
-        severity: 'INFO',
-      });
-    } else {
-      checks.push({
-        key: 'dest_senasa_code',
-        label: 'Habilitacion SENASA Destino',
-        passed: false,
-        message: 'La sala de destino no posee codigo de autorizacion SENASA (SEF-Letra-N°).',
-        severity: 'WARNING',
-      });
-    }
-
-    // 4. Delegacion de clave fiscal en ARCA (F3283/E)
-    if (originEst?.producerId) {
-      const [delegation] = await this.db
-        .select()
-        .from(senasaDelegation)
-        .where(
-          and(
-            eq(senasaDelegation.producerId, originEst.producerId),
-            eq(senasaDelegation.service, 'SIGSA_DTE'),
-          ),
-        )
-        .limit(1);
-
-      if (delegation?.status === 'ACEPTADA') {
-        checks.push({
-          key: 'senasa_delegation',
-          label: 'Delegacion ARCA (SIGSA)',
-          passed: true,
-          message: 'Servicio SIGSA_DTE delegado y aceptado en ARCA.',
-          severity: 'INFO',
-        });
-      } else {
-        checks.push({
-          key: 'senasa_delegation',
-          label: 'Delegacion ARCA (SIGSA)',
-          passed: false,
-          message: 'El productor no tiene aceptada la delegacion de SIGSA en ARCA (F3283/E). Podra emitir en modo manual.',
-          severity: 'WARNING',
-        });
-      }
-    }
-
-    // 5. Patente de transporte
-    const plate = dto.transportPlate ?? mov.driverDocument;
-    if (plate && isValidPlate(plate)) {
-      checks.push({
-        key: 'transport_plate',
-        label: 'Patente del Transporte',
-        passed: true,
-        message: `Patente valida segun formato nacional: ${normalizePlate(plate)}`,
-        severity: 'INFO',
-      });
-    } else {
-      checks.push({
-        key: 'transport_plate',
-        label: 'Patente del Transporte',
-        passed: false,
-        message: 'La patente informada no cumple con los formatos oficiales vigentes en Argentina.',
-        severity: 'ERROR',
-      });
-    }
-
-    // 6. Fechas de vigencia
-    const todayAr = toArgentinaDateString();
-    const loadDate = dto.loadDate ?? todayAr;
-    const expiryDate = dto.expiryDate ?? addDaysIso(loadDate, 3);
-    const duration = daysBetweenIso(loadDate, expiryDate);
-
-    if (loadDate < todayAr) {
-      checks.push({
-        key: 'validity_dates',
-        label: 'Fecha de Carga',
-        passed: false,
-        message: 'La fecha de carga no puede ser anterior a la fecha actual.',
-        severity: 'ERROR',
-      });
-    } else if (duration < MIN_VALIDITY_DAYS || duration > MAX_VALIDITY_DAYS) {
-      checks.push({
-        key: 'validity_dates',
-        label: 'Plazo de Vigencia',
-        passed: false,
-        message: `El plazo de vigencia debe ser de entre ${MIN_VALIDITY_DAYS} y ${MAX_VALIDITY_DAYS} dias corridos (seleccionado: ${duration} dias).`,
-        severity: 'ERROR',
-      });
-    } else {
-      checks.push({
-        key: 'validity_dates',
-        label: 'Plazo de Vigencia',
-        passed: true,
-        message: `Vigencia valida de ${duration} dias (${loadDate} al ${expiryDate}).`,
-        severity: 'INFO',
-      });
-    }
-
-    // 7. Cantidad declarada vs estimada
-    const movQty = Number(mov.quantity);
-    const declaredQty = dto.declaredQuantity ?? suggestDeclaredQuantity(movQty);
-    if (declaredQty < movQty) {
-      checks.push({
-        key: 'declared_quantity',
-        label: 'Cantidad Declarada',
-        passed: false,
-        message: `La cantidad declarada (${declaredQty}) es menor a la estimada del movimiento (${movQty}). Podria ser rechazada en destino.`,
-        severity: 'WARNING',
-      });
-    } else {
-      checks.push({
-        key: 'declared_quantity',
-        label: 'Cantidad Declarada',
-        passed: true,
-        message: `Cantidad declarada (${declaredQty}) cubre el total estimado (${movQty}).`,
-        severity: 'INFO',
-      });
-    }
-
-    const hasErrors = checks.some((c) => c.severity === 'ERROR');
-
-    return {
-      ready: !hasErrors,
-      movementId: mov.id,
-      checks,
-      suggestedDeclaredQuantity: suggestDeclaredQuantity(movQty),
-      defaultDates: {
-        loadDate: todayAr,
-        expiryDate: addDaysIso(todayAr, DEFAULT_VALIDITY_DAYS),
-      },
-    };
-  }
+  // =========================================================================
+  // Alta
+  // =========================================================================
 
   /**
-   * Crea un borrador de DT-e asociado a un movimiento.
+   * Solicitud de DT-e API-SEM (POST /dte). Sin movementId crea tambien el
+   * movimiento, en la misma transaccion: o quedan los dos o ninguno.
    */
-  async createDraft(dto: CreateDteDraftDto, user: CurrentUserContext) {
-    const [mov] = await this.db.select().from(movement).where(eq(movement.id, dto.movementId)).limit(1);
-    if (!mov) throw new NotFoundException('Movimiento no encontrado.');
+  async create(dto: CreateDteRequestDto, actor: AuthenticatedUser, correlationId?: string) {
+    this.access.assertCanWrite(actor);
+    const now = new Date();
 
-    if (mov.status === 'CANCELLED' || mov.status === 'REJECTED') {
+    if (dto.number && dto.submit) {
       throw new DomainRuleException(
         HttpStatus.BAD_REQUEST,
-        'MOVIMIENTO_NO_DISPONIBLE',
-        'No se puede emitir DT-e para un movimiento cancelado o rechazado.',
+        'NUMERO_Y_SOLICITUD',
+        'Indica el numero de un DT-e ya emitido o pedi la emision a SIGSA, no las dos cosas.',
       );
     }
 
-    // Verificar si ya existe un DT-e activo para este movimiento
-    const existing = await findDteByMovementId(this.db, mov.id);
-    if (
-      existing &&
-      [DteStatuses.BORRADOR, DteStatuses.SOLICITADO, DteStatuses.EMITIDO, DteStatuses.VIGENTE].includes(
-        existing.status as any,
-      )
-    ) {
+    let existing: MovementRow | null = null;
+    let ctx: DteContext;
+    if (dto.movementId) {
+      const found = await this.movements.findOne(dto.movementId, actor);
+      existing = found;
+      ctx = await this.checks.contextForMovement(found);
+      assertIssuer(actor, ctx.origin.organizationId);
+      this.assertMovementAcceptsDte(found);
+      await this.assertNoActiveDte(found.id);
+      if (!this.isApiSem(found, ctx)) {
+        throw new DomainRuleException(
+          HttpStatus.BAD_REQUEST,
+          'DTE_NO_APLICA',
+          'El DT-e API-SEM ampara el traslado de material melario de un apiario a una sala de extraccion. Para otros documentos use POST /movements/:id/dte.',
+        );
+      }
+      if (!found.originApiaryId) {
+        throw new DomainRuleException(
+          HttpStatus.BAD_REQUEST,
+          'MOVIMIENTO_SIN_APIARIO',
+          'El movimiento no indica el apiario de origen, que es el origen oficial del DT-e.',
+        );
+      }
+    } else {
+      if (!dto.apiaryId || !dto.destinationEstablishmentId) {
+        throw new DomainRuleException(
+          HttpStatus.BAD_REQUEST,
+          'ORIGEN_DESTINO_REQUERIDOS',
+          'Indica el apiario de origen (apiaryId) y la sala de destino (destinationEstablishmentId), o un movimiento existente (movementId).',
+        );
+      }
+      ctx = await this.checks.contextForNew(dto.apiaryId, dto.destinationEstablishmentId);
+      assertIssuer(actor, ctx.origin.organizationId);
+    }
+
+    const draft = normalizeDraft(dto);
+    assertDraftRules(draft);
+
+    const checks = await this.checks.buildChecks(ctx, draft, {
+      forSubmission: Boolean(dto.submit),
+      now,
+    });
+    if (dto.submit) {
+      this.assertGatewayCanEmit();
+      this.checks.assertChecksPass(checks);
+    }
+    const number = dto.number?.trim() || null;
+    if (number) await this.assertNumberAvailable(number);
+
+    const initial: DteStatus = number ? 'EMITIDO' : dto.submit ? 'SOLICITADO' : 'BORRADOR';
+
+    const created = await this.db.transaction(async (tx) => {
+      let target = existing;
+      if (!target) {
+        target = await this.movements.create(
+          {
+            movementType: 'MATERIAL_MELARIO',
+            materialType: 'MATERIAL_MELARIO',
+            originEstablishmentId: ctx.origin.id,
+            originApiaryId: ctx.apiary?.id,
+            destinationEstablishmentId: ctx.destination.id,
+            carrierId: dto.carrierId,
+            vehicleId: dto.vehicleId,
+            driverName: dto.driverName,
+            driverDocument: dto.driverDocument,
+            // El traslado se programa en la fecha de carga: con esa fecha el
+            // motor de reglas decide la exigencia documental.
+            scheduledAt: scheduledAtFor(draft.loadDate),
+            quantity: draft.estimatedQuantity ?? draft.declaredQuantity ?? 1,
+            unit: 'ALZA',
+            notes: dto.notes,
+          },
+          actor,
+          correlationId,
+          tx,
+        );
+      }
+
+      const [row] = await tx
+        .insert(dte)
+        .values({
+          movementId: target.id,
+          number,
+          status: initial,
+          issueMode: number ? 'MANUAL' : dto.submit ? this.gatewayIssueMode() : 'MANUAL',
+          issuedAt: number ? (dto.issuedAt ? new Date(dto.issuedAt) : now) : null,
+          requestedAt: dto.submit ? now : null,
+          verificationCode: dto.verificationCode?.trim() || null,
+          ...officialSnapshot(ctx),
+          ...apiSemDefaults(),
+          ...draftColumns(draft),
+          requestedById: actor.id,
+          originRenspa: await this.establishments.activeRenspaNumber(ctx.origin.id),
+          destinationRenspa: await this.establishments.activeRenspaNumber(ctx.destination.id),
+          externalSystem: 'SENASA_SIGSA',
+          syncStatus: 'PENDING_SYNC',
+          payload: {
+            movementCode: target.code,
+            materialType: target.materialType,
+            quantity: target.quantity,
+            unit: target.unit,
+          } as never,
+        })
+        .returning();
+
+      await this.insertDocument(tx, row, actor);
+      await this.queries.recordTransition(tx, {
+        dteId: row.id,
+        from: null,
+        to: initial,
+        source: 'USUARIO',
+        reason:
+          initial === 'EMITIDO'
+            ? `Registro del DT-e ${number} emitido en SIGSA.`
+            : initial === 'SOLICITADO'
+              ? 'Alta y solicitud de emision a SIGSA.'
+              : 'Alta del borrador.',
+        actorUserId: actor.id,
+        correlationId,
+      });
+      await this.events.publish(
+        {
+          eventType: DomainEvents.DteCreated,
+          entityType: 'movement',
+          entityId: target.id,
+          actorUserId: actor.id,
+          organizationId: row.issuerOrganizationId,
+          correlationId,
+          payload: {
+            dteId: row.id,
+            number: row.number,
+            status: row.status,
+            syncStatus: row.syncStatus,
+            issueMode: row.issueMode,
+          },
+        },
+        tx,
+      );
+      if (initial === 'SOLICITADO') await this.publishRequested(tx, row, actor, correlationId);
+      return row;
+    });
+
+    return { ...presentDte(created, actor, now), checks };
+  }
+
+  /**
+   * Registro del documento de un movimiento existente (POST /movements/:id/dte).
+   * Compatibilidad con la version anterior y con la cola offline.
+   */
+  async createForMovement(
+    movementId: string,
+    dto: CreateDteDto,
+    actor: AuthenticatedUser,
+    correlationId?: string,
+  ) {
+    this.access.assertCanWrite(actor);
+    const now = new Date();
+    const record = await this.movements.findOne(movementId, actor);
+
+    const current = await this.queries.currentForMovement(movementId);
+    if (current && !isVoid(current.status)) {
       throw new DomainRuleException(
         HttpStatus.CONFLICT,
         'DTE_ACTIVO_EXISTENTE',
-        `Ya existe un DT-e en estado ${existing.status} para este movimiento.`,
+        'El movimiento ya tiene un DT-e asociado.',
       );
     }
-
-    // Validar patente
-    if (!isValidPlate(dto.transportPlate)) {
+    if (['RECEIVED', 'REJECTED', 'CANCELLED'].includes(record.status)) {
       throw new DomainRuleException(
-        HttpStatus.BAD_REQUEST,
-        'PATENTE_INVALIDA',
-        'La patente de transporte no respeta el formato automotor oficial de Argentina.',
+        HttpStatus.CONFLICT,
+        'MOVIMIENTO_CERRADO',
+        `No se puede emitir un DT-e para un movimiento en estado ${record.status}.`,
       );
     }
 
-    // Validar vigencia
-    const todayAr = toArgentinaDateString();
-    if (dto.loadDate < todayAr) {
+    const ctx = await this.checks.contextForMovement(record);
+    const apiSem = this.isApiSem(record, ctx);
+    const number = dto.number?.trim() || null;
+    let draft: DraftData | null = null;
+
+    if (apiSem) {
+      assertIssuer(actor, ctx.origin.organizationId);
+      const loadDate = dto.loadDate ?? toArDate(record.scheduledAt);
+      draft = normalizeDraft({
+        estimatedQuantity: dto.estimatedQuantity,
+        declaredQuantity:
+          dto.declaredQuantity ??
+          (record.unit === 'ALZA' ? Math.ceil(Number(record.quantity)) : undefined),
+        loadDate,
+        expiryDate: dto.expiryDate,
+        transport: dto.transport,
+      });
+      assertDraftRules(draft);
+      if (number) await this.assertNumberAvailable(number);
+    } else {
+      this.access.assertMovementAccess(
+        actor,
+        ctx.origin.organizationId,
+        ctx.destination.organizationId,
+      );
+    }
+
+    const issuedAt = dto.issuedAt ? new Date(dto.issuedAt) : now;
+    const status: DteStatus = number ? 'EMITIDO' : 'BORRADOR';
+
+    const [originRenspa, destinationRenspa] = await Promise.all([
+      dto.originRenspa
+        ? Promise.resolve(dto.originRenspa)
+        : this.establishments.activeRenspaNumber(record.originEstablishmentId),
+      dto.destinationRenspa
+        ? Promise.resolve(dto.destinationRenspa)
+        : this.establishments.activeRenspaNumber(record.destinationEstablishmentId),
+    ]);
+
+    const created = await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(dte)
+        .values({
+          movementId,
+          number,
+          status,
+          issueMode: 'MANUAL',
+          issuedAt: number ? issuedAt : null,
+          verificationCode: dto.verificationCode?.trim() || null,
+          originRenspa,
+          destinationRenspa,
+          ...officialSnapshot(ctx),
+          ...(apiSem && draft ? { ...apiSemDefaults(), ...draftColumns(draft) } : {}),
+          requestedById: actor.id,
+          externalSystem: 'SENASA_SIGSA',
+          externalId: dto.fromExternalSystem ? number : null,
+          // Solo se marca sincronizado si el numero vino del organismo.
+          syncStatus: dto.fromExternalSystem ? 'SYNCHRONIZED' : 'PENDING_SYNC',
+          lastSyncAt: dto.fromExternalSystem ? now : null,
+          payload: {
+            movementCode: record.code,
+            materialType: record.materialType,
+            quantity: record.quantity,
+            unit: record.unit,
+          } as never,
+        })
+        .returning();
+
+      await this.insertDocument(tx, row, actor);
+      await this.queries.recordTransition(tx, {
+        dteId: row.id,
+        from: null,
+        to: status,
+        source: 'USUARIO',
+        reason: number ? `Registro del documento ${number}.` : 'Alta del borrador.',
+        actorUserId: actor.id,
+        correlationId,
+      });
+      await this.events.publish(
+        {
+          eventType: DomainEvents.DteCreated,
+          entityType: 'movement',
+          entityId: movementId,
+          actorUserId: actor.id,
+          correlationId,
+          payload: {
+            dteId: row.id,
+            number: row.number,
+            status: row.status,
+            syncStatus: row.syncStatus,
+            issueMode: row.issueMode,
+          },
+        },
+        tx,
+      );
+      return row;
+    });
+
+    return presentDte(created, actor, now);
+  }
+
+  // =========================================================================
+  // Borrador
+  // =========================================================================
+
+  async updateDraft(id: string, dto: UpdateDteDraftDto, actor: AuthenticatedUser) {
+    this.access.assertCanWrite(actor);
+    const row = await this.reads.findVisible(id, actor);
+    assertIssuer(actor, row.issuerOrganizationId);
+    if (row.status !== 'BORRADOR') {
       throw new DomainRuleException(
-        HttpStatus.BAD_REQUEST,
-        'FECHA_CARGA_PASADA',
-        'La fecha de carga no puede ser anterior al dia de hoy.',
+        HttpStatus.CONFLICT,
+        'DTE_NO_EDITABLE',
+        'Solo un borrador se puede editar. Para corregir un DT-e emitido, anulalo y emiti uno nuevo.',
       );
     }
-    const days = daysBetweenIso(dto.loadDate, dto.expiryDate);
-    if (days < MIN_VALIDITY_DAYS || days > MAX_VALIDITY_DAYS) {
+    if (row.movementTypeCode !== DTE_RULES.movementTypeCode) {
       throw new DomainRuleException(
-        HttpStatus.BAD_REQUEST,
-        'VIGENCIA_FUERA_DE_RANGO',
-        `El plazo de vigencia debe ser de entre ${MIN_VALIDITY_DAYS} y ${MAX_VALIDITY_DAYS} dias corridos (especificado: ${days} dias).`,
+        HttpStatus.CONFLICT,
+        'DTE_NO_EDITABLE',
+        'Este documento no es un DT-e API-SEM y no se edita por esta via.',
       );
     }
 
-    // Resolucion de entidades asociadas
-    const [originEst] = await this.db.select().from(establishment).where(eq(establishment.id, mov.originEstablishmentId)).limit(1);
-    const [destEst] = await this.db.select().from(establishment).where(eq(establishment.id, mov.destinationEstablishmentId)).limit(1);
-    const [originRenspa] = await this.db.select().from(renspaRegistration).where(eq(renspaRegistration.establishmentId, mov.originEstablishmentId)).limit(1);
-    const [destRenspa] = await this.db.select().from(renspaRegistration).where(eq(renspaRegistration.establishmentId, mov.destinationEstablishmentId)).limit(1);
+    const loadDate = dto.loadDate ?? row.loadDate ?? toArDate(new Date());
+    const draft = normalizeDraft({
+      estimatedQuantity: dto.estimatedQuantity ?? row.estimatedQuantity ?? undefined,
+      declaredQuantity: dto.declaredQuantity ?? row.declaredQuantity ?? undefined,
+      loadDate,
+      expiryDate: dto.expiryDate ?? (dto.loadDate ? undefined : (row.expiryDate ?? undefined)),
+      transport: dto.transport ?? transportOf(row),
+    });
+    assertDraftRules(draft);
 
-    // Aislamiento: solo el emisor de origen (o ADMIN) puede crear el borrador
-    if (user.role !== 'ADMIN' && originEst?.organizationId && originEst.organizationId !== user.organizationId) {
-      throw new ForbiddenException('No tiene permisos para crear un DT-e para un establecimiento de otra organización.');
+    const updated = await this.db.transaction(async (tx) => {
+      const [saved] = await tx
+        .update(dte)
+        .set({ ...draftColumns(draft), updatedAt: new Date() })
+        .where(and(eq(dte.id, id), eq(dte.status, 'BORRADOR')))
+        .returning();
+      if (!saved) this.concurrentChange();
+
+      // El movimiento en borrador acompana al DT-e: misma fecha y misma cantidad.
+      const [target] = await tx.select().from(movement).where(eq(movement.id, row.movementId));
+      if (target && target.status === 'DRAFT' && target.unit === 'ALZA') {
+        await tx
+          .update(movement)
+          .set({
+            scheduledAt: new Date(scheduledAtFor(draft.loadDate)),
+            quantity: String(draft.estimatedQuantity ?? draft.declaredQuantity ?? target.quantity),
+            updatedAt: new Date(),
+          })
+          .where(eq(movement.id, target.id));
+      }
+      return saved;
+    });
+
+    return presentDte(updated, actor);
+  }
+
+  // =========================================================================
+  // Emision
+  // =========================================================================
+
+  /**
+   * Emite un borrador. Con `number` registra un DT-e obtenido en SIGSA (modo
+   * manual, siempre disponible como contingencia). Sin `number` lo pide por API:
+   * queda SOLICITADO y DteSyncWorker completa numero y codigo de cierre.
+   */
+  async issue(id: string, dto: IssueDteDto, actor: AuthenticatedUser, correlationId?: string) {
+    this.access.assertCanWrite(actor);
+    const now = new Date();
+    const row = await this.reads.findVisible(id, actor);
+    assertIssuer(actor, row.issuerOrganizationId);
+
+    if (row.status !== 'BORRADOR') {
+      throw new DomainRuleException(
+        HttpStatus.CONFLICT,
+        'DTE_NO_EMITIBLE',
+        `Solo un borrador puede emitirse; este DT-e esta ${effectiveStatus(row.status, row, now)}.`,
+      );
     }
 
-    let originCode = originRenspa?.number ?? originEst?.name ?? null;
-    if (mov.originApiaryId) {
-      const [apiaryRecord] = await this.db.select().from(apiary).where(eq(apiary.id, mov.originApiaryId)).limit(1);
-      if (apiaryRecord?.renapaCode) {
-        originCode = apiaryRecord.renapaCode;
+    const target = await this.movements.findRaw(row.movementId);
+    const ctx = await this.checks.contextForMovement(target);
+    const number = dto.number?.trim() || null;
+
+    if (number) {
+      if (row.movementTypeCode === DTE_RULES.movementTypeCode) {
+        await this.assertNumberAvailable(number, row.id);
+      }
+      const updated = await this.db.transaction(async (tx) => {
+        const [saved] = await tx
+          .update(dte)
+          .set({
+            status: 'EMITIDO',
+            number,
+            verificationCode: dto.verificationCode?.trim() || row.verificationCode,
+            issuedAt: dto.issuedAt ? new Date(dto.issuedAt) : now,
+            issueMode: 'MANUAL',
+            ...officialSnapshot(ctx),
+            syncStatus: 'PENDING_SYNC',
+            errorCode: null,
+            errorMessage: null,
+            updatedAt: now,
+          })
+          .where(and(eq(dte.id, id), eq(dte.status, 'BORRADOR')))
+          .returning();
+        if (!saved) this.concurrentChange();
+
+        await this.queries.updateDocumentNumber(tx, saved);
+        await this.queries.recordTransition(tx, {
+          dteId: id,
+          from: 'BORRADOR',
+          to: 'EMITIDO',
+          source: 'USUARIO',
+          reason: `Registro del numero ${number} emitido en SIGSA.`,
+          actorUserId: actor.id,
+          correlationId,
+        });
+        await this.events.publish(
+          {
+            eventType: DomainEvents.DteIssued,
+            entityType: 'movement',
+            entityId: row.movementId,
+            actorUserId: actor.id,
+            organizationId: row.issuerOrganizationId,
+            correlationId,
+            payload: { dteId: id, number, status: 'EMITIDO', issueMode: 'MANUAL' },
+          },
+          tx,
+        );
+        return saved;
+      });
+      return presentDte(updated, actor, now);
+    }
+
+    // Emision por API.
+    this.assertGatewayCanEmit();
+    if (row.movementTypeCode !== DTE_RULES.movementTypeCode || !row.loadDate || !row.expiryDate) {
+      throw new DomainRuleException(
+        HttpStatus.CONFLICT,
+        'DTE_INCOMPLETO',
+        'El borrador no tiene los datos del tramite API-SEM (fechas y alzas). Completalos antes de emitir.',
+      );
+    }
+    const checks = await this.checks.buildChecks(ctx, draftOf(row), { forSubmission: true, now });
+    this.checks.assertChecksPass(checks);
+
+    const updated = await this.db.transaction(async (tx) => {
+      const [saved] = await tx
+        .update(dte)
+        .set({
+          status: 'SOLICITADO',
+          issueMode: this.gatewayIssueMode(),
+          requestedAt: now,
+          ...officialSnapshot(ctx),
+          syncStatus: 'PENDING_SYNC',
+          errorCode: null,
+          errorMessage: null,
+          updatedAt: now,
+        })
+        .where(and(eq(dte.id, id), eq(dte.status, 'BORRADOR')))
+        .returning();
+      if (!saved) this.concurrentChange();
+
+      await this.queries.recordTransition(tx, {
+        dteId: id,
+        from: 'BORRADOR',
+        to: 'SOLICITADO',
+        source: 'USUARIO',
+        reason: `Solicitud de emision enviada (${this.gateway.mode}).`,
+        actorUserId: actor.id,
+        correlationId,
+      });
+      await this.publishRequested(tx, saved, actor, correlationId);
+      return saved;
+    });
+
+    return { ...presentDte(updated, actor, now), checks };
+  }
+
+  // =========================================================================
+  // Anulacion
+  // =========================================================================
+
+  /**
+   * Baja del DT-e antes del cierre (seccion 5.1): ANULADO si el arancel se
+   * abono, ELIMINADO si no. Tambien es el primer paso ante un exceso de carga
+   * (seccion 5.2): anular y emitir uno nuevo para el mismo movimiento.
+   */
+  async void(id: string, dto: VoidDteDto, actor: AuthenticatedUser, correlationId?: string) {
+    this.access.assertCanWrite(actor);
+    const now = new Date();
+    let row = await this.reads.findVisible(id, actor);
+    assertIssuer(actor, row.issuerOrganizationId);
+
+    const current = effectiveStatus(row.status, row, now);
+    if (!OPEN_FOR_VOID.includes(current)) {
+      throw new DomainRuleException(
+        HttpStatus.CONFLICT,
+        'DTE_NO_ANULABLE',
+        current === 'VENCIDO'
+          ? 'Un DT-e vencido no se anula: la sala debe cerrarlo o declarar que la carga no arribo antes de que caduque.'
+          : `Un DT-e ${current} no admite anulacion.`,
+      );
+    }
+    const next: DteStatus =
+      ['EMITIDO', 'VIGENTE'].includes(current) && dto.feePaid ? 'ANULADO' : 'ELIMINADO';
+
+    const updated = await this.db.transaction(async (tx) => {
+      row = await this.lifecycle.advance(row, now, tx);
+      const [saved] = await tx
+        .update(dte)
+        .set({
+          status: next,
+          voidedAt: now,
+          voidReason: dto.reason.trim(),
+          feePaid: Boolean(dto.feePaid),
+          updatedAt: now,
+        })
+        .where(and(eq(dte.id, id), eq(dte.status, row.status)))
+        .returning();
+      if (!saved) this.concurrentChange();
+
+      await this.queries.recordTransition(tx, {
+        dteId: id,
+        from: row.status,
+        to: next,
+        source: 'USUARIO',
+        reason: dto.reason.trim(),
+        actorUserId: actor.id,
+        correlationId,
+      });
+      await this.events.publish(
+        {
+          eventType: DomainEvents.DteVoided,
+          entityType: 'movement',
+          entityId: row.movementId,
+          actorUserId: actor.id,
+          organizationId: row.issuerOrganizationId,
+          correlationId,
+          payload: {
+            dteId: id,
+            number: row.number,
+            status: next,
+            reason: dto.reason.trim(),
+            feePaid: Boolean(dto.feePaid),
+          },
+        },
+        tx,
+      );
+      return saved;
+    });
+
+    return presentDte(updated, actor, now);
+  }
+
+  // =========================================================================
+  // Cierre en sala (SITA)
+  // =========================================================================
+
+  /**
+   * CU-12 / especificacion 6. La sala confirma el arribo con el numero y el
+   * codigo de cierre impresos y las alzas reales. Qreal nunca puede superar lo
+   * declarado: ese caso exige anular y reemitir, no "corregir" el cierre.
+   */
+  async close(
+    id: string,
+    dto: CloseDteRequestDto,
+    actor: AuthenticatedUser,
+    correlationId?: string,
+  ) {
+    this.access.assertCanWrite(actor);
+    const now = new Date();
+    let row = await this.reads.findVisible(id, actor);
+    assertReceiver(actor, row.destinationOrganizationId);
+
+    const target = await this.movements.findRaw(row.movementId);
+    const [received] = await this.db
+      .select()
+      .from(reception)
+      .where(eq(reception.movementId, row.movementId))
+      .limit(1);
+
+    const at = dto.closedAt
+      ? new Date(dto.closedAt)
+      : dto.arrivalAt
+        ? new Date(dto.arrivalAt)
+        : now;
+    const apiSem = row.movementTypeCode === DTE_RULES.movementTypeCode;
+    const current = effectiveStatus(row.status, row, at);
+
+    if (apiSem ? !OPEN_FOR_CLOSE.includes(current) : current !== 'EMITIDO') {
+      throw this.notClosable(current, row);
+    }
+    if (!['RECEIVED', 'PARTIALLY_RECEIVED'].includes(target.status)) {
+      throw new DomainRuleException(
+        HttpStatus.CONFLICT,
+        'MOVIMIENTO_NO_RECIBIDO',
+        `El DT-e solo puede cerrarse una vez recibido el movimiento. Estado actual: ${target.status}.`,
+      );
+    }
+
+    let confirmed: number | null = null;
+    let verificationCode = row.verificationCode;
+    if (apiSem) {
+      if (dto.number && dto.number.trim() !== (row.number ?? '').trim()) {
+        throw new DomainRuleException(
+          HttpStatus.UNPROCESSABLE_ENTITY,
+          'NUMERO_DTE_NO_COINCIDE',
+          `El numero ingresado (${dto.number.trim()}) no coincide con el del DT-e (${row.number ?? 'sin numero'}).`,
+        );
+      }
+      if (row.verificationCode) {
+        if (!dto.verificationCode) {
+          throw new DomainRuleException(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            'CODIGO_CIERRE_REQUERIDO',
+            'Ingresa el codigo de cierre impreso en el DT-e.',
+          );
+        }
+        if (normalizeCode(dto.verificationCode) !== normalizeCode(row.verificationCode)) {
+          throw new DomainRuleException(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            'CODIGO_CIERRE_INVALIDO',
+            'El codigo de cierre no coincide con el del DT-e.',
+          );
+        }
+      } else if (dto.verificationCode) {
+        verificationCode = dto.verificationCode.trim();
+      }
+
+      confirmed =
+        dto.confirmedQuantity ??
+        (received && received.unit === 'ALZA'
+          ? Math.round(Number(received.receivedQuantity))
+          : null);
+      if (row.declaredQuantity !== null && confirmed === null) {
+        throw new DomainRuleException(
+          HttpStatus.BAD_REQUEST,
+          'CANTIDAD_REAL_REQUERIDA',
+          'Indica las alzas efectivamente recibidas (confirmedQuantity).',
+        );
+      }
+      if (confirmed !== null) {
+        const violation = validateConfirmedQuantity(row.declaredQuantity, confirmed);
+        if (violation) {
+          throw new DomainRuleException(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            violation.code,
+            violation.message,
+            {
+              declaredQuantity: row.declaredQuantity,
+              confirmedQuantity: confirmed,
+              minimumToDeclare: confirmed,
+            },
+          );
+        }
       }
     }
 
-    const isHoney = mov.materialType === 'MIEL' || (mov.movementType as string) === 'MATERIAL_MELARIO';
-    const productCode = isHoney ? '24.45' : mov.materialType;
-    const productName = mov.movementType === 'MATERIAL_MELARIO' ? 'Alzas con miel' : 'Miel a granel';
+    const arrivalAt = dto.arrivalAt ? new Date(dto.arrivalAt) : (received?.receivedAt ?? at);
 
-    const [created] = await this.db
-      .insert(dte)
-      .values({
-        movementId: mov.id,
-        status: DteStatuses.BORRADOR,
-        loadDate: dto.loadDate,
-        expiryDate: dto.expiryDate,
-        declaredQuantity: Math.round(dto.declaredQuantity),
-        estimatedQuantity: Math.round(Number(mov.quantity)),
-        unit: mov.unit,
-        movementTypeCode: mov.movementType,
-        transitReason: dto.transitReason ?? 'EXTRACCION',
-        productCode,
-        productName,
-        issuerOrganizationId: user.organizationId,
-        destinationOrganizationId: destEst?.organizationId ?? null,
-        holderProducerId: dto.holderProducerId ?? originEst?.producerId ?? null,
-        originRenspa: originRenspa?.number ?? null,
-        destinationRenspa: destRenspa?.number ?? null,
-        originCode,
-        destinationCode: destEst?.senasaCode ?? null,
-        transportType: dto.transportType ?? 'PROPIO',
-        transportPlate: normalizePlate(dto.transportPlate),
-        transportTrailerPlate: dto.transportTrailerPlate ? normalizePlate(dto.transportTrailerPlate) : null,
-        issueMode: 'MANUAL',
-        syncStatus: 'NOT_APPLICABLE',
-      })
-      .returning();
-
-    await recordStatusHistory(this.db, {
-      dteId: created.id,
-      fromStatus: null,
-      toStatus: DteStatuses.BORRADOR,
-      actorUserId: user.id,
-      reason: 'Borrador de DT-e inicializado.',
-    });
-
-    await this.events.publish({
-      eventType: DomainEvents.DteCreated,
-      entityType: 'dte',
-      entityId: created.id,
-      actorUserId: user.id,
-      organizationId: user.organizationId,
-      payload: { movementId: mov.id, declaredQuantity: dto.declaredQuantity },
-    });
-
-    return presentDte(created, { userRole: user.role, userOrgId: user.organizationId });
-  }
-
-  /**
-   * Emision manual (contingencia / carga directa con numero y codigo oficial de SIGSA).
-   */
-  async issueManual(id: string, dto: IssueManualDteDto, user: CurrentUserContext) {
-    const item = await findDteById(this.db, id);
-    if (!item) throw new NotFoundException('DT-e no encontrado.');
-
-    // Aislamiento: solo la organizacion emisora (o ADMIN) puede registrar la emision
-    if (user.role !== 'ADMIN' && item.issuerOrganizationId && item.issuerOrganizationId !== user.organizationId) {
-      throw new ForbiddenException('No tiene permisos para emitir un DT-e de otra organización.');
-    }
-
-    if (item.status !== DteStatuses.BORRADOR && item.status !== DteStatuses.SOLICITADO) {
-      throw new DomainRuleException(
-        HttpStatus.BAD_REQUEST,
-        'ESTADO_INVALIDO_PARA_EMISION',
-        `No se puede emitir un DT-e en estado ${item.status}.`,
-      );
-    }
-
-    const issuedAt = dto.issuedAt ? new Date(dto.issuedAt) : new Date();
-
-    const [updated] = await this.db
-      .update(dte)
-      .set({
-        number: dto.number.trim(),
-        verificationCode: dto.verificationCode.trim(),
-        pdfUrl: dto.pdfUrl?.trim() ?? null,
-        status: DteStatuses.EMITIDO,
-        issuedAt,
-        issueMode: 'MANUAL',
-        syncStatus: 'SYNCHRONIZED',
-        updatedAt: new Date(),
-      })
-      .where(eq(dte.id, id))
-      .returning();
-
-    // Actualizar movimiento para requerir documento
-    await this.db
-      .update(movement)
-      .set({
-        requiresDocument: true,
-        requiredDocumentType: 'DTE',
-        updatedAt: new Date(),
-      })
-      .where(eq(movement.id, item.movementId));
-
-    await recordStatusHistory(this.db, {
-      dteId: item.id,
-      fromStatus: item.status,
-      toStatus: DteStatuses.EMITIDO,
-      actorUserId: user.id,
-      reason: `Emision manual con numero oficial ${dto.number}`,
-    });
-
-    await this.events.publish({
-      eventType: DomainEvents.DteIssued,
-      entityType: 'dte',
-      entityId: item.id,
-      actorUserId: user.id,
-      organizationId: user.organizationId,
-      payload: { number: dto.number, issueMode: 'MANUAL' },
-    });
-
-    return presentDte(updated, { userRole: user.role, userOrgId: user.organizationId });
-  }
-
-  /**
-   * Solicita la emision del DT-e al gateway (Simulador o SIGSA).
-   */
-  async requestSigsa(id: string, user: CurrentUserContext, correlationId?: string) {
-    const item = await findDteById(this.db, id);
-    if (!item) throw new NotFoundException('DT-e no encontrado.');
-
-    // Aislamiento: solo la organizacion emisora (o ADMIN) puede solicitar la emision
-    if (user.role !== 'ADMIN' && item.issuerOrganizationId && item.issuerOrganizationId !== user.organizationId) {
-      throw new ForbiddenException('No tiene permisos para solicitar la emisión de un DT-e de otra organización.');
-    }
-
-    if (item.status !== DteStatuses.BORRADOR && item.status !== DteStatuses.RECHAZADO) {
-      throw new DomainRuleException(
-        HttpStatus.BAD_REQUEST,
-        'ESTADO_INVALIDO_PARA_SOLICITUD',
-        `El DT-e se encuentra en estado ${item.status}.`,
-      );
-    }
-
-    // Actualizar estado a SOLICITADO
-    await this.db
-      .update(dte)
-      .set({
-        status: DteStatuses.SOLICITADO,
-        requestedAt: new Date(),
-        requestedById: user.id,
-        syncStatus: 'PENDING_SYNC',
-        updatedAt: new Date(),
-      })
-      .where(eq(dte.id, id));
-
-    await recordStatusHistory(this.db, {
-      dteId: item.id,
-      fromStatus: item.status,
-      toStatus: DteStatuses.SOLICITADO,
-      actorUserId: user.id,
-      correlationId,
-      reason: 'Solicitud enviada al servicio API-SEM de SENASA.',
-    });
-
-    await this.events.publish({
-      eventType: DomainEvents.DteRequested,
-      entityType: 'dte',
-      entityId: item.id,
-      actorUserId: user.id,
-      organizationId: user.organizationId,
-      correlationId,
-      payload: { movementId: item.movementId },
-    });
-
-    try {
-      const loadDateIso = item.loadDate ?? toArgentinaDateString();
-      const expiryDateIso = item.expiryDate ?? addDaysIso(loadDateIso, 3);
-
-      const sigsaResult = await this.senasaGateway.requestDte({
-        movementId: item.movementId,
-        originRenspa: item.originRenspa,
-        destinationRenspa: item.destinationRenspa,
-        originCode: item.originCode,
-        destinationCode: item.destinationCode,
-        holderTaxId: item.holderTaxId,
-        loadDate: loadDateIso,
-        expiryDate: expiryDateIso,
-        declaredQuantity: Number(item.declaredQuantity),
-        unit: item.unit ?? 'ALZA',
-        productCode: item.productCode ?? 'MIEL',
-        productName: item.productName ?? 'Miel a granel',
-        transportType: item.transportType ?? 'PROPIO',
-        transportPlate: item.transportPlate ?? '',
-        transportTrailerPlate: item.transportTrailerPlate,
-        transitReason: item.transitReason ?? 'EXTRACCION',
-        correlationId,
-      });
-
-      const [updated] = await this.db
+    const updated = await this.db.transaction(async (tx) => {
+      row = await this.lifecycle.advance(row, at, tx);
+      const [saved] = await tx
         .update(dte)
         .set({
-          number: sigsaResult.number,
-          verificationCode: sigsaResult.verificationCode,
-          externalId: sigsaResult.externalId,
-          pdfUrl: sigsaResult.pdfUrl,
-          status: DteStatuses.EMITIDO,
-          issuedAt: sigsaResult.issuedAt,
-          feePaid: sigsaResult.feePaid ?? true,
-          syncStatus: 'SYNCHRONIZED',
-          updatedAt: new Date(),
+          status: 'CERRADO',
+          closedAt: at,
+          arrivalAt,
+          confirmedQuantity: confirmed,
+          verificationCode,
+          externalStatus: 'CERRADO',
+          updatedAt: now,
+        })
+        .where(and(eq(dte.id, id), eq(dte.status, row.status)))
+        .returning();
+      if (!saved) this.concurrentChange();
+
+      await this.queries.recordTransition(tx, {
+        dteId: id,
+        from: row.status,
+        to: 'CERRADO',
+        source: 'USUARIO',
+        reason:
+          confirmed !== null
+            ? `Cierre en sala: ${confirmed} de ${row.declaredQuantity ?? '?'} alzas declaradas.${dto.notes ? ` ${dto.notes}` : ''}`
+            : `Cierre por la sala receptora.${dto.notes ? ` ${dto.notes}` : ''}`,
+        actorUserId: actor.id,
+        correlationId,
+        occurredAt: at,
+      });
+      await this.events.publish(
+        {
+          eventType: DomainEvents.DteClosed,
+          entityType: 'movement',
+          entityId: row.movementId,
+          actorUserId: actor.id,
+          organizationId: row.destinationOrganizationId,
+          correlationId,
+          occurredAt: at,
+          payload: {
+            dteId: id,
+            number: row.number,
+            closedAt: at.toISOString(),
+            confirmedQuantity: confirmed,
+            declaredQuantity: row.declaredQuantity,
+          },
+        },
+        tx,
+      );
+      return saved;
+    });
+
+    return presentDte(updated, actor, now);
+  }
+
+  /** POST /movements/:id/dte/close: cierre del DT-e en juego del movimiento. */
+  async closeForMovement(
+    movementId: string,
+    dto: CloseDteDto,
+    actor: AuthenticatedUser,
+    correlationId?: string,
+  ) {
+    await this.movements.findOne(movementId, actor);
+    const current = await this.queries.currentForMovement(movementId);
+    if (!current) throw new NotFoundException('El movimiento no tiene un DT-e asociado.');
+    return this.close(current.id, dto, actor, correlationId);
+  }
+
+  /** La sala declara que la carga nunca llego (estado SIN ARRIBO, seccion 5.1). */
+  async reportNoArrival(
+    id: string,
+    dto: NoArrivalDteDto,
+    actor: AuthenticatedUser,
+    correlationId?: string,
+  ) {
+    this.access.assertCanWrite(actor);
+    const now = new Date();
+    let row = await this.reads.findVisible(id, actor);
+    assertReceiver(actor, row.destinationOrganizationId);
+
+    const current = effectiveStatus(row.status, row, now);
+    if (!OPEN_FOR_CLOSE.includes(current)) {
+      throw new DomainRuleException(
+        HttpStatus.CONFLICT,
+        'DTE_NO_ADMITE_SIN_ARRIBO',
+        `Solo un DT-e vigente o vencido puede declararse sin arribo; este esta ${current}.`,
+      );
+    }
+    const target = await this.movements.findRaw(row.movementId);
+    if (['RECEIVED', 'PARTIALLY_RECEIVED'].includes(target.status)) {
+      throw new DomainRuleException(
+        HttpStatus.CONFLICT,
+        'MOVIMIENTO_RECIBIDO',
+        'El movimiento ya tiene la recepcion registrada: la carga arribo. Corresponde cerrar el DT-e.',
+      );
+    }
+
+    const updated = await this.db.transaction(async (tx) => {
+      row = await this.lifecycle.advance(row, now, tx);
+      const [saved] = await tx
+        .update(dte)
+        .set({ status: 'SIN_ARRIBO', externalStatus: 'SIN_ARRIBO', updatedAt: now })
+        .where(and(eq(dte.id, id), eq(dte.status, row.status)))
+        .returning();
+      if (!saved) this.concurrentChange();
+
+      await this.queries.recordTransition(tx, {
+        dteId: id,
+        from: row.status,
+        to: 'SIN_ARRIBO',
+        source: 'USUARIO',
+        reason: dto.reason.trim(),
+        actorUserId: actor.id,
+        correlationId,
+      });
+      await this.events.publish(
+        {
+          eventType: DomainEvents.DteNoArrival,
+          entityType: 'movement',
+          entityId: row.movementId,
+          actorUserId: actor.id,
+          organizationId: row.destinationOrganizationId,
+          correlationId,
+          payload: { dteId: id, number: row.number, reason: dto.reason.trim() },
+        },
+        tx,
+      );
+      return saved;
+    });
+
+    return presentDte(updated, actor, now);
+  }
+
+  /**
+   * Un CADUCADO bloquea al titular en SIGSA hasta que SENASA lo regulariza. La
+   * plataforma replica el bloqueo y un ADMIN lo levanta al constatar la
+   * regularizacion (la nota queda en el historial).
+   */
+  async regularize(
+    id: string,
+    dto: RegularizeDteDto,
+    actor: AuthenticatedUser,
+    correlationId?: string,
+  ) {
+    if (actor.role !== 'ADMIN') {
+      throw new ForbiddenException('Solo un ADMIN registra la regularizacion ante SENASA.');
+    }
+    const now = new Date();
+    let row = await this.reads.findVisible(id, actor);
+    row = await this.lifecycle.advance(row, now);
+    if (row.status !== 'CADUCADO' || row.regularizedAt) {
+      throw new DomainRuleException(
+        HttpStatus.CONFLICT,
+        'DTE_NO_REGULARIZABLE',
+        row.regularizedAt
+          ? 'El DT-e ya fue regularizado.'
+          : `Solo un DT-e caducado se regulariza; este esta ${row.status}.`,
+      );
+    }
+
+    const updated = await this.db.transaction(async (tx) => {
+      const [saved] = await tx
+        .update(dte)
+        .set({
+          regularizedAt: now,
+          regularizedById: actor.id,
+          regularizationNote: dto.note.trim(),
+          updatedAt: now,
         })
         .where(eq(dte.id, id))
         .returning();
-
-      await this.db
-        .update(movement)
-        .set({ requiresDocument: true, requiredDocumentType: 'DTE', updatedAt: new Date() })
-        .where(eq(movement.id, item.movementId));
-
-      await recordStatusHistory(this.db, {
-        dteId: item.id,
-        fromStatus: DteStatuses.SOLICITADO,
-        toStatus: DteStatuses.EMITIDO,
-        actorUserId: user.id,
-        correlationId,
-        reason: `Autorizado por SENASA con numero ${sigsaResult.number}`,
-      });
-
-      await this.events.publish({
-        eventType: DomainEvents.DteIssued,
-        entityType: 'dte',
-        entityId: item.id,
-        actorUserId: user.id,
-        organizationId: user.organizationId,
-        correlationId,
-        payload: { number: sigsaResult.number, verificationCode: sigsaResult.verificationCode },
-      });
-
-      return presentDte(updated, { userRole: user.role, userOrgId: user.organizationId });
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      await this.db
-        .update(dte)
-        .set({
-          syncStatus: 'ERROR',
-          errorMessage: errorMsg.slice(0, 600),
-          updatedAt: new Date(),
-        })
-        .where(eq(dte.id, id));
-      throw err;
-    }
-  }
-
-  /**
-   * Anula un DT-e emitido o vigente.
-   */
-  async voidDte(id: string, dto: VoidDteDto, user: CurrentUserContext, correlationId?: string) {
-    const item = await findDteById(this.db, id);
-    if (!item) throw new NotFoundException('DT-e no encontrado.');
-
-    // Aislamiento: solo la organizacion emisora (o ADMIN) puede anular
-    if (user.role !== 'ADMIN' && item.issuerOrganizationId && item.issuerOrganizationId !== user.organizationId) {
-      throw new ForbiddenException('No tiene permisos para anular un DT-e emitido por otra organización.');
-    }
-
-    if (item.status !== DteStatuses.EMITIDO && item.status !== DteStatuses.VIGENTE) {
-      throw new DomainRuleException(
-        HttpStatus.BAD_REQUEST,
-        'ESTADO_INVALIDO_PARA_ANULACION',
-        `No se puede anular un DT-e en estado ${item.status}. Solo se pueden anular documentos EMITIDOS o VIGENTES.`,
-      );
-    }
-
-    if (item.number) {
-      await this.senasaGateway.voidDte({
-        dteNumber: item.number,
-        reason: dto.reason,
-        externalId: item.externalId,
+      await this.queries.recordTransition(tx, {
+        dteId: id,
+        from: 'CADUCADO',
+        to: 'CADUCADO',
+        source: 'USUARIO',
+        reason: `Regularizado ante SENASA: ${dto.note.trim()}`,
+        actorUserId: actor.id,
         correlationId,
       });
-    }
-
-    const [updated] = await this.db
-      .update(dte)
-      .set({
-        status: DteStatuses.ANULADO,
-        voidedAt: new Date(),
-        voidReason: dto.reason.trim(),
-        syncStatus: 'SYNCHRONIZED',
-        updatedAt: new Date(),
-      })
-      .where(eq(dte.id, id))
-      .returning();
-
-    await recordStatusHistory(this.db, {
-      dteId: item.id,
-      fromStatus: item.status,
-      toStatus: DteStatuses.ANULADO,
-      actorUserId: user.id,
-      correlationId,
-      reason: dto.reason,
+      await this.events.publish(
+        {
+          eventType: DomainEvents.DteRegularized,
+          entityType: 'movement',
+          entityId: row.movementId,
+          actorUserId: actor.id,
+          correlationId,
+          payload: { dteId: id, number: row.number, note: dto.note.trim() },
+        },
+        tx,
+      );
+      return saved;
     });
-
-    await this.events.publish({
-      eventType: DomainEvents.DteVoided,
-      entityType: 'dte',
-      entityId: item.id,
-      actorUserId: user.id,
-      organizationId: user.organizationId,
-      correlationId,
-      payload: { reason: dto.reason },
-    });
-
-    return presentDte(updated, { userRole: user.role, userOrgId: user.organizationId });
+    return presentDte(updated, actor, now);
   }
 
   /**
-   * Cierra el DT-e en la sala de extraccion de destino (SITA / API-SEM).
+   * @deprecated POST /movements/:id/dte/status. Traduce los estados anteriores
+   * (ISSUED, APPROVED, REJECTED, CANCELLED) al ciclo oficial.
    */
-  async closeDte(id: string, dto: CloseDteDto, user: CurrentUserContext, correlationId?: string) {
-    const item = await findDteById(this.db, id);
-    if (!item) throw new NotFoundException('DT-e no encontrado.');
+  async updateStatusLegacy(
+    movementId: string,
+    dto: UpdateDteStatusDto,
+    actor: AuthenticatedUser,
+    correlationId?: string,
+  ) {
+    this.access.assertCanWrite(actor);
+    await this.movements.findOne(movementId, actor);
+    const current = await this.queries.currentForMovement(movementId);
+    if (!current) throw new NotFoundException('El movimiento no tiene un DT-e asociado.');
 
-    // Aislamiento: solo la organizacion de destino (o ADMIN) puede cerrar el DT-e
-    if (user.role !== 'ADMIN' && item.destinationOrganizationId && item.destinationOrganizationId !== user.organizationId) {
-      throw new ForbiddenException('No tiene permisos para cerrar un DT-e destinado a otra organización.');
-    }
-
-    if (![DteStatuses.VIGENTE, DteStatuses.VENCIDO, DteStatuses.CADUCADO].includes(item.status as any)) {
-      throw new DomainRuleException(
-        HttpStatus.BAD_REQUEST,
-        'ESTADO_INVALIDO_PARA_CIERRE',
-        `El DT-e se encuentra en estado ${item.status}. Solo puede cerrarse cuando ha arribado a sala en vigencia o estado vencido/caducado.`,
-      );
-    }
-
-    // Regla de oro: Validar codigo de verificacion de cierre oficial
-    const providedCode = dto.verificationCode.trim().toUpperCase();
-    const storedCode = (item.verificationCode ?? '').trim().toUpperCase();
-
-    if (storedCode && providedCode !== storedCode) {
-      throw new DomainRuleException(
-        HttpStatus.BAD_REQUEST,
-        'CODIGO_VERIFICACION_INVALIDO',
-        'El codigo de verificacion ingresado no coincide con el codigo impreso en el DT-e oficial presentado por el transportista.',
-      );
-    }
-
-    // Regla de oro: La cantidad arribada no puede superar la declarada
-    const declaredQty = Number(item.declaredQuantity);
-    if (dto.confirmedQuantity > declaredQty) {
-      throw new DomainRuleException(
-        HttpStatus.BAD_REQUEST,
-        'EXCESO_CANTIDAD_DECLARADA',
-        `La cantidad recibida (${dto.confirmedQuantity}) supera la cantidad declarada en el DT-e (${declaredQty}). La normativa prohibe ingresar material excedente bajo el mismo documento.`,
-        { declaredQuantity: declaredQty, attemptedQuantity: dto.confirmedQuantity },
-      );
-    }
-
-    // Notificar a SENASA SITA
-    if (item.number) {
-      await this.senasaGateway.closeDte({
-        dteNumber: item.number,
-        verificationCode: providedCode,
-        confirmedQuantity: dto.confirmedQuantity,
-        arrivalAt: dto.arrivalAt ? new Date(dto.arrivalAt) : new Date(),
-        correlationId,
-      });
-    }
-
-    const [updated] = await this.db
-      .update(dte)
-      .set({
-        status: DteStatuses.CERRADO,
-        confirmedQuantity: Math.round(dto.confirmedQuantity),
-        arrivalAt: dto.arrivalAt ? new Date(dto.arrivalAt) : new Date(),
-        closedAt: new Date(),
-        syncStatus: 'SYNCHRONIZED',
-        updatedAt: new Date(),
-      })
-      .where(eq(dte.id, id))
-      .returning();
-
-    await recordStatusHistory(this.db, {
-      dteId: item.id,
-      fromStatus: item.status,
-      toStatus: DteStatuses.CERRADO,
-      actorUserId: user.id,
-      correlationId,
-      reason: `Cierre en sala con cantidad ${dto.confirmedQuantity}`,
-    });
-
-    await this.events.publish({
-      eventType: DomainEvents.DteClosed,
-      entityType: 'dte',
-      entityId: item.id,
-      actorUserId: user.id,
-      organizationId: user.organizationId,
-      correlationId,
-      payload: { confirmedQuantity: dto.confirmedQuantity },
-    });
-
-    return presentDte(updated, { userRole: user.role, userOrgId: user.organizationId });
-  }
-
-  /**
-   * Reporta el DT-e como "Sin Arribo".
-   */
-  async reportNoArrival(id: string, dto: NoArrivalDteDto, user: CurrentUserContext, correlationId?: string) {
-    const item = await findDteById(this.db, id);
-    if (!item) throw new NotFoundException('DT-e no encontrado.');
-
-    if (item.status !== DteStatuses.VIGENTE && item.status !== DteStatuses.VENCIDO) {
-      throw new DomainRuleException(
-        HttpStatus.BAD_REQUEST,
-        'ESTADO_INVALIDO_PARA_SIN_ARRIBO',
-        `No se puede declarar sin arribo un DT-e en estado ${item.status}.`,
-      );
-    }
-
-    if (item.number) {
-      await this.senasaGateway.reportNoArrival({
-        dteNumber: item.number,
-        reason: dto.reason,
-        correlationId,
-      });
-    }
-
-    const [updated] = await this.db
-      .update(dte)
-      .set({
-        status: DteStatuses.SIN_ARRIBO,
-        voidReason: dto.reason.trim(),
-        syncStatus: 'SYNCHRONIZED',
-        updatedAt: new Date(),
-      })
-      .where(eq(dte.id, id))
-      .returning();
-
-    await recordStatusHistory(this.db, {
-      dteId: item.id,
-      fromStatus: item.status,
-      toStatus: DteStatuses.SIN_ARRIBO,
-      actorUserId: user.id,
-      correlationId,
-      reason: dto.reason,
-    });
-
-    await this.events.publish({
-      eventType: DomainEvents.DteNoArrival,
-      entityType: 'dte',
-      entityId: item.id,
-      actorUserId: user.id,
-      organizationId: user.organizationId,
-      correlationId,
-      payload: { reason: dto.reason },
-    });
-
-    return presentDte(updated, { userRole: user.role, userOrgId: user.organizationId });
-  }
-
-  /**
-   * Regulariza un DT-e vencido o caducado.
-   */
-  async regularize(id: string, dto: RegularizeDteDto, user: CurrentUserContext) {
-    const item = await findDteById(this.db, id);
-    if (!item) throw new NotFoundException('DT-e no encontrado.');
-
-    if (item.status !== DteStatuses.VENCIDO && item.status !== DteStatuses.CADUCADO) {
-      throw new DomainRuleException(
-        HttpStatus.BAD_REQUEST,
-        'NO_REQUIERE_REGULARIZACION',
-        `El DT-e se encuentra en estado ${item.status}. Solo DT-e VENCIDOS o CADUCADOS pueden regularizarse.`,
-      );
-    }
-
-    const declaredQty = Number(item.declaredQuantity);
-    if (dto.confirmedQuantity > declaredQty) {
-      throw new DomainRuleException(
-        HttpStatus.BAD_REQUEST,
-        'EXCESO_CANTIDAD_DECLARADA',
-        `La cantidad regularizada (${dto.confirmedQuantity}) supera la declarada (${declaredQty}).`,
-      );
-    }
-
-    const [updated] = await this.db
-      .update(dte)
-      .set({
-        status: DteStatuses.CERRADO,
-        confirmedQuantity: Math.round(dto.confirmedQuantity),
-        regularizedAt: new Date(),
-        regularizedById: user.id,
-        regularizationNote: dto.regularizationNote.trim(),
-        closedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(dte.id, id))
-      .returning();
-
-    await recordStatusHistory(this.db, {
-      dteId: item.id,
-      fromStatus: item.status,
-      toStatus: DteStatuses.CERRADO,
-      actorUserId: user.id,
-      reason: `Regularizado extemporaneamente: ${dto.regularizationNote}`,
-    });
-
-    await this.events.publish({
-      eventType: DomainEvents.DteRegularized,
-      entityType: 'dte',
-      entityId: item.id,
-      actorUserId: user.id,
-      organizationId: user.organizationId,
-      payload: { confirmedQuantity: dto.confirmedQuantity, note: dto.regularizationNote },
-    });
-
-    return presentDte(updated, { userRole: user.role, userOrgId: user.organizationId });
-  }
-
-  /**
-   * Obtiene un DT-e por su identificador unico.
-   */
-  async getById(id: string, user: CurrentUserContext) {
-    const item = await findDteById(this.db, id);
-    if (!item) throw new NotFoundException('DT-e no encontrado.');
-
-    const history = await getDteHistory(this.db, id);
-
-    const presented = presentDte(item, {
-      userRole: user.role,
-      userOrgId: user.organizationId,
-    });
-
-    return {
-      ...presented,
-      history,
-    };
-  }
-
-  /**
-   * Obtiene el DT-e activo de un movimiento.
-   */
-  async getByMovementId(movementId: string, user: CurrentUserContext) {
-    const item = await findDteByMovementId(this.db, movementId);
-    if (!item) return null;
-
-    const history = await getDteHistory(this.db, item.id);
-    const presented = presentDte(item, {
-      userRole: user.role,
-      userOrgId: user.organizationId,
-    });
-
-    return {
-      ...presented,
-      history,
-    };
-  }
-
-  /**
-   * Listado paginado de DT-e con filtros de organizacion y perspectiva.
-   */
-  async list(filter: DteFilterDto, user: CurrentUserContext) {
-    const page = filter.page ?? 1;
-    const pageSize = filter.pageSize ?? 20;
-    const conditions: SQL[] = [];
-
-    // Filtro por organizacion y perspectiva
-    const isAdmin = user.role === 'ADMIN';
-    const orgId = user.organizationId;
-
-    if (!isAdmin && orgId) {
-      if (filter.perspective === 'RECEIVED') {
-        conditions.push(eq(dte.destinationOrganizationId, orgId));
-      } else if (filter.perspective === 'ISSUED') {
-        conditions.push(eq(dte.issuerOrganizationId, orgId));
-      } else {
-        conditions.push(
-          or(
-            eq(dte.issuerOrganizationId, orgId),
-            eq(dte.destinationOrganizationId, orgId),
-          )!,
+    switch (dto.status) {
+      case 'ISSUED': {
+        const number = dto.number ?? current.number;
+        if (!number) {
+          throw new DomainRuleException(
+            HttpStatus.CONFLICT,
+            'NUMERO_REQUERIDO',
+            'Para emitir se requiere el numero de DT-e.',
+          );
+        }
+        return this.issue(current.id, { number }, actor, correlationId);
+      }
+      case 'CANCELLED':
+        return this.void(
+          current.id,
+          { reason: dto.reason ?? 'Cancelado desde la API anterior.', feePaid: false },
+          actor,
+          correlationId,
         );
+      case 'REJECTED': {
+        if (!['BORRADOR', 'SOLICITADO'].includes(current.status)) {
+          throw new DomainRuleException(
+            HttpStatus.CONFLICT,
+            'TRANSICION_INVALIDA',
+            `Transicion invalida del DT-e: ${current.status} -> RECHAZADO.`,
+          );
+        }
+        const saved = await this.db.transaction(async (tx) => {
+          const [row] = await tx
+            .update(dte)
+            .set({ status: 'RECHAZADO', errorMessage: dto.reason ?? null, updatedAt: new Date() })
+            .where(and(eq(dte.id, current.id), eq(dte.status, current.status)))
+            .returning();
+          if (!row) this.concurrentChange();
+          await this.queries.recordTransition(tx, {
+            dteId: current.id,
+            from: current.status,
+            to: 'RECHAZADO',
+            source: 'USUARIO',
+            reason: dto.reason ?? 'Rechazado.',
+            actorUserId: actor.id,
+            correlationId,
+          });
+          await this.events.publish(
+            {
+              eventType: DomainEvents.DteRejected,
+              entityType: 'movement',
+              entityId: movementId,
+              actorUserId: actor.id,
+              correlationId,
+              payload: { dteId: current.id, reason: dto.reason ?? null },
+            },
+            tx,
+          );
+          return row;
+        });
+        return presentDte(saved, actor);
       }
-    } else if (isAdmin && orgId) {
-      if (filter.perspective === 'RECEIVED') {
-        conditions.push(eq(dte.destinationOrganizationId, orgId));
-      } else if (filter.perspective === 'ISSUED') {
-        conditions.push(eq(dte.issuerOrganizationId, orgId));
-      }
+      default:
+        // APPROVED no existe en el ciclo oficial: se acepta sin cambios.
+        return presentDte(current, actor);
     }
-
-    if (filter.status) {
-      conditions.push(eq(dte.status, filter.status));
-    }
-
-    if (filter.search) {
-      const term = `%${filter.search.trim()}%`;
-      conditions.push(
-        or(
-          ilike(dte.number, term),
-          ilike(dte.originRenspa, term),
-          ilike(dte.destinationRenspa, term),
-          ilike(dte.transportPlate, term),
-        )!,
-      );
-    }
-
-    const where = conditions.length > 0 ? and(...conditions) : undefined;
-
-    const [rows, [{ count }]] = await Promise.all([
-      this.db
-        .select()
-        .from(dte)
-        .where(where)
-        .orderBy(desc(dte.createdAt))
-        .limit(pageSize)
-        .offset((page - 1) * pageSize),
-      this.db
-        .select({ count: sql<number>`cast(count(*) as int)` })
-        .from(dte)
-        .where(where),
-    ]);
-
-    return {
-      data: presentDteList(rows, { userRole: user.role, userOrgId: user.organizationId }),
-      meta: {
-        page,
-        pageSize,
-        total: count,
-        totalPages: Math.ceil(count / pageSize),
-      },
-    };
   }
 
-  /**
-   * Resumen de tareas y estados del DT-e para el panel del usuario.
-   */
-  async summary(user: CurrentUserContext) {
-    const orgId = user.organizationId;
-    const isAdmin = user.role === 'ADMIN';
+  // =========================================================================
+  // Internos
+  // =========================================================================
 
-    const baseCondition =
-      !isAdmin && orgId
-        ? or(eq(dte.issuerOrganizationId, orgId), eq(dte.destinationOrganizationId, orgId))
-        : sql`1=1`;
-
-    const rows = await this.db
-      .select({
-        status: dte.status,
-        count: sql<number>`cast(count(*) as int)`,
-      })
-      .from(dte)
-      .where(baseCondition)
-      .groupBy(dte.status);
-
-    const counts: Record<string, number> = {};
-    for (const r of rows) {
-      counts[r.status] = r.count;
-    }
-
-    return {
-      borradores: counts[DteStatuses.BORRADOR] ?? 0,
-      solicitados: counts[DteStatuses.SOLICITADO] ?? 0,
-      emitidos: counts[DteStatuses.EMITIDO] ?? 0,
-      vigentes: counts[DteStatuses.VIGENTE] ?? 0,
-      vencidos: counts[DteStatuses.VENCIDO] ?? 0,
-      caducados: counts[DteStatuses.CADUCADO] ?? 0,
-      cerrados: counts[DteStatuses.CERRADO] ?? 0,
-      total: Object.values(counts).reduce((acc, v) => acc + v, 0),
-    };
-  }
-
-  // Metodos de compatibilidad hacia atras para MovementController
-  async create(movementId: string, dto: any, actor: any, correlationId?: string) {
-    const [mov] = await this.db.select().from(movement).where(eq(movement.id, movementId)).limit(1);
-    if (!mov) throw new NotFoundException('Movimiento no encontrado.');
-
-    let item = await findDteByMovementId(this.db, movementId);
-    if (!item) {
-      const todayAr = toArgentinaDateString();
-      item = (await this.createDraft(
-        {
-          movementId,
-          loadDate: todayAr,
-          expiryDate: addDaysIso(todayAr, DEFAULT_VALIDITY_DAYS),
-          declaredQuantity: Number(mov.quantity),
-          transportPlate: dto.transportPlate ? normalizePlate(dto.transportPlate) : 'AF123AA',
-        },
-        actor,
-      )) as any;
-    }
-
-    if (dto.number) {
-      const verificationCode = dto.verificationCode?.trim() || `VER-${Math.floor(1000 + Math.random() * 9000)}`;
-      return this.issueManual(
-        item.id,
-        {
-          number: dto.number,
-          verificationCode,
-          issuedAt: dto.issuedAt,
-        },
-        actor,
-      );
-    }
-    return item;
-  }
-
-  async getByMovement(movementId: string, actor: any) {
-    return this.getByMovementId(movementId, actor);
-  }
-
-  async updateStatus(movementId: string, dto: any, actor: any, correlationId?: string) {
-    const item = await findDteByMovementId(this.db, movementId);
-    if (!item) throw new NotFoundException('DT-e no encontrado.');
-
-    if (dto.status === 'CANCELLED') {
-      return this.voidDte(item.id, { reason: dto.reason ?? 'Anulado' }, actor, correlationId);
-    }
-
-    const [updated] = await this.db
-      .update(dte)
-      .set({
-        status: dto.status,
-        number: dto.number ?? item.number,
-        updatedAt: new Date(),
-      })
-      .where(eq(dte.id, item.id))
-      .returning();
-
-    return presentDte(updated, { userRole: actor.role, userOrgId: actor.organizationId });
-  }
-
-  async close(movementId: string, dto: any, actor: any, correlationId?: string) {
-    const item = await findDteByMovementId(this.db, movementId);
-    if (!item) throw new NotFoundException('DT-e no encontrado.');
-
-    if (!dto?.verificationCode?.trim()) {
-      throw new DomainRuleException(
-        HttpStatus.BAD_REQUEST,
-        'CODIGO_VERIFICACION_REQUERIDO',
-        'Se requiere ingresar el código de verificación oficial impreso en el DT-e físico.',
-      );
-    }
-
-    return this.closeDte(
-      item.id,
+  private async publishRequested(
+    tx: DbExecutor,
+    row: DteRow,
+    actor: AuthenticatedUser,
+    correlationId?: string,
+  ): Promise<void> {
+    await this.events.publish(
       {
-        verificationCode: dto.verificationCode.trim(),
-        confirmedQuantity: Number(dto.confirmedQuantity ?? item.declaredQuantity ?? 0),
-        notes: dto.notes,
-        arrivalAt: dto.arrivalAt,
+        eventType: DomainEvents.DteRequested,
+        entityType: 'movement',
+        entityId: row.movementId,
+        actorUserId: actor.id,
+        organizationId: row.issuerOrganizationId,
+        correlationId,
+        payload: { dteId: row.id, mode: this.gateway.mode },
       },
-      actor,
-      correlationId,
+      tx,
+    );
+  }
+
+  private gatewayIssueMode(): 'SIMULADO' | 'SIGSA' {
+    return this.gateway.mode === 'simulado' ? 'SIMULADO' : 'SIGSA';
+  }
+
+  private assertGatewayCanEmit(): void {
+    if (!this.gateway.capabilities.emit) {
+      throw new DomainRuleException(
+        HttpStatus.CONFLICT,
+        'EMISION_API_NO_DISPONIBLE',
+        `${this.gateway.description} Emiti el DT-e en SIGSA y registra su numero.`,
+        { mode: this.gateway.mode },
+      );
+    }
+  }
+
+  private async assertNumberAvailable(number: string, exceptId?: string): Promise<void> {
+    const conditions: SQL[] = [
+      eq(dte.number, number),
+      eq(dte.movementTypeCode, DTE_RULES.movementTypeCode),
+    ];
+    if (exceptId) conditions.push(ne(dte.id, exceptId));
+    const rows = await this.db
+      .select({ id: dte.id })
+      .from(dte)
+      .where(and(...conditions))
+      .limit(1);
+    if (rows.length > 0) {
+      throw new DomainRuleException(
+        HttpStatus.CONFLICT,
+        'NUMERO_DTE_DUPLICADO',
+        `El DT-e ${number} ya esta registrado en ApiTrace.`,
+      );
+    }
+  }
+
+  private async assertNoActiveDte(movementId: string): Promise<void> {
+    const current = await this.queries.currentForMovement(movementId);
+    if (current && !isVoid(current.status)) {
+      throw new DomainRuleException(
+        HttpStatus.CONFLICT,
+        'DTE_ACTIVO_EXISTENTE',
+        'El movimiento ya tiene un DT-e en juego. Para reemplazarlo, anulalo primero.',
+      );
+    }
+  }
+
+  private assertMovementAcceptsDte(target: MovementRow): void {
+    if (['RECEIVED', 'PARTIALLY_RECEIVED', 'REJECTED', 'CANCELLED'].includes(target.status)) {
+      throw new DomainRuleException(
+        HttpStatus.CONFLICT,
+        'MOVIMIENTO_CERRADO',
+        `No se puede emitir un DT-e para un movimiento en estado ${target.status}.`,
+      );
+    }
+  }
+
+  private isApiSem(target: MovementRow, ctx: DteContext): boolean {
+    return (
+      target.requiredDocumentType === 'DTE' ||
+      (target.materialType === 'MATERIAL_MELARIO' && ctx.destination.type === 'SALA_EXTRACCION')
+    );
+  }
+
+  private notClosable(current: DteStatus, row: DteRow): DomainRuleException {
+    switch (current) {
+      case 'EMITIDO':
+        return new DomainRuleException(
+          HttpStatus.CONFLICT,
+          'DTE_NO_VIGENTE',
+          `El DT-e todavia no esta vigente (se habilita el ${row.loadDate} a las 00:00): no puede cerrarse.`,
+        );
+      case 'CADUCADO':
+        return new DomainRuleException(
+          HttpStatus.CONFLICT,
+          'DTE_CADUCADO',
+          'El DT-e caduco: ya no admite cierre. El titular debe regularizar ante SENASA.',
+        );
+      case 'CERRADO':
+        return new DomainRuleException(
+          HttpStatus.CONFLICT,
+          'DTE_YA_CERRADO',
+          'El DT-e ya esta cerrado.',
+        );
+      default:
+        return new DomainRuleException(
+          HttpStatus.CONFLICT,
+          'TRANSICION_INVALIDA',
+          `Transicion invalida del DT-e: ${current} -> CERRADO.`,
+        );
+    }
+  }
+
+  private async insertDocument(
+    tx: DbExecutor,
+    row: DteRow,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    await tx.insert(document).values({
+      type: 'DTE',
+      number: row.number,
+      movementId: row.movementId,
+      issuedAt: row.issuedAt,
+      externalSystem: 'SENASA_SIGSA',
+      externalId: row.externalId,
+      metadata: { dteId: row.id } as never,
+      createdById: actor.id,
+    });
+  }
+
+  private concurrentChange(): never {
+    throw new DomainRuleException(
+      HttpStatus.CONFLICT,
+      'CAMBIO_CONCURRENTE',
+      'El DT-e cambio mientras se procesaba la operacion. Actualiza y volve a intentar.',
     );
   }
 }
-

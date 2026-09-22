@@ -1,48 +1,50 @@
-import { Injectable, HttpStatus } from '@nestjs/common';
-import { DomainRuleException } from '../../../common/exceptions/domain-rule.exception';
-import type {
-  CloseDteInput,
-  CloseDteResult,
-  NoArrivalInput,
-  NoArrivalResult,
-  RequestDteInput,
-  RequestDteResult,
-  SenasaGateway,
-  VoidDteInput,
-  VoidDteResult,
+import {
+  SenasaUnavailableError,
+  type DteEmissionResult,
+  type RegistryLookup,
+  type SenasaGateway,
 } from './senasa.gateway';
 
-@Injectable()
+/**
+ * Modo sin integracion. Es el comportamiento honesto mientras SENASA no
+ * habilite su API: el DT-e se emite en SIGSA (web u oficina local) y en
+ * ApiTrace se registra el numero y el codigo de cierre que figuran impresos.
+ */
 export class ManualSenasaGateway implements SenasaGateway {
-  async requestDte(_input: RequestDteInput): Promise<RequestDteResult> {
-    throw new DomainRuleException(
-      HttpStatus.BAD_REQUEST,
-      'MODO_MANUAL_REQUIERE_CARGA',
-      'El sistema esta configurado en modo manual. Debe emitir el DT-e directamente en SIGSA y cargar el numero y codigo de verificacion mediante el formulario.',
+  readonly mode = 'manual' as const;
+  readonly environment = 'local' as const;
+  readonly capabilities = { emit: false, void: false, close: false, registryLookup: false };
+  readonly description =
+    'Sin integracion con SENASA: el DT-e se emite en SIGSA y en ApiTrace se registra su numero.';
+
+  async lookupApiary(): Promise<RegistryLookup | null> {
+    return null;
+  }
+
+  async lookupSala(): Promise<RegistryLookup | null> {
+    return null;
+  }
+
+  async emitDte(): Promise<DteEmissionResult> {
+    throw this.unavailable();
+  }
+
+  async voidDte(): Promise<void> {
+    // Nada que sincronizar: la anulacion se hace en SIGSA y se refleja aca.
+  }
+
+  async closeDte(): Promise<void> {
+    // El cierre se hace en SITA; ApiTrace solo lo registra.
+  }
+
+  async reportNoArrival(): Promise<void> {
+    // Idem: la declaracion de "sin arribo" se hace en SITA.
+  }
+
+  private unavailable(): SenasaUnavailableError {
+    return new SenasaUnavailableError(
+      'MODO_MANUAL',
+      'La emision por API no esta habilitada. Emiti el DT-e en SIGSA y registra su numero.',
     );
-  }
-
-  async voidDte(input: VoidDteInput): Promise<VoidDteResult> {
-    return {
-      success: true,
-      voidedAt: new Date(),
-      message: `Anulacion registrada en modo manual para DT-e ${input.dteNumber}. Recuerde anular tambien en autogestion SIGSA.`,
-    };
-  }
-
-  async closeDte(input: CloseDteInput): Promise<CloseDteResult> {
-    return {
-      success: true,
-      closedAt: input.arrivalAt ?? new Date(),
-      message: `Cierre registrado en modo manual para DT-e ${input.dteNumber}.`,
-    };
-  }
-
-  async reportNoArrival(input: NoArrivalInput): Promise<NoArrivalResult> {
-    return {
-      success: true,
-      reportedAt: new Date(),
-      message: `Sin arribo registrado en modo manual para DT-e ${input.dteNumber}.`,
-    };
   }
 }

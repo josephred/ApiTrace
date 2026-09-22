@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../database/database.module';
-import { establishment, producer, renspaRegistration } from '../../database/schema';
+import { establishment, organization, producer, renspaRegistration } from '../../database/schema';
 import { AccessControlService } from '../../common/services/access-control.service';
 import { DomainEvents, EventsService } from '../../common/services/events.service';
 import type { AuthenticatedUser } from '../../common/types';
@@ -9,6 +9,7 @@ import type { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import type {
   AssociateRenspaDto,
   CreateEstablishmentDto,
+  ListReceiversQueryDto,
   UpdateEstablishmentDto,
 } from './dto/establishment.dto';
 
@@ -37,6 +38,7 @@ export class EstablishmentService {
       if (owner.length === 0) throw new NotFoundException('El productor indicado no existe.');
       this.access.assertOrganizationAccess(actor, owner[0].organizationId);
     }
+    const senasaCode = await this.assertSenasaCodeAvailable(dto.senasaCode);
 
     return this.db.transaction(async (tx) => {
       const [created] = await tx
@@ -52,7 +54,7 @@ export class EstablishmentService {
           latitude: dto.latitude !== undefined ? String(dto.latitude) : null,
           longitude: dto.longitude !== undefined ? String(dto.longitude) : null,
           rne: dto.rne ?? null,
-          senasaCode: dto.senasaCode ?? null,
+          senasaCode,
           senasaStatus: dto.senasaStatus ?? 'PENDING_VERIFICATION',
           senasaValidTo: dto.senasaValidTo ?? null,
           createdById: actor.id,
@@ -147,55 +149,16 @@ export class EstablishmentService {
     return this.db.select().from(establishment).where(inArray(establishment.id, ids));
   }
 
-  /**
-   * Resuelve el hallazgo H-02: permite a cualquier usuario o productor consultar
-   * salas de extraccion y acopios habilitados de todo el sistema para seleccionar
-   * como destino de un movimiento o DT-e, independientemente de la organizacion.
-   */
-  async listReceivers(search?: string) {
-    const conditions: SQL[] = [
-      inArray(establishment.type, ['SALA_EXTRACCION', 'ACOPIO']),
-      eq(establishment.status, 'ACTIVE'),
-    ];
-
-    if (search) {
-      const term = `%${search.trim()}%`;
-      conditions.push(
-        or(
-          ilike(establishment.name, term),
-          ilike(establishment.locality, term),
-          ilike(establishment.senasaCode, term),
-        )!,
-      );
-    }
-
-    const rows = await this.db
-      .select({
-        id: establishment.id,
-        name: establishment.name,
-        type: establishment.type,
-        locality: establishment.locality,
-        province: establishment.province,
-        senasaCode: establishment.senasaCode,
-        senasaStatus: establishment.senasaStatus,
-        senasaValidTo: establishment.senasaValidTo,
-        organizationId: establishment.organizationId,
-      })
-      .from(establishment)
-      .where(and(...conditions))
-      .orderBy(asc(establishment.name))
-      .limit(100);
-
-    return rows;
-  }
-
   async update(id: string, dto: UpdateEstablishmentDto, actor: AuthenticatedUser) {
     this.access.assertCanWrite(actor);
     await this.findOne(id, actor);
+    const senasaCode =
+      dto.senasaCode !== undefined ? await this.assertSenasaCodeAvailable(dto.senasaCode, id) : undefined;
     const [updated] = await this.db
       .update(establishment)
       .set({
         ...dto,
+        senasaCode,
         latitude: dto.latitude !== undefined ? String(dto.latitude) : undefined,
         longitude: dto.longitude !== undefined ? String(dto.longitude) : undefined,
         updatedAt: new Date(),
@@ -281,6 +244,71 @@ export class EstablishmentService {
       .from(renspaRegistration)
       .where(eq(renspaRegistration.establishmentId, establishmentId))
       .orderBy(asc(renspaRegistration.createdAt));
+  }
+
+  /**
+   * Destinos posibles de un traslado, de cualquier organizacion: salas de
+   * extraccion y acopios activos. Resuelve el hallazgo H-02 (un productor no
+   * podia elegir una sala de otra organizacion). Devuelve solo datos publicos
+   * del establecimiento, nunca datos del titular.
+   */
+  async receivers(query: ListReceiversQueryDto) {
+    const conditions: SQL[] = [
+      eq(establishment.status, 'ACTIVE'),
+      eq(establishment.type, query.type ?? 'SALA_EXTRACCION'),
+    ];
+    if (query.q) {
+      const like = `%${query.q}%`;
+      const search = or(
+        ilike(establishment.name, like),
+        ilike(establishment.locality, like),
+        ilike(establishment.senasaCode, like),
+      );
+      if (search) conditions.push(search);
+    }
+    const where = and(...conditions);
+
+    const [rows, [{ count }]] = await Promise.all([
+      this.db
+        .select({
+          id: establishment.id,
+          name: establishment.name,
+          type: establishment.type,
+          locality: establishment.locality,
+          province: establishment.province,
+          senasaCode: establishment.senasaCode,
+          senasaStatus: establishment.senasaStatus,
+          senasaValidTo: establishment.senasaValidTo,
+          organizationId: establishment.organizationId,
+          organizationName: organization.name,
+        })
+        .from(establishment)
+        .innerJoin(organization, eq(organization.id, establishment.organizationId))
+        .where(where)
+        .orderBy(asc(establishment.name))
+        .limit(query.pageSize)
+        .offset(query.offset),
+      this.db.select({ count: sql<number>`cast(count(*) as int)` }).from(establishment).where(where),
+    ]);
+    return { rows, total: count };
+  }
+
+  /** El codigo SENASA identifica al establecimiento habilitado: no se comparte. */
+  private async assertSenasaCodeAvailable(
+    value: string | undefined | null,
+    exceptId?: string,
+  ): Promise<string | null> {
+    const code = value?.trim().toUpperCase().replace(/\s+/g, '') || null;
+    if (!code) return null;
+    const rows = await this.db
+      .select({ id: establishment.id })
+      .from(establishment)
+      .where(eq(establishment.senasaCode, code))
+      .limit(2);
+    if (rows.some((row) => row.id !== exceptId)) {
+      throw new ConflictException(`El codigo SENASA ${code} ya esta asignado a otro establecimiento.`);
+    }
+    return code;
   }
 
   /** RENSPA vigente de un establecimiento, usado al armar el DT-e. */

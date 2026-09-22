@@ -1,5 +1,16 @@
-import { index, integer, numeric, pgTable, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
-import { entityStatusEnum } from './enums';
+import {
+  date,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
+import { entityStatusEnum, registrationStatusEnum } from './enums';
 import { establishment } from './establishment';
 
 /** Apiario: unidad productiva que contiene colmenas, dentro de un establecimiento. */
@@ -18,10 +29,16 @@ export const apiary = pgTable(
     province: varchar('province', { length: 100 }),
     hiveCount: integer('hive_count').notNull().default(0),
     status: entityStatusEnum('status').notNull().default('ACTIVE'),
-    renapaCode: varchar('renapa_code', { length: 40 }),
-    renapaStatus: varchar('renapa_status', { length: 40 }).notNull().default('PENDING_VERIFICATION'),
-    renapaValidTo: varchar('renapa_valid_to', { length: 10 }),
     registeredAt: timestamp('registered_at', { withTimezone: true }),
+    /**
+     * Identificacion oficial del apiario en RENAPA, formato Letra-N°RENAPA-N°Apiario
+     * (ej. B53999-2). Es el "establecimiento de origen" del DT-e API-SEM. Nunca PK:
+     * `code` sigue siendo el codigo interno del productor.
+     */
+    renapaCode: varchar('renapa_code', { length: 40 }),
+    /** Habilitacion del apiario en RENAPA. SIGSA no emite DT-e si no esta ACTIVE. */
+    renapaStatus: registrationStatusEnum('renapa_status').notNull().default('PENDING_VERIFICATION'),
+    renapaValidTo: date('renapa_valid_to', { mode: 'string' }),
     notes: varchar('notes', { length: 1000 }),
     createdById: uuid('created_by_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -30,7 +47,7 @@ export const apiary = pgTable(
   (t) => [
     unique('apiary_establishment_code_uq').on(t.establishmentId, t.code),
     index('apiary_status_idx').on(t.status),
-    index('apiary_renapa_code_idx').on(t.renapaCode),
+    uniqueIndex('apiary_renapa_code_uq').on(t.renapaCode),
   ],
 );
 

@@ -58,19 +58,25 @@ export const ApiariesPage = () => {
     },
     { key: 'name', header: 'Nombre', cell: (item) => item.name ?? '—' },
     {
-      key: 'establishment',
-      header: 'Establecimiento',
-      cell: (item) => item.establishmentName ?? '—',
-    },
-    {
+      // Origen oficial del DT-e: sin RENAPA del apiario SIGSA no emite.
       key: 'renapa',
       header: 'RENAPA',
       cell: (item) =>
         item.renapaCode ? (
-          <span className="mono font-medium">{item.renapaCode}</span>
+          <span className="row row-tight">
+            <span className="mono">{item.renapaCode}</span>
+            {item.renapaStatus && item.renapaStatus !== 'ACTIVE' && (
+              <StatusPill status={item.renapaStatus} withIcon={false} />
+            )}
+          </span>
         ) : (
-          <span className="faint small">Sin registrar</span>
+          <span className="faint small">sin RENAPA</span>
         ),
+    },
+    {
+      key: 'establishment',
+      header: 'Establecimiento',
+      cell: (item) => item.establishmentName ?? '—',
     },
     {
       key: 'hives',
@@ -135,21 +141,21 @@ export const ApiariesPage = () => {
           onLoadMore={() => setPageSize((size) => size + 25)}
           loadingMore={list.loading}
           rowActions={(item) => (
-            <div className="row row-tight">
+            <>
               {canWrite && (
-                <>
-                  <Button size="sm" onClick={() => setHivesFor(item)}>
-                    Colmenas
-                  </Button>
-                  <Button size="sm" variant="secondary" onClick={() => setRenapaFor(item)}>
-                    RENAPA
-                  </Button>
-                </>
+                <Button size="sm" onClick={() => setHivesFor(item)}>
+                  Colmenas
+                </Button>
+              )}
+              {canWrite && (
+                <Button size="sm" onClick={() => setRenapaFor(item)}>
+                  RENAPA
+                </Button>
               )}
               <ButtonLink size="sm" to={`/trace/forward/apiary/${item.id}`} icon="trace">
                 Dónde terminó
               </ButtonLink>
-            </div>
+            </>
           )}
           empty={
             <EmptyState
@@ -180,22 +186,34 @@ export const ApiariesPage = () => {
         />
       )}
 
-      {hivesFor && (
-        <HivesSheet
-          apiary={hivesFor}
-          onClose={() => {
-            setHivesFor(null);
+      {renapaFor && (
+        <OfficialRegistrySheet
+          title="RENAPA del apiario"
+          subtitle={`Apiario ${renapaFor.code}`}
+          path={`/apiaries/${renapaFor.id}`}
+          entity="/apiaries"
+          names={{ code: 'renapaCode', status: 'renapaStatus', validTo: 'renapaValidTo' }}
+          codeLabel="RENAPA del apiario"
+          codePlaceholder="B53999-2"
+          help="renapaApiary"
+          initial={{
+            code: renapaFor.renapaCode,
+            status: renapaFor.renapaStatus,
+            validTo: renapaFor.renapaValidTo,
+          }}
+          onClose={() => setRenapaFor(null)}
+          onDone={() => {
+            setRenapaFor(null);
             list.reload();
           }}
         />
       )}
 
-      {renapaFor && (
-        <OfficialRegistrySheet
-          target={{ type: 'apiary', data: renapaFor }}
-          onClose={() => setRenapaFor(null)}
-          onDone={() => {
-            setRenapaFor(null);
+      {hivesFor && (
+        <HivesSheet
+          apiary={hivesFor}
+          onClose={() => {
+            setHivesFor(null);
             list.reload();
           }}
         />
@@ -229,6 +247,13 @@ const CreateApiarySheet = ({
     },
     { name: 'code', label: 'Código', required: true, placeholder: 'API-001' },
     { name: 'name', label: 'Nombre', placeholder: 'El Ceibo' },
+    {
+      name: 'renapaCode',
+      label: 'RENAPA del apiario',
+      placeholder: 'B53999-2',
+      help: 'renapaApiary',
+      hint: 'Lo necesita el DT-e. Podés cargarlo después.',
+    },
     { name: 'latitude', label: 'Latitud', type: 'number', step: 'any' },
     { name: 'longitude', label: 'Longitud', type: 'number', step: 'any' },
     { name: 'locality', label: 'Localidad' },
