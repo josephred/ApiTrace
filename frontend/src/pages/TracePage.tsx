@@ -257,6 +257,7 @@ export const TracePage = () => {
 
           <Card
             title={`Cadena ${data.direction === 'backward' ? 'hacia atrás' : 'hacia adelante'}`}
+            help="traceGraph"
             actions={<span className="small muted desktop-only">Tocá un nodo para ver su detalle</span>}
           >
             <TraceGraph result={data} />

@@ -31,7 +31,7 @@ import {
 } from '../lib/dteDraft';
 import { TRANSPORT_TYPES } from '../lib/vocabulary';
 import { Icon } from './Icon';
-import { Button, ButtonLink, Notice, Sheet, StatusPill, useToast, useWriteFeedback } from './ui';
+import { Button, ButtonLink, HelpTip, Notice, Sheet, StatusPill, useToast, useWriteFeedback } from './ui';
 import { Disclosure, Field, FormError, Steps, WizardActions, useForm, type FieldSpec } from './Form';
 import { Chips, PickCards, QuantityStepper, type PickOption } from './Pickers';
 import { SlideToConfirm } from './SlideToConfirm';
@@ -738,6 +738,7 @@ export const DteWizard = ({
                     <span aria-hidden="true" style={{ color: 'var(--danger-fg)' }}>
                       *
                     </span>
+                    <HelpTip topic="scheduledAt" />
                   </div>
                   <Chips
                     label="Fecha de carga"
@@ -772,6 +773,7 @@ export const DteWizard = ({
                     <span aria-hidden="true" style={{ color: 'var(--danger-fg)' }}>
                       *
                     </span>
+                    <HelpTip topic="dteValidity" />
                   </div>
                   <Chips
                     label="Días de vigencia"
@@ -810,6 +812,7 @@ export const DteWizard = ({
                     <span aria-hidden="true" style={{ color: 'var(--danger-fg)' }}>
                       *
                     </span>
+                    <HelpTip topic="transport" />
                   </div>
                   <Chips
                     label="Tipo de vehículo"
@@ -899,8 +902,9 @@ export const DteWizard = ({
                   </dl>
                 </div>
 
-                <div className="form-section-title" style={{ marginTop: 'var(--sp-5)' }}>
-                  Lo que SIGSA va a revisar
+                <div className="form-section-title" style={{ marginTop: 'var(--sp-5)', display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+                  <span>Lo que SIGSA va a revisar</span>
+                  <HelpTip topic="dte" />
                 </div>
                 {checking && (
                   <p className="row row-tight small muted">
@@ -937,7 +941,7 @@ export const DteWizard = ({
                       }
                       onConfirm={() => send('request')}
                     />
-                    <div className="emit-secondary">
+                    <div className="emit-secondary" style={{ alignItems: 'center' }}>
                       <Button
                         variant="ghost"
                         icon="back"
@@ -955,6 +959,7 @@ export const DteWizard = ({
                       >
                         Guardar borrador sin pedir
                       </Button>
+                      <HelpTip topic="slideToConfirm" />
                     </div>
                     <Disclosure label="Ya lo emití en SIGSA: registrar número y código">
                       <ManualFields

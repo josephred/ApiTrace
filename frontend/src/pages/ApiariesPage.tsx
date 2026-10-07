@@ -383,7 +383,7 @@ const HivesSheet = ({ apiary, onClose }: { apiary: Apiary; onClose: () => void }
   };
 
   return (
-    <Sheet title="Colmenas" subtitle={`Apiario ${apiary.code}`} onClose={onClose}>
+    <Sheet title="Colmenas" subtitle={`Apiario ${apiary.code}`} help="hives" onClose={onClose}>
       {failure && <FormError title={failure.title} detail={failure.detail} />}
       {queued > 0 && (
         <Notice tone="info" title="Guardadas en el dispositivo">

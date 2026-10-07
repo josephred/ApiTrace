@@ -28,6 +28,7 @@ import {
   ConfirmDialog,
   EmptyState,
   ErrorNotice,
+  HelpTip,
   Notice,
   PageHeader,
   Pill,
@@ -651,8 +652,9 @@ export const MovementDetailPage = () => {
 
           {data.reception && (
             <>
-              <div className="form-section-title" style={{ marginTop: 'var(--sp-5)' }}>
-                Recepción
+              <div className="form-section-title" style={{ marginTop: 'var(--sp-5)', display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+                <span>Recepción</span>
+                <HelpTip topic="reception" />
               </div>
               <SummaryList
                 rows={[
@@ -663,9 +665,12 @@ export const MovementDetailPage = () => {
                       <span className="row row-tight" style={{ justifyContent: 'flex-end' }}>
                         {formatQuantity(data.reception.receivedQuantity, data.reception.unit)}
                         {data.reception.hasDiscrepancy && (
-                          <Pill tone="warning" icon="warning">
-                            con diferencia
-                          </Pill>
+                          <>
+                            <Pill tone="warning" icon="warning">
+                              con diferencia
+                            </Pill>
+                            <HelpTip topic="receptionDiscrepancy" />
+                          </>
                         )}
                       </span>
                     ),
