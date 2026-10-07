@@ -173,6 +173,17 @@ export const getMeta = async <T>(key: string): Promise<T | undefined> => {
   return (await db.get('meta', key)) as T | undefined;
 };
 
+export const deleteMeta = async (key: string): Promise<void> => {
+  const db = await getDb();
+  await db.delete('meta', key);
+};
+
+/** Cuantas lecturas guardadas hay en el dispositivo (pantalla de diagnostico). */
+export const countCache = async (): Promise<number> => {
+  const db = await getDb();
+  return db.count('cache');
+};
+
 /** Borra todo lo local. Se usa al cerrar sesion para no dejar datos de otro usuario. */
 export const wipeLocalData = async (): Promise<void> => {
   const db = await getDb();

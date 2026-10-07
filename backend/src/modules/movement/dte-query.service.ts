@@ -5,9 +5,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { and, desc, eq, gte, ilike, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { DRIZZLE, type Database } from '../../database/database.module';
+import type { AppConfig } from '../../config/configuration';
 import { apiary, dte, establishment, movement, producer, reception } from '../../database/schema';
 import { AccessControlService } from '../../common/services/access-control.service';
 import { DomainRuleException } from '../../common/exceptions/domain-rule.exception';
@@ -52,6 +54,7 @@ export class DteQueryService {
     private readonly lifecycle: DteLifecycleService,
     private readonly checks: DteChecksService,
     @Inject(SENASA_GATEWAY) private readonly gateway: SenasaGateway,
+    private readonly config: ConfigService,
   ) {}
 
   /** El DT-e, si el usuario puede verlo: emite, recibe o tiene alcance global. */
@@ -356,6 +359,12 @@ export class DteQueryService {
       environment: this.gateway.environment,
       description: this.gateway.description,
       capabilities: this.gateway.capabilities,
+      /**
+       * CUIT de ApiTrace como representante (SENASA_PLATFORM_CUIT). Es el dato
+       * que el titular escribe en ARCA al delegar SIGSA o SITA: la guia de
+       * delegacion lo muestra con boton para copiarlo. null si no se configuro.
+       */
+      platformTaxId: this.config.get<AppConfig['senasa']>('senasa')?.platformTaxId ?? null,
       rules: DTE_RULES,
     };
   }

@@ -1,21 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { apiSend, NetworkError } from '../lib/api';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { usePreferences } from '../lib/settingsContext';
 import { useResource } from '../lib/useResource';
-import { fieldErrors, toUserMessage } from '../lib/errors';
-import {
-  DEFAULT_VALIDITY_DAYS,
-  DTE_STATUS_FILTERS,
-  MAX_VALIDITY_DAYS,
-  addDaysIso,
-  daysBetweenIso,
-  formatDay,
-  suggestDeclared,
-  todayAr,
-} from '../lib/dte';
-import { INTEGRATION_MODES, TRANSPORT_TYPES, statusInfo } from '../lib/vocabulary';
+import { DTE_STATUS_FILTERS, formatDay } from '../lib/dte';
+import { INTEGRATION_MODES, statusInfo } from '../lib/vocabulary';
 import {
   Button,
   Card,
@@ -23,34 +11,14 @@ import {
   Notice,
   PageHeader,
   Pill,
-  Sheet,
   Stat,
   StatusPill,
-  SummaryList,
-  useWriteFeedback,
 } from '../components/ui';
 import { DataList, type Column } from '../components/DataList';
 import { ResourceNotices } from '../components/ResourceNotices';
-import {
-  Disclosure,
-  Field,
-  Fields,
-  FormError,
-  Steps,
-  WizardActions,
-  useForm,
-  type FieldSpec,
-} from '../components/Form';
-import { DteChecks } from '../components/DteChecks';
-import type {
-  Apiary,
-  Dte,
-  DteListItem,
-  DtePreflight,
-  DteSummary,
-  Paginated,
-  Receiver,
-} from '../lib/types';
+import { DteWizard } from '../components/DteWizard';
+import { DraftBanner } from '../components/Panel';
+import type { DteListItem, DteSummary, Paginated } from '../lib/types';
 
 type Perspective = 'emitidos' | 'recibidos' | 'todos';
 
@@ -93,6 +61,17 @@ export const DtePage = () => {
   const list = useResource<Paginated<DteListItem>>(`/dte?${query.toString()}`);
   const summary = useResource<DteSummary>('/dte/summary');
   const canIssue = canWrite && hasRole('PRODUCTOR');
+
+  // El panel y el aviso del borrador abren el asistente con /dte?nuevo=1.
+  const wantsNew = params.get('nuevo') === '1';
+  useEffect(() => {
+    if (!wantsNew) return;
+    if (canIssue) setCreating(true);
+    const next = new URLSearchParams(params);
+    next.delete('nuevo');
+    setParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantsNew, canIssue]);
 
   const update = (changes: Record<string, string | null>) => {
     const next = new URLSearchParams(params);
@@ -204,6 +183,8 @@ export const DtePage = () => {
       />
 
       <ResourceNotices resource={list} />
+
+      {canIssue && !creating && <DraftBanner onResume={() => setCreating(true)} />}
 
       {integration && (
         <Notice
@@ -329,8 +310,9 @@ export const DtePage = () => {
       </Card>
 
       {creating && (
-        <NewDteWizard
-          canRequest={Boolean(integration?.capabilities.emit)}
+        <DteWizard
+          integration={integration ?? null}
+          blockedHolders={data?.blockedHolders}
           onClose={() => setCreating(false)}
           onDone={() => {
             setCreating(false);
@@ -340,504 +322,5 @@ export const DtePage = () => {
         />
       )}
     </div>
-  );
-};
-
-/* =========================================================================
-   Asistente: preparar, verificar y emitir
-   ========================================================================= */
-
-const STEP_NAMES = ['Origen y destino', 'Alzas y fechas', 'Transporte', 'Verificar y emitir'];
-
-/**
- * El DT-e se arma en cuatro preguntas: de dónde a dónde, cuántas alzas y
- * cuándo, en qué vehículo, y si SIGSA lo aceptaría. La última etapa corre la
- * misma verificación que haría SIGSA y ofrece tres salidas: guardar el
- * borrador, pedirlo por API (si el canal lo permite) o registrar uno ya
- * emitido en SIGSA.
- */
-const NewDteWizard = ({
-  canRequest,
-  onClose,
-  onDone,
-}: {
-  canRequest: boolean;
-  onClose: () => void;
-  onDone: () => void;
-}) => {
-  const navigate = useNavigate();
-  const feedback = useWriteFeedback();
-  // Patentes habituales guardadas en Configuracion: se precargan, siempre editables.
-  const { preferences } = usePreferences();
-  const [step, setStep] = useState(0);
-  const [busy, setBusy] = useState<'draft' | 'request' | 'manual' | null>(null);
-  const [failure, setFailure] = useState<{ title: string; detail?: string } | null>(null);
-  const [preflight, setPreflight] = useState<DtePreflight | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [offline, setOffline] = useState(false);
-
-  const apiaries = useResource<Paginated<Apiary>>('/apiaries?pageSize=100');
-  const receivers = useResource<Paginated<Receiver>>('/establishments/receivers?pageSize=100');
-  const today = todayAr();
-
-  const fields: FieldSpec[] = useMemo(
-    () => [
-      // ---------------------------------------------------------- paso 1
-      {
-        name: 'apiaryId',
-        label: 'Apiario de origen',
-        type: 'select',
-        required: true,
-        full: true,
-        help: 'renapaApiary',
-        options: (apiaries.data?.data ?? []).map((item) => ({
-          value: item.id,
-          label: `${item.code}${item.name ? ` — ${item.name}` : ''} · ${
-            item.renapaCode ? `RENAPA ${item.renapaCode}` : 'sin RENAPA'
-          }`,
-        })),
-      },
-      {
-        name: 'destinationEstablishmentId',
-        label: 'Sala de extracción',
-        type: 'select',
-        required: true,
-        full: true,
-        help: 'senasaSala',
-        options: (receivers.data?.data ?? []).map((item) => ({
-          value: item.id,
-          label: `${item.name} · ${item.senasaCode ?? 'sin código SENASA'} (${item.organizationName})`,
-        })),
-      },
-      // ---------------------------------------------------------- paso 2
-      {
-        name: 'estimatedQuantity',
-        label: 'Alzas que estimás cosechar',
-        type: 'number',
-        min: '1',
-        step: '1',
-        inputMode: 'numeric',
-      },
-      {
-        name: 'declaredQuantity',
-        label: 'Alzas a declarar',
-        type: 'number',
-        min: '1',
-        step: '1',
-        required: true,
-        inputMode: 'numeric',
-        help: 'dteDeclared',
-        validate: (value, all) =>
-          all.estimatedQuantity && Number(value) < Number(all.estimatedQuantity)
-            ? 'No puede ser menor que lo estimado: la sala no podrá confirmar más de lo declarado.'
-            : null,
-      },
-      {
-        name: 'loadDate',
-        label: 'Fecha de carga',
-        type: 'date',
-        required: true,
-        defaultValue: today,
-        help: 'dteValidity',
-      },
-      {
-        name: 'expiryDate',
-        label: 'Vence',
-        type: 'date',
-        required: true,
-        defaultValue: addDaysIso(today, DEFAULT_VALIDITY_DAYS),
-        validate: (value, all) => {
-          if (!all.loadDate) return null;
-          const days = daysBetweenIso(all.loadDate, value);
-          return days < DEFAULT_VALIDITY_DAYS || days > MAX_VALIDITY_DAYS
-            ? `Tiene que ser entre ${DEFAULT_VALIDITY_DAYS} y ${MAX_VALIDITY_DAYS} días después de la carga.`
-            : null;
-        },
-      },
-      // ---------------------------------------------------------- paso 3
-      {
-        name: 'transportType',
-        label: 'Vehículo',
-        type: 'select',
-        required: true,
-        defaultValue: 'CAMIONETA',
-        options: TRANSPORT_TYPES.options,
-      },
-      {
-        name: 'transportPlate',
-        label: 'Patente',
-        required: true,
-        placeholder: 'AA123BC',
-        autoComplete: 'off',
-        defaultValue: preferences.vehiclePlate,
-      },
-      {
-        name: 'transportTrailerPlate',
-        label: 'Patente del acoplado',
-        placeholder: 'Si lleva acoplado',
-        autoComplete: 'off',
-        defaultValue: preferences.trailerPlate,
-      },
-      // ---------------------------------------------------------- manual
-      { name: 'number', label: 'Número de DT-e', placeholder: '022440451-4', full: true },
-      {
-        name: 'verificationCode',
-        label: 'Código de cierre',
-        placeholder: '790112',
-        help: 'dteVerificationCode',
-      },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [apiaries.data, receivers.data, preferences.vehiclePlate, preferences.trailerPlate],
-  );
-
-  const { values, set, setValues, blur, errors, setErrors, validateAll } = useForm(fields);
-  const byName = (name: string) => fields.find((field) => field.name === name)!;
-  const pick = (names: string[]) => names.map(byName);
-
-  const stepFields = [
-    ['apiaryId', 'destinationEstablishmentId'],
-    ['estimatedQuantity', 'declaredQuantity', 'loadDate', 'expiryDate'],
-    ['transportType', 'transportPlate', 'transportTrailerPlate'],
-    [],
-  ];
-
-  /** Al estimar, se propone declarar con margen: la sala no puede confirmar de mas. */
-  const onEstimated = (value: string) => {
-    setValues((current) => {
-      const previous = current.estimatedQuantity
-        ? suggestDeclared(Number(current.estimatedQuantity))
-        : null;
-      const untouched = !current.declaredQuantity || Number(current.declaredQuantity) === previous;
-      return {
-        ...current,
-        estimatedQuantity: value,
-        declaredQuantity:
-          untouched && Number(value) > 0
-            ? String(suggestDeclared(Number(value)))
-            : current.declaredQuantity,
-      };
-    });
-  };
-
-  /** La fecha de vencimiento acompana a la de carga mientras nadie la toque. */
-  const onLoadDate = (value: string) => {
-    setValues((current) => {
-      const previousDefault = current.loadDate
-        ? addDaysIso(current.loadDate, DEFAULT_VALIDITY_DAYS)
-        : null;
-      return {
-        ...current,
-        loadDate: value,
-        expiryDate:
-          !current.expiryDate || current.expiryDate === previousDefault
-            ? addDaysIso(value, DEFAULT_VALIDITY_DAYS)
-            : current.expiryDate,
-      };
-    });
-  };
-
-  const body = (extra: Record<string, unknown> = {}) => ({
-    apiaryId: values.apiaryId,
-    destinationEstablishmentId: values.destinationEstablishmentId,
-    ...(values.estimatedQuantity ? { estimatedQuantity: Number(values.estimatedQuantity) } : {}),
-    declaredQuantity: Number(values.declaredQuantity),
-    loadDate: values.loadDate,
-    expiryDate: values.expiryDate,
-    transport: {
-      type: values.transportType,
-      plate: values.transportPlate,
-      ...(values.transportTrailerPlate ? { trailerPlate: values.transportTrailerPlate } : {}),
-    },
-    ...extra,
-  });
-
-  // La verificacion corre al llegar al ultimo paso y cada vez que se vuelve a el.
-  useEffect(() => {
-    if (step !== 3) return;
-    let cancelled = false;
-    setChecking(true);
-    setOffline(false);
-    setPreflight(null);
-    apiSend<DtePreflight>('POST', '/dte/preflight', body(), {
-      label: 'Verificación de DT-e',
-      entity: '/dte',
-      queueOffline: false,
-    })
-      .then((result) => {
-        if (!cancelled && !result.queued) setPreflight(result.data);
-      })
-      .catch((cause: unknown) => {
-        if (cancelled) return;
-        if (cause instanceof NetworkError) setOffline(true);
-        else {
-          const message = toUserMessage(cause, 'read');
-          setFailure({ title: message.title, detail: message.detail });
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setChecking(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
-
-  const next = () => {
-    if (!validateAll(stepFields[step])) return;
-    setFailure(null);
-    setStep((current) => current + 1);
-  };
-
-  const back = () => {
-    if (step === 0) onClose();
-    else setStep((current) => current - 1);
-  };
-
-  const send = async (kind: 'draft' | 'request' | 'manual') => {
-    if (!validateAll(stepFields.flat())) return;
-    if (kind === 'manual' && !values.number?.trim()) {
-      setErrors((current) => ({ ...current, number: 'Completá el número que figura en el DT-e.' }));
-      return;
-    }
-    setBusy(kind);
-    setFailure(null);
-    try {
-      const extra =
-        kind === 'request'
-          ? { submit: true }
-          : kind === 'manual'
-            ? {
-                number: values.number.trim(),
-                ...(values.verificationCode
-                  ? { verificationCode: values.verificationCode.trim() }
-                  : {}),
-              }
-            : {};
-      const result = await apiSend<Dte>('POST', '/dte', body(extra), {
-        label: `DT-e de ${values.declaredQuantity} alzas (${formatDay(values.loadDate)})`,
-        entity: '/dte',
-      });
-      if (result.queued) {
-        feedback.queued('El DT-e');
-        onDone();
-        return;
-      }
-      feedback.saved(
-        kind === 'request'
-          ? 'Emisión solicitada a SIGSA'
-          : kind === 'manual'
-            ? `DT-e ${result.data.number} registrado`
-            : 'Borrador guardado',
-      );
-      onDone();
-      navigate(`/dte/${result.data.id}`);
-    } catch (cause) {
-      const perField = fieldErrors(
-        cause,
-        fields.map((field) => field.name),
-      );
-      if (Object.keys(perField).length > 0) {
-        setErrors((current) => ({ ...current, ...perField }));
-        const firstBad = Object.keys(perField)[0];
-        const target = stepFields.findIndex((group) => group.includes(firstBad));
-        if (target >= 0) setStep(target);
-      } else {
-        const message = toUserMessage(cause, 'write');
-        setFailure({ title: message.title, detail: message.detail });
-      }
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const label = (name: string) =>
-    byName(name).options?.find((option) => option.value === values[name])?.label ?? '—';
-
-  return (
-    <Sheet
-      title="Nuevo DT-e"
-      subtitle="Traslado de alzas melarias del apiario a la sala (API-SEM)"
-      onClose={onClose}
-    >
-      <Steps names={STEP_NAMES} current={step} />
-
-      <form
-        onSubmit={(event: FormEvent) => {
-          event.preventDefault();
-          if (step < 3) next();
-        }}
-        noValidate
-      >
-        {failure && <FormError title={failure.title} detail={failure.detail} />}
-
-        {step === 0 && (
-          <>
-            <Fields
-              fields={pick(stepFields[0])}
-              values={values}
-              errors={errors}
-              onChange={set}
-              onBlur={blur}
-            />
-            {apiaries.data && apiaries.data.data.every((item) => !item.renapaCode) && (
-              <Notice tone="warning" title="Tus apiarios no tienen RENAPA cargado">
-                El RENAPA del apiario es el origen oficial del DT-e. Cargalo desde Apiarios →
-                RENAPA.
-              </Notice>
-            )}
-            <WizardActions onBack={back} onNext={next} nextLabel="Continuar" />
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <div className="form-grid">
-              <Field
-                spec={byName('estimatedQuantity')}
-                value={values.estimatedQuantity ?? ''}
-                error={errors.estimatedQuantity}
-                onChange={onEstimated}
-                onBlur={() => blur('estimatedQuantity')}
-              />
-              <Field
-                spec={byName('declaredQuantity')}
-                value={values.declaredQuantity ?? ''}
-                error={errors.declaredQuantity}
-                onChange={(value) => set('declaredQuantity', value)}
-                onBlur={() => blur('declaredQuantity')}
-              />
-              <Field
-                spec={byName('loadDate')}
-                value={values.loadDate ?? ''}
-                error={errors.loadDate}
-                onChange={onLoadDate}
-                onBlur={() => blur('loadDate')}
-              />
-              <Field
-                spec={byName('expiryDate')}
-                value={values.expiryDate ?? ''}
-                error={errors.expiryDate}
-                onChange={(value) => set('expiryDate', value)}
-                onBlur={() => blur('expiryDate')}
-              />
-            </div>
-            <Notice tone="info" title="Declará de más, nunca de menos">
-              Si a la sala llegan más alzas que las declaradas, el DT-e se anula y hay que emitir
-              otro antes de descargar. Declarar de más no tiene penalidad.
-            </Notice>
-            <WizardActions onBack={back} onNext={next} nextLabel="Continuar" />
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            <Fields
-              fields={pick(stepFields[2])}
-              values={values}
-              errors={errors}
-              onChange={set}
-              onBlur={blur}
-            />
-            <p className="small muted">
-              El movimiento API-SEM no lleva precintos ni requiere transporte habilitado por SENASA.
-            </p>
-            <WizardActions onBack={back} onNext={next} nextLabel="Verificar" />
-          </>
-        )}
-
-        {step === 3 && (
-          <>
-            <SummaryList
-              rows={[
-                { key: 'Origen', value: label('apiaryId') },
-                { key: 'Destino', value: label('destinationEstablishmentId') },
-                {
-                  key: 'Alzas',
-                  value: `${values.declaredQuantity} declaradas${
-                    values.estimatedQuantity ? ` (${values.estimatedQuantity} estimadas)` : ''
-                  }`,
-                },
-                {
-                  key: 'Vigencia',
-                  value: `${formatDay(values.loadDate)} → ${formatDay(values.expiryDate)}`,
-                },
-                {
-                  key: 'Transporte',
-                  value: `${TRANSPORT_TYPES.label(values.transportType)} ${values.transportPlate}${
-                    values.transportTrailerPlate ? ` + ${values.transportTrailerPlate}` : ''
-                  }`,
-                },
-              ]}
-            />
-
-            <div className="form-section-title" style={{ marginTop: 'var(--sp-5)' }}>
-              Lo que SIGSA va a revisar
-            </div>
-            {checking && <p className="small muted">Verificando…</p>}
-            {offline && (
-              <Notice tone="warning" title="Sin conexión">
-                No se pudo verificar. Podés guardar el borrador: se envía al volver la señal y lo
-                verificás antes de emitir.
-              </Notice>
-            )}
-            {preflight && <DteChecks checks={preflight.checks} />}
-
-            <Disclosure label="Ya lo emití en SIGSA: registrar número y código de cierre">
-              <Field
-                spec={byName('number')}
-                value={values.number ?? ''}
-                error={errors.number}
-                onChange={(value) => set('number', value)}
-              />
-              <Field
-                spec={byName('verificationCode')}
-                value={values.verificationCode ?? ''}
-                error={errors.verificationCode}
-                onChange={(value) => set('verificationCode', value)}
-              />
-              <Button
-                variant="secondary"
-                icon="check"
-                busy={busy === 'manual'}
-                busyLabel="Registrando…"
-                disabled={Boolean(busy)}
-                onClick={() => void send('manual')}
-              >
-                Registrar DT-e emitido
-              </Button>
-            </Disclosure>
-
-            <div className="form-actions">
-              <Button variant="ghost" icon="back" onClick={back} disabled={Boolean(busy)}>
-                Volver
-              </Button>
-              <Button
-                variant={canRequest && preflight?.ok ? 'secondary' : 'primary'}
-                busy={busy === 'draft'}
-                busyLabel="Guardando…"
-                disabled={Boolean(busy)}
-                onClick={() => void send('draft')}
-              >
-                Guardar borrador
-              </Button>
-              {canRequest && (
-                <Button
-                  variant="primary"
-                  icon="send"
-                  busy={busy === 'request'}
-                  busyLabel="Enviando…"
-                  disabled={Boolean(busy) || !preflight?.ok}
-                  onClick={() => void send('request')}
-                >
-                  Pedir a SIGSA
-                </Button>
-              )}
-            </div>
-          </>
-        )}
-      </form>
-    </Sheet>
   );
 };

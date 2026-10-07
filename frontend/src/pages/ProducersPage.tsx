@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
 import { apiSend } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
@@ -20,6 +20,7 @@ import {
 } from '../components/ui';
 import { DataList, type Column } from '../components/DataList';
 import { ResourceNotices } from '../components/ResourceNotices';
+import { DelegationGuide } from '../components/DelegationGuide';
 import {
   Disclosure,
   Field,
@@ -400,6 +401,8 @@ const DelegationSheet = ({
     `/producers/${producer.id}/senasa-delegations`,
   );
   const [editing, setEditing] = useState<SenasaDelegation['service'] | null>(null);
+  const [guide, setGuide] = useState(false);
+  const closeGuide = useCallback(() => setGuide(false), []);
 
   return (
     <Sheet
@@ -408,11 +411,20 @@ const DelegationSheet = ({
       help="delegation"
       onClose={onClose}
     >
-      <Notice tone="info" title="Se delega en ARCA">
+      <Notice
+        tone="info"
+        title="Se delega en ARCA"
+        action={
+          <Button size="sm" icon="shield" onClick={() => setGuide(true)}>
+            Ver la guía paso a paso
+          </Button>
+        }
+      >
         Desde ARCA, en el Administrador de Relaciones de Clave Fiscal (formulario F3283/E), el
         titular delega el servicio de SENASA en la CUIT de ApiTrace. Acá se registra el estado para
         saber si ApiTrace puede operar en su nombre.
       </Notice>
+      {guide && <DelegationGuide onClose={closeGuide} />}
 
       {delegations.loading && <SkeletonList rows={2} />}
       <ResourceNotices resource={delegations} />

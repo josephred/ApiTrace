@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
 import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { useHelpSettings } from '../lib/helpContext';
@@ -18,6 +18,9 @@ import {
   SummaryList,
   useWriteFeedback,
 } from '../components/ui';
+import { Diagnostics } from '../components/Diagnostics';
+import { DelegationGuide } from '../components/DelegationGuide';
+import { reopenOnboarding } from '../components/Onboarding';
 import type { DteIntegration, UserRole } from '../lib/types';
 
 /** Roles que trabajan con DT-e (la misma lista que App.tsx). */
@@ -39,6 +42,10 @@ export const SettingsPage = () => {
 
   const [vehiclePlate, setVehiclePlate] = useState(preferences.vehiclePlate);
   const [trailerPlate, setTrailerPlate] = useState(preferences.trailerPlate);
+  const [guide, setGuide] = useState(false);
+  const closeGuide = useCallback(() => setGuide(false), []);
+  // Delegan en ARCA quienes emiten (SIGSA) o cierran (SITA) DT-e por ApiTrace.
+  const delegates = Boolean(user && ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR'].includes(user.role));
 
   if (!user) return null;
 
@@ -365,6 +372,38 @@ export const SettingsPage = () => {
           </Card>
         </div>
       )}
+
+      {/* =====================================================================
+          SECCIÓN 5: AYUDA Y DIAGNÓSTICO (TODOS)
+          ===================================================================== */}
+      <div>
+        <div className="form-section-title" style={{ marginBottom: 'var(--sp-3)' }}>
+          Ayuda y diagnóstico
+        </div>
+        <div className="grid c2" style={{ gap: 'var(--sp-4)', alignItems: 'start' }}>
+          <Card title="Primeros pasos">
+            <div className="stack" style={{ gap: 'var(--sp-3)' }}>
+              <p className="small muted" style={{ margin: 0 }}>
+                La introducción que aparece la primera vez
+                {delegates ? ' y la guía para delegar el servicio de SENASA en ApiTrace desde ARCA' : ''}.
+              </p>
+              <div className="row">
+                <Button size="sm" icon="play" onClick={reopenOnboarding}>
+                  Ver la introducción
+                </Button>
+                {delegates && (
+                  <Button size="sm" icon="shield" onClick={() => setGuide(true)}>
+                    Cómo delegar en ARCA
+                  </Button>
+                )}
+              </div>
+            </div>
+          </Card>
+          <Diagnostics />
+        </div>
+      </div>
+
+      {guide && <DelegationGuide onClose={closeGuide} />}
     </div>
   );
 };

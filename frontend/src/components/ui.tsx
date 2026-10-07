@@ -520,6 +520,9 @@ export const Sheet = ({
     (first ?? panel)?.focus();
 
     const onKey = (event: KeyboardEvent) => {
+      // Con otra hoja abierta encima (por ejemplo, una guía dentro de un
+      // asistente), el teclado es de la de arriba: Escape cierra solo esa.
+      if (panel?.querySelector('.overlay')) return;
       if (event.key === 'Escape') {
         event.stopPropagation();
         onClose();

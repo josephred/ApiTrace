@@ -14,5 +14,7 @@ process.env.OUTBOX_ENABLED = 'false';
 process.env.THROTTLE_LIMIT = '100000';
 // Los tests e2e recorren la emision asincrona completa contra el simulador.
 process.env.SENASA_MODE = 'simulado';
+// CUIT de ApiTrace como representante: la guia de delegacion la muestra.
+process.env.SENASA_PLATFORM_CUIT = '30-71234567-9';
 // El barrido de vigencia se invoca a mano con un reloj controlado.
 process.env.DTE_LIFECYCLE_ENABLED = 'false';

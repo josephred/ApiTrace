@@ -113,3 +113,69 @@ export const DTE_STATUS_FILTERS: DteStatus[] = [
 
 /** Patente sin espacios ni guiones, en mayusculas. */
 export const normalizePlate = (value: string): string => value.toUpperCase().replace(/[\s.-]/g, '');
+
+/* =========================================================================
+   Vigencia en lenguaje de campo
+   ========================================================================= */
+
+/** Inicio y fin de un dia de calendario argentino (UTC-3, sin horario de verano). */
+const startOfDayAr = (day: string): number => Date.parse(`${day.slice(0, 10)}T00:00:00-03:00`);
+const endOfDayAr = (day: string): number => Date.parse(`${day.slice(0, 10)}T23:59:59.999-03:00`);
+
+export interface ValidityWindow {
+  /** 0 al empezar el dia de carga, 1 al terminar el dia de vencimiento. */
+  progress: number;
+  /** «Vence hoy a las 23:59», «Quedan 3 días», «Se habilita mañana». */
+  label: string;
+  tone: 'success' | 'warning' | 'danger' | 'neutral';
+}
+
+/**
+ * Cuanto le queda a un DT-e para circular. Es la version honesta de la
+ * «tarjeta de transito» del prototipo ApiAsistente: no simula GPS, mide lo
+ * unico que la norma fija, la ventana entre la carga y el vencimiento.
+ */
+export const validityWindow = (
+  loadDate: string | null | undefined,
+  expiryDate: string | null | undefined,
+  now: Date = new Date(),
+): ValidityWindow | null => {
+  if (!loadDate || !expiryDate) return null;
+  const start = startOfDayAr(loadDate);
+  const end = endOfDayAr(expiryDate);
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return null;
+
+  const instant = now.getTime();
+  const progress = Math.min(1, Math.max(0, (instant - start) / (end - start)));
+  const today = todayAr(now);
+
+  if (instant < start) {
+    const days = daysBetweenIso(today, loadDate.slice(0, 10));
+    return {
+      progress: 0,
+      label: days <= 1 ? 'Se habilita mañana a las 00:00' : `Se habilita en ${days} días`,
+      tone: 'neutral',
+    };
+  }
+  if (instant > end) return { progress: 1, label: 'Venció', tone: 'danger' };
+
+  const left = daysBetweenIso(today, expiryDate.slice(0, 10));
+  if (left <= 0) return { progress, label: 'Vence hoy a las 23:59', tone: 'warning' };
+  if (left === 1) return { progress, label: 'Vence mañana a las 23:59', tone: 'success' };
+  return { progress, label: `Quedan ${left} días`, tone: 'success' };
+};
+
+/** Atajos de fecha de carga dentro de la anticipacion que admite SIGSA. */
+export const loadDateShortcuts = (today: string = todayAr()): { value: string; label: string }[] =>
+  [
+    { value: today, label: 'Hoy' },
+    { value: addDaysIso(today, 1), label: 'Mañana' },
+    { value: addDaysIso(today, 2), label: 'Pasado mañana' },
+  ].filter((option) => daysBetweenIso(today, option.value) <= MAX_ANTICIPATION_DAYS);
+
+/** Vigencias posibles (de la minima a la maxima), en dias despues de la carga. */
+export const validityOptions = (): number[] => {
+  const options: number[] = [];
+  for (let days = DEFAULT_VALIDITY_DAYS; days <= MAX_VALIDITY_DAYS; days += 1) options.push(days);
+  return options;
+};

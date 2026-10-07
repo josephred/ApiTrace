@@ -48,3 +48,10 @@ export const toLocalInput = (date = new Date()): string => {
 };
 
 export const toIso = (localValue: string): string => new Date(localValue).toISOString();
+
+/** CUIT con guiones (30-71234567-9). Si no tiene 11 digitos, se devuelve tal cual. */
+export const formatCuit = (value: string | null | undefined): string => {
+  if (!value) return '—';
+  const digits = value.replace(/\D/g, '');
+  return digits.length === 11 ? `${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}` : value;
+};

@@ -285,6 +285,8 @@ export interface DteIntegration {
   environment: string;
   description: string;
   capabilities: { emit: boolean; void: boolean; close: boolean; registryLookup: boolean };
+  /** CUIT de ApiTrace como representante, para delegar SIGSA/SITA en ARCA. null si no se configuro. */
+  platformTaxId?: string | null;
   rules: {
     defaultValidityDays: number;
     maxValidityDays: number;

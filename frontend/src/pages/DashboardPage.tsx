@@ -15,6 +15,7 @@ import {
   StatusPill,
 } from '../components/ui';
 import { DataList, type Column } from '../components/DataList';
+import { DraftBanner, HolderCard, Hero, OnRouteCard } from '../components/Panel';
 import type {
   Apiary,
   Drum,
@@ -229,6 +230,14 @@ export const DashboardPage = () => {
   const stale = movements.fromCache || lots.fromCache || apiaries.fromCache;
   const firstName = user?.fullName.split(' ')[0] ?? '';
 
+  // El panel arranca por la acción del día: emitir (productor) o cerrar (sala).
+  const heroKind: 'issuer' | 'receiver' | null = isProducer
+    ? 'issuer'
+    : role === 'SALA' || role === 'ACOPIADOR'
+      ? 'receiver'
+      : null;
+  const blockedHolders = dteSummary.data?.blockedHolders ?? [];
+
   const awaitingTotal = awaiting.data?.meta.total ?? 0;
   const draftTotal = drafts.data?.meta.total ?? 0;
   const hasTasks = failedCount > 0 || awaitingTotal > 0 || draftTotal > 0 || dteCards.length > 0;
@@ -278,15 +287,26 @@ export const DashboardPage = () => {
 
   return (
     <div className="stack">
-      <PageHeader
-        title={firstName ? `Hola, ${firstName}` : 'Panel'}
-        sub="Esto es lo que necesita tu atención hoy."
-        actions={
-          <ButtonLink to="/trace" variant="primary" icon="trace">
-            Consultar trazabilidad
-          </ButtonLink>
-        }
-      />
+      {heroKind ? (
+        <Hero
+          firstName={firstName}
+          kind={heroKind}
+          pending={dteSummary.data?.tasks.pendingClosure ?? 0}
+          blocked={heroKind === 'issuer' && blockedHolders.length > 0}
+        />
+      ) : (
+        <PageHeader
+          title={firstName ? `Hola, ${firstName}` : 'Panel'}
+          sub="Esto es lo que necesita tu atención hoy."
+          actions={
+            <ButtonLink to="/trace" variant="primary" icon="trace">
+              Consultar trazabilidad
+            </ButtonLink>
+          }
+        />
+      )}
+
+      {heroKind === 'issuer' && <DraftBanner />}
 
       {stale && (
         <Notice tone="warning" title="Estas viendo una copia local">
@@ -338,6 +358,19 @@ export const DashboardPage = () => {
               detail="Están creados pero todavía no salieron del establecimiento."
               to="/movements?status=DRAFT"
               cta="Ver borradores"
+            />
+          )}
+        </div>
+      )}
+
+      {/* ------------------------------------------- en ruta y ficha del titular */}
+      {heroKind && (
+        <div className="grid c2">
+          <OnRouteCard perspective={heroKind === 'issuer' ? 'emitidos' : 'recibidos'} />
+          {heroKind === 'issuer' && (
+            <HolderCard
+              blockedIds={blockedHolders.map((holder) => holder.id)}
+              integration={dteSummary.data?.integration}
             />
           )}
         </div>

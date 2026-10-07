@@ -9,6 +9,7 @@ import { Icon, Logo } from './Icon';
 import { Button, HelpTip, Sheet } from './ui';
 import { InstallPrompt } from './InstallPrompt';
 import { UpdatePrompt } from './UpdatePrompt';
+import { Onboarding } from './Onboarding';
 
 /* =========================================================================
    Estado de los datos — un solo lugar
@@ -234,6 +235,8 @@ export const Layout = () => {
           )}
         </button>
       </nav>
+
+      <Onboarding />
 
       {moreOpen && (
         <Sheet title="Todas las secciones" onClose={() => setMoreOpen(false)}>

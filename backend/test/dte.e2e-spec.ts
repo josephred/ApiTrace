@@ -655,6 +655,8 @@ describe('DT-e API-SEM por usuario (e2e)', () => {
       expect(producerView.body.issued.CERRADO).toBe(1);
       expect(producerView.body.issued.ANULADO).toBe(1);
       expect(producerView.body.integration.mode).toBe('simulado');
+      // La guia de delegacion en ARCA muestra la CUIT de ApiTrace para copiarla.
+      expect(producerView.body.integration.platformTaxId).toBe('30712345679');
 
       const salaView = await request(http).get(`${PREFIX}/dte/summary`).set(auth(sala)).expect(200);
       expect(salaView.body.tasks.pendingClosure).toBe(1);

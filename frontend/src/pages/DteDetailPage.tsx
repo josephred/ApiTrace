@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiSend } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
 import { fieldErrors, toUserMessage } from '../lib/errors';
 import { formatDateTime, formatQuantity, toLocalInput } from '../lib/format';
@@ -18,7 +19,6 @@ import {
   Button,
   ButtonLink,
   Card,
-  ConfirmDialog,
   ErrorNotice,
   HelpTip,
   Notice,
@@ -31,7 +31,40 @@ import {
 } from '../components/ui';
 import { ResourceNotices } from '../components/ResourceNotices';
 import { Fields, Form, FormError, useForm, type FieldSpec } from '../components/Form';
-import type { DteAction, DteDetail } from '../lib/types';
+import { DteWizard, RouteLine } from '../components/DteWizard';
+import { SlideToConfirm } from '../components/SlideToConfirm';
+import type { DteDraftContext } from '../lib/dteDraft';
+import type { DteAction, DteDetail, DteStatus } from '../lib/types';
+
+/** Dados de baja: dejan lugar a otro DT-e para el mismo traslado. */
+const VOID_STATUSES: DteStatus[] = ['ANULADO', 'ELIMINADO', 'RECHAZADO'];
+const CLOSED_MOVEMENT = ['RECEIVED', 'PARTIALLY_RECEIVED', 'REJECTED', 'CANCELLED'];
+
+/**
+ * Cuando el DT-e de un traslado se dio de baja (por ejemplo, porque llegaron
+ * más alzas que las declaradas), la norma pide emitir otro antes de
+ * descargar. Es el «resolver conflicto» del prototipo ApiAsistente: el
+ * asistente se abre con el mismo traslado y los datos del DT-e anterior.
+ */
+const reissueContext = (
+  dte: DteDetail,
+): DteDraftContext & { defaults: Record<string, string> } => ({
+  movementId: dte.movement.id,
+  movementCode: dte.movement.code,
+  origin: dte.apiary
+    ? `${dte.apiary.name ?? dte.apiary.code}${dte.apiary.renapaCode ? ` (RENAPA ${dte.apiary.renapaCode})` : ''}`
+    : dte.origin.name,
+  destination: `${dte.destination.name}${dte.destination.senasaCode ? ` (${dte.destination.senasaCode})` : ''}`,
+  replaces: dte.number,
+  reason: dte.voidReason ?? null,
+  defaults: {
+    estimatedQuantity: dte.estimatedQuantity ? String(dte.estimatedQuantity) : '',
+    declaredQuantity: dte.declaredQuantity ? String(dte.declaredQuantity) : '',
+    transportType: dte.transportType ?? 'CAMIONETA',
+    transportPlate: dte.transportPlate ?? '',
+    transportTrailerPlate: dte.transportTrailerPlate ?? '',
+  },
+});
 
 /* =========================================================================
    Acciones
@@ -334,8 +367,11 @@ const buildActions = (dte: DteDetail): Partial<Record<ActionSpec['key'], ActionS
 export const DteDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const resource = useResource<DteDetail>(id ? `/dte/${id}` : null);
+  const { user, canWrite, hasRole } = useAuth();
   const [action, setAction] = useState<ActionSpec | null>(null);
   const [confirmRequest, setConfirmRequest] = useState(false);
+  const [reissuing, setReissuing] = useState(false);
+  const closeRequest = useCallback(() => setConfirmRequest(false), []);
   const [requesting, setRequesting] = useState(false);
   const [requestError, setRequestError] = useState<{
     title: string;
@@ -393,6 +429,17 @@ export const DteDetailPage = () => {
       setRequesting(false);
     }
   };
+
+  // Otro DT-e para el mismo traslado: solo quien emite, si este se dio de baja,
+  // el traslado sigue abierto y no hay otro DT-e en juego.
+  const canReissue =
+    canWrite &&
+    hasRole('PRODUCTOR') &&
+    (dte.perspective === 'emisor' || user?.role === 'ADMIN') &&
+    VOID_STATUSES.includes(dte.status) &&
+    dte.movementTypeCode === 'API-SEM' &&
+    !CLOSED_MOVEMENT.includes(dte.movement.status) &&
+    dte.related.every((other) => VOID_STATUSES.includes(other.status));
 
   const buttons = allowed.map((key) => {
     if (key === 'print') {
@@ -476,6 +523,21 @@ export const DteDetailPage = () => {
         ))}
 
       {requestError && <FormError title={requestError.title} detail={requestError.detail} />}
+
+      {canReissue && (
+        <section className="card next-step-card">
+          <div className="grow">
+            <div className="next-step-title">Emití otro DT-e para este traslado</div>
+            <p className="small muted">
+              Este DT-e ya no ampara la carga. Si el traslado sigue, el asistente se abre con el
+              mismo origen, el mismo destino y los datos de este DT-e para corregirlos.
+            </p>
+          </div>
+          <Button variant="primary" icon="plus" onClick={() => setReissuing(true)}>
+            Emitir otro DT-e
+          </Button>
+        </section>
+      )}
 
       {buttons.length > 0 && (
         <Card>
@@ -750,26 +812,65 @@ export const DteDetailPage = () => {
       </section>
 
       {confirmRequest && (
-        <ConfirmDialog
-          title="Pedir el DT-e a SIGSA"
-          tone="primary"
-          description={
-            <>
-              Se envía la solicitud con {dte.declaredQuantity} alzas declaradas, carga el{' '}
-              {formatDay(dte.loadDate)} y vencimiento el {formatDay(dte.expiryDate)}. El número y el
-              código de cierre llegan en unos segundos.
-              {dte.integration.mode === 'simulado' && (
-                <>
-                  {' '}
-                  <strong>Modo simulado: el número no tendrá validez oficial.</strong>
-                </>
-              )}
-            </>
-          }
-          confirmLabel="Enviar a SIGSA"
-          busy={requesting}
-          onCancel={() => setConfirmRequest(false)}
-          onConfirm={() => void requestEmission()}
+        <Sheet title="Pedir el DT-e a SIGSA" subtitle={dte.movement.code} onClose={closeRequest} narrow>
+          <div className="route-card">
+            <RouteLine
+              origin={dte.apiary ? `${dte.apiary.name ?? dte.apiary.code} (RENAPA ${dte.originCode ?? dte.apiary.renapaCode ?? '—'})` : dte.origin.name}
+              destination={`${dte.destination.name} (${dte.destinationCode ?? dte.destination.senasaCode ?? '—'})`}
+            />
+            <dl className="route-facts">
+              <div>
+                <dt>Alzas declaradas</dt>
+                <dd>
+                  <span className="route-big">{dte.declaredQuantity ?? '—'}</span>
+                </dd>
+              </div>
+              <div>
+                <dt>Vigencia</dt>
+                <dd>
+                  {formatDay(dte.loadDate)} al {formatDay(dte.expiryDate)}
+                </dd>
+              </div>
+            </dl>
+          </div>
+          {dte.integration.mode === 'simulado' && (
+            <Notice tone="warning" title="Modo simulado">
+              El número que se obtenga no tiene validez oficial: no se transita con él.
+            </Notice>
+          )}
+          {requestError && <FormError title={requestError.title} detail={requestError.detail} />}
+          <div style={{ marginTop: 'var(--sp-4)' }}>
+            <SlideToConfirm
+              label={
+                dte.integration.mode === 'simulado'
+                  ? 'Deslizá para simular la emisión'
+                  : 'Deslizá para pedir el DT-e'
+              }
+              busyLabel="Enviando a SIGSA…"
+              busy={requesting}
+              onConfirm={requestEmission}
+            />
+          </div>
+          <p className="small muted" style={{ marginTop: 'var(--sp-3)' }}>
+            El número y el código de cierre llegan en unos segundos.
+          </p>
+          <div className="form-actions">
+            <Button variant="ghost" onClick={closeRequest} disabled={requesting}>
+              Cancelar
+            </Button>
+          </div>
+        </Sheet>
+      )}
+
+      {reissuing && (
+        <DteWizard
+          integration={dte.integration}
+          reissue={reissueContext(dte)}
+          onClose={() => setReissuing(false)}
+          onDone={() => {
+            setReissuing(false);
+            resource.reload();
+          }}
         />
       )}
 

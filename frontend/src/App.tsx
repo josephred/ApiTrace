@@ -50,9 +50,13 @@ const OPERATION_ROLES: UserRole[] = [
 const LOT_ROLES: UserRole[] = ['ADMIN', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'LABORATORIO', 'AUDITOR'];
 const DTE_ROLES: UserRole[] = ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'AUDITOR'];
 
+/** Pantalla de arranque: la marca, como el splash del prototipo ApiAsistente. */
 const Booting = () => (
-  <div style={{ display: 'grid', placeItems: 'center', minHeight: '100dvh', gap: 'var(--sp-4)' }}>
-    <Logo size={44} />
+  <div className="boot">
+    <span className="boot-logo">
+      <Logo size={64} />
+    </span>
+    <span className="boot-name">ApiTrace</span>
     <span className="small muted" role="status">
       Abriendo ApiTrace…
     </span>

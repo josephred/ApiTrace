@@ -441,24 +441,37 @@ export const ChoiceGroup = ({
  * Solo se usa donde dividir de verdad reduce la complejidad: un formulario de
  * doce campos en un telefono. Los formularios cortos siguen en un solo paso,
  * porque partirlos agregaria toques sin quitar dificultad.
+ *
+ * Cada paso es una celda hexagonal, como las del panal y el logotipo: la que
+ * se completa queda llena y con tilde. Es la linea de progreso del prototipo
+ * ApiAsistente (circulos numerados unidos por una linea), llevada al lenguaje
+ * visual de ApiTrace. El texto «Paso 2 de 4» sigue ahi para lectores de
+ * pantalla, que no ven las celdas.
  */
 export const Steps = ({ names, current }: { names: string[]; current: number }) => (
-  <>
-    <div className="steps-counter" aria-live="polite">
+  <div className="steps-wrap">
+    <div className="steps-counter sr-only" aria-live="polite">
       Paso {current + 1} de {names.length}: {names[current]}
     </div>
-    <div className="steps">
-      {names.map((name, index) => (
-        <div
-          key={name}
-          className={`step ${index < current ? 'done' : index === current ? 'current' : ''}`}
-        >
-          <span className="step-bar" />
-          <span className="step-name desktop-only">{name}</span>
-        </div>
-      ))}
-    </div>
-  </>
+    <ol className="steps" aria-hidden="true">
+      {names.map((name, index) => {
+        const state = index < current ? 'done' : index === current ? 'current' : 'todo';
+        return (
+          <li key={name} className={`step step-${state}`}>
+            <span className="step-cell">
+              <svg viewBox="0 0 32 32" className="step-hex" focusable="false">
+                <path d="M16 2.6 27.6 9.3v13.4L16 29.4 4.4 22.7V9.3z" />
+              </svg>
+              <span className="step-num">
+                {state === 'done' ? <Icon name="check" size={14} strokeWidth={3} /> : index + 1}
+              </span>
+            </span>
+            <span className="step-name">{name}</span>
+          </li>
+        );
+      })}
+    </ol>
+  </div>
 );
 
 export const WizardActions = ({
