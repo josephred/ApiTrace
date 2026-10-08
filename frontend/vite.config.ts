@@ -9,6 +9,11 @@ const { version } = JSON.parse(
   readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8'),
 ) as { version: string };
 
+// Al compilar en Render, habilitar cuentas demo por defecto salvo que se indique false
+if (process.env.RENDER && process.env.VITE_DEMO_ACCESS === undefined) {
+  process.env.VITE_DEMO_ACCESS = 'true';
+}
+
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(version),

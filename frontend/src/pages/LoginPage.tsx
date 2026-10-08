@@ -18,12 +18,25 @@ const DEMO_USERS = [
 ];
 
 /**
- * El acceso rápido existe para probar roles sin recordar seis contraseñas. Se
- * muestra en desarrollo o en una instancia de demostración declarada como tal
- * (VITE_DEMO_ACCESS=true al compilar), nunca en la instancia con datos reales:
- * cualquiera que abra la pantalla entraría con cualquier rol.
+ * Detección del entorno de Render o local. En dominios de Render (*.onrender.com o render.com),
+ * o en localhost, se habilita el acceso rápido de demostración a menos que se desactive
+ * explícitamente mediante VITE_DEMO_ACCESS=false.
  */
-const DEMO_ACCESS = import.meta.env.DEV || import.meta.env.VITE_DEMO_ACCESS === 'true';
+const isRenderHost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname.endsWith('.onrender.com') ||
+    window.location.hostname.includes('render.com') ||
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1');
+
+/**
+ * El acceso rápido existe para probar roles sin recordar seis contraseñas. Se
+ * muestra en desarrollo, al desplegar en Render o cuando se declara VITE_DEMO_ACCESS=true,
+ * salvo que se apague explícitamente con VITE_DEMO_ACCESS=false.
+ */
+const DEMO_ACCESS =
+  import.meta.env.VITE_DEMO_ACCESS === 'true' ||
+  (import.meta.env.VITE_DEMO_ACCESS !== 'false' && (import.meta.env.DEV || isRenderHost));
 
 export const LoginPage = () => {
   const { login } = useAuth();
@@ -157,9 +170,13 @@ export const LoginPage = () => {
           </form>
 
           {DEMO_ACCESS && (
-            <details className="disclosure" style={{ marginTop: 'var(--sp-5)' }}>
+            <details className="disclosure" open style={{ marginTop: 'var(--sp-5)' }}>
               <summary>Acceso rápido para pruebas (Cuentas demo)</summary>
               <div className="disclosure-body" style={{ paddingBottom: 'var(--sp-4)' }}>
+                <p className="small muted" style={{ marginBottom: 'var(--sp-3)' }}>
+                  Hacé clic en cualquier rol para ingresar automáticamente (contraseña:{' '}
+                  <code style={{ fontSize: '0.85em' }}>ApiTrace2026!</code>):
+                </p>
                 <div
                   style={{
                     display: 'grid',
