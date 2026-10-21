@@ -12,6 +12,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { IdentityService } from './identity.service';
@@ -20,6 +21,7 @@ import {
   LoginDto,
   RefreshDto,
   RegisterDto,
+  SignupDto,
   UpdateUserRoleDto,
 } from './dto/auth.dto';
 import { Audit, CurrentUser, Public, Roles } from '../../common/decorators';
@@ -40,6 +42,19 @@ export class AuthController {
   })
   register(@Body() dto: RegisterDto, @CurrentUser() actor?: AuthenticatedUser) {
     return this.auth.register(dto, actor);
+  }
+
+  @Public()
+  @Post('signup')
+  // Alta publica: un tope propio por IP, mas estricto que el general.
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Crear cuenta de apicultor (nombre, CUIT, RENAPA y contrasena)',
+    description:
+      'Crea organizacion, productor, RENAPA pendiente de verificacion y usuario PRODUCTOR activo, y devuelve la sesion iniciada. Luego se entra con la CUIT.',
+  })
+  signup(@Body() dto: SignupDto, @Req() req: Request) {
+    return this.auth.signup(dto, { ip: req.ip, userAgent: req.headers['user-agent'] });
   }
 
   @Public()

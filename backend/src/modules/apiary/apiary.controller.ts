@@ -32,6 +32,7 @@ export class ApiaryController {
   async list(@Query() query: ListApiariesQueryDto, @CurrentUser() actor: AuthenticatedUser) {
     const { rows, total } = await this.apiaries.list(query, actor, {
       establishmentId: query.establishmentId,
+      zoneId: query.zoneId,
     });
     return paginated(rows, total, query);
   }

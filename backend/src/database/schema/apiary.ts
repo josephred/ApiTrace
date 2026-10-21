@@ -12,6 +12,8 @@ import {
 } from 'drizzle-orm/pg-core';
 import { entityStatusEnum, registrationStatusEnum } from './enums';
 import { establishment } from './establishment';
+import { mediaFile } from './media';
+import { zone } from './zone';
 
 /** Apiario: unidad productiva que contiene colmenas, dentro de un establecimiento. */
 export const apiary = pgTable(
@@ -28,6 +30,10 @@ export const apiary = pgTable(
     locality: varchar('locality', { length: 120 }),
     province: varchar('province', { length: 100 }),
     hiveCount: integer('hive_count').notNull().default(0),
+    /** Zona del apicultor (migracion 0003). Opcional: un apiario puede no tener zona. */
+    zoneId: uuid('zone_id').references(() => zone.id, { onDelete: 'set null' }),
+    /** Foto tomada al registrarlo (media_file). */
+    photoId: uuid('photo_id').references(() => mediaFile.id, { onDelete: 'set null' }),
     status: entityStatusEnum('status').notNull().default('ACTIVE'),
     registeredAt: timestamp('registered_at', { withTimezone: true }),
     /**
@@ -48,6 +54,8 @@ export const apiary = pgTable(
     unique('apiary_establishment_code_uq').on(t.establishmentId, t.code),
     index('apiary_status_idx').on(t.status),
     uniqueIndex('apiary_renapa_code_uq').on(t.renapaCode),
+    index('apiary_zone_idx').on(t.zoneId),
+    index('apiary_photo_idx').on(t.photoId),
   ],
 );
 

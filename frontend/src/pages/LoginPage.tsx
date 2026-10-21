@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { NetworkError } from '../lib/api';
 import { toUserMessage } from '../lib/errors';
-import { Logo } from '../components/Icon';
+import { Icon, Logo } from '../components/Icon';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { Button, Card, Notice } from '../components/ui';
+import { Notice } from '../components/ui';
+import { FormHero, SubmitButton, TextFieldCard } from '../components/MasterForm';
 
 /** Usuarios de prueba del seed (npm run db:seed). */
 const DEMO_USERS = [
@@ -38,21 +39,25 @@ const DEMO_ACCESS =
   import.meta.env.VITE_DEMO_ACCESS === 'true' ||
   (import.meta.env.VITE_DEMO_ACCESS !== 'false' && (import.meta.env.DEV || isRenderHost));
 
+/**
+ * Ingreso con el mismo lenguaje visual que «Creá tu cuenta» (doc 13): se
+ * entra con la CUIT (cuentas creadas desde el teléfono) o con el correo.
+ */
 export const LoginPage = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ identifier?: string; password?: string }>({});
   const [error, setError] = useState<{ title: string; detail?: string } | null>(null);
 
-  const attempt = async (targetEmail: string, targetPassword: string) => {
+  const attempt = async (targetIdentifier: string, targetPassword: string) => {
     setBusy(true);
     setError(null);
     try {
-      await login(targetEmail.trim(), targetPassword);
+      await login(targetIdentifier.trim(), targetPassword);
       navigate('/', { replace: true });
     } catch (cause) {
       if (cause instanceof NetworkError) {
@@ -78,136 +83,104 @@ export const LoginPage = () => {
    */
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
-    const found: { email?: string; password?: string } = {};
-    if (!email.trim()) found.email = 'Escribí tu correo.';
+    const found: { identifier?: string; password?: string } = {};
+    if (!identifier.trim()) found.identifier = 'Escribí tu CUIT o tu correo.';
     if (!password) found.password = 'Escribí tu contraseña.';
     setFieldErrors(found);
     if (Object.keys(found).length > 0) return;
-    void attempt(email, password);
+    void attempt(identifier, password);
   };
 
   return (
-    <div className="auth-screen">
-      <div className="auth-box">
-        <div className="auth-brand">
-          <Logo size={38} />
-          <span>ApiTrace</span>
-        </div>
+    <div className="auth-page">
+      <div className="auth-top">
+        <Logo size={30} />
+        <span translate="no">ApiTrace</span>
+      </div>
+      <form className="master-form" onSubmit={onSubmit} noValidate>
+        <FormHero
+          icon="person"
+          title="Iniciá sesión"
+          subtitle="Entrá con tu CUIT o con tu correo. Una vez adentro, la app funciona sin conexión."
+        />
 
-        <Card>
-          <h2 style={{ marginBottom: 'var(--sp-1)' }}>Iniciar sesión</h2>
-          <p className="small muted" style={{ marginBottom: 'var(--sp-5)' }}>
-            Trazabilidad apícola argentina.
-          </p>
+        {error && (
+          <Notice tone="danger" title={error.title}>
+            {error.detail}
+          </Notice>
+        )}
 
-          {error && (
-            <div style={{ marginBottom: 'var(--sp-4)' }}>
-              <Notice tone="danger" title={error.title}>
-                {error.detail}
-              </Notice>
-            </div>
-          )}
+        <TextFieldCard
+          label="CUIT o correo"
+          name="username"
+          icon="user"
+          placeholder="Ej. 20-12345678-6"
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
+          value={identifier}
+          onChange={setIdentifier}
+          error={fieldErrors.identifier}
+        />
+        <TextFieldCard
+          label="Contraseña"
+          name="password"
+          icon="lock"
+          placeholder="Tu contraseña"
+          type={showPassword ? 'text' : 'password'}
+          autoComplete="current-password"
+          value={password}
+          onChange={setPassword}
+          error={fieldErrors.password}
+          trailing={
+            // Escribir a ciegas en un teléfono, con guantes o a pleno sol, es
+            // la causa más común de un intento fallido.
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setShowPassword((value) => !value)}
+              aria-pressed={showPassword}
+              aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            >
+              <Icon name={showPassword ? 'eyeOff' : 'eye'} size={22} />
+            </button>
+          }
+        />
 
-          <form onSubmit={onSubmit} noValidate>
-            <div className="field">
-              <label className="field-label" htmlFor="email">
-                Correo electrónico
-              </label>
-              <input
-                id="email"
-                type="email"
-                inputMode="email"
-                autoComplete="username"
-                autoCapitalize="none"
-                spellCheck={false}
-                aria-invalid={fieldErrors.email ? true : undefined}
-                aria-describedby={fieldErrors.email ? 'email-error' : undefined}
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-              {fieldErrors.email && (
-                <span className="field-error" id="email-error">
-                  {fieldErrors.email}
-                </span>
-              )}
-            </div>
-            <div className="field">
-              <label className="field-label" htmlFor="password">
-                Contraseña
-              </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  aria-invalid={fieldErrors.password ? true : undefined}
-                  aria-describedby={fieldErrors.password ? 'password-error' : undefined}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  style={{ paddingRight: 'var(--sp-12)' }}
-                />
-                {/* Escribir a ciegas en un telefono, con guantes o a pleno sol,
-                    es la causa mas comun de un intento fallido. */}
+        <SubmitButton busy={busy} busyLabel="Entrando…">
+          Entrar
+        </SubmitButton>
+
+        <p className="auth-switch">
+          ¿No tenés cuenta? <Link to="/registro">Creá tu cuenta</Link>
+        </p>
+
+        {DEMO_ACCESS && (
+          <details className="demo-access" open>
+            <summary>Acceso rápido para pruebas (cuentas demo)</summary>
+            <p className="small muted">
+              Tocá un rol para entrar (contraseña <code>ApiTrace2026!</code>):
+            </p>
+            <div className="demo-grid">
+              {DEMO_USERS.map((demo) => (
                 <button
+                  key={demo.email}
                   type="button"
-                  className="reveal-btn"
-                  onClick={() => setShowPassword((value) => !value)}
-                  aria-pressed={showPassword}
-                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  className="chip-button"
+                  disabled={busy}
+                  onClick={() => void attempt(demo.email, 'ApiTrace2026!')}
                 >
-                  {showPassword ? 'Ocultar' : 'Mostrar'}
+                  {demo.label}
                 </button>
-              </div>
-              {fieldErrors.password && (
-                <span className="field-error" id="password-error">
-                  {fieldErrors.password}
-                </span>
-              )}
+              ))}
             </div>
-            <Button type="submit" variant="primary" block busy={busy} busyLabel="Entrando…">
-              Entrar
-            </Button>
-          </form>
+          </details>
+        )}
 
-          {DEMO_ACCESS && (
-            <details className="disclosure" open style={{ marginTop: 'var(--sp-5)' }}>
-              <summary>Acceso rápido para pruebas (Cuentas demo)</summary>
-              <div className="disclosure-body" style={{ paddingBottom: 'var(--sp-4)' }}>
-                <p className="small muted" style={{ marginBottom: 'var(--sp-3)' }}>
-                  Hacé clic en cualquier rol para ingresar automáticamente (contraseña:{' '}
-                  <code style={{ fontSize: '0.85em' }}>ApiTrace2026!</code>):
-                </p>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                    gap: 'var(--sp-2)',
-                  }}
-                >
-                  {DEMO_USERS.map((demo) => (
-                    <Button
-                      key={demo.email}
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void attempt(demo.email, 'ApiTrace2026!')}
-                    >
-                      {demo.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            </details>
-          )}
-        </Card>
-
-        <div
-          className="auth-foot"
-          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--sp-4)' }}
-        >
-          <span>Una vez dentro, la aplicación funciona sin conexión.</span>
+        <div className="auth-foot">
           <ThemeToggle />
         </div>
-      </div>
+      </form>
     </div>
   );
 };

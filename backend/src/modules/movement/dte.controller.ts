@@ -36,6 +36,13 @@ import {
  * Se conservan las convenciones de la API existente (recursos en ingles,
  * camelCase, Idempotency-Key) en lugar de las del documento.
  */
+/**
+ * Quien despacha arma el tramite: el productor (alzas, colmenas, nucleos,
+ * reinas) y tambien la sala, el acopio o el fraccionador (tambores, frascos).
+ * El servicio exige ademas que el origen sea de su organizacion.
+ */
+const ISSUER_ROLES = ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'FRACCIONADOR'] as const;
+
 @ApiTags('DT-e')
 @ApiBearerAuth()
 @Controller('dte')
@@ -71,7 +78,7 @@ export class DteController {
 
   @Post('preflight')
   @HttpCode(HttpStatus.OK)
-  @Roles('ADMIN', 'PRODUCTOR')
+  @Roles(...ISSUER_ROLES)
   @ApiOperation({
     summary: 'Verificacion previa sin efectos',
     description:
@@ -82,7 +89,7 @@ export class DteController {
   }
 
   @Post()
-  @Roles('ADMIN', 'PRODUCTOR')
+  @Roles(...ISSUER_ROLES)
   @Audit('DTE_CREATED', 'dte')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   @ApiOperation({
@@ -105,7 +112,7 @@ export class DteController {
   }
 
   @Patch(':id')
-  @Roles('ADMIN', 'PRODUCTOR')
+  @Roles(...ISSUER_ROLES)
   @Audit('DTE_DRAFT_UPDATED', 'dte')
   @ApiOperation({ summary: 'Editar un borrador (cantidades, fechas, transporte).' })
   update(
@@ -118,7 +125,7 @@ export class DteController {
 
   @Post(':id/issue')
   @HttpCode(HttpStatus.OK)
-  @Roles('ADMIN', 'PRODUCTOR')
+  @Roles(...ISSUER_ROLES)
   @Audit('DTE_ISSUED', 'dte')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   @ApiOperation({
@@ -137,7 +144,7 @@ export class DteController {
 
   @Post(':id/void')
   @HttpCode(HttpStatus.OK)
-  @Roles('ADMIN', 'PRODUCTOR')
+  @Roles(...ISSUER_ROLES)
   @Audit('DTE_VOIDED', 'dte')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   @ApiOperation({

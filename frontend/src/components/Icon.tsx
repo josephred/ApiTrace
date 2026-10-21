@@ -237,6 +237,22 @@ const PATHS = {
       <polyline points="15 2 15 7 20 7" />
     </>
   ),
+  /** Frasco: la sala de fraccionamiento. */
+  jar: (
+    <>
+      <rect width="10" height="3.5" x="7" y="2.5" rx="1" />
+      <path d="M8 6h8a3 3 0 0 1 3 3v9.5a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3z" />
+      <path d="M5 12h14" />
+    </>
+  ),
+  /** Documento con renglones: el DT-e en la barra inferior. */
+  fileLines: (
+    <>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" />
+      <path d="M15 2v5h5" />
+      <path d="M8 9h3M8 13h8M8 17h8" />
+    </>
+  ),
   trash: (
     <>
       <path d="M3 6h18" />
@@ -312,6 +328,106 @@ const PATHS = {
     </>
   ),
   play: <path d="m7 4 13 8-13 8z" />,
+  /* --------------------------------------------------- rediseño (doc 13) */
+  user: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4.5 21a7.5 7.5 0 0 1 15 0" />
+    </>
+  ),
+  home: (
+    <>
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V20a1 1 0 0 0 1 1h4.5v-6h3v6H18a1 1 0 0 0 1-1V9.5" />
+    </>
+  ),
+  map: (
+    <>
+      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+      <circle cx="12" cy="10" r="3" />
+    </>
+  ),
+  camera: (
+    <>
+      <path d="M14.5 4h-5L7.5 6.5H4a2 2 0 0 0-2 2V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8.5a2 2 0 0 0-2-2h-3.5z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </>
+  ),
+  car: (
+    <>
+      <path d="M5 11 6.6 6.4A2 2 0 0 1 8.5 5h7a2 2 0 0 1 1.9 1.4L19 11" />
+      <path d="M3 17v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4H3z" />
+      <path d="M5 17v2M19 17v2" />
+      <circle cx="7.5" cy="14" r="0.6" />
+      <circle cx="16.5" cy="14" r="0.6" />
+    </>
+  ),
+  trailer: (
+    <>
+      <rect x="2" y="7" width="14" height="8" rx="1.5" />
+      <circle cx="7" cy="17" r="2.5" />
+      <path d="M16 13h6" />
+    </>
+  ),
+  crosshair: (
+    <>
+      <circle cx="12" cy="12" r="7" />
+      <circle cx="12" cy="12" r="2.6" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+    </>
+  ),
+  beehive: (
+    <>
+      <path d="M6 4h12l2 4H4z" />
+      <path d="M4.5 8h15v4h-15zM5 12h14v4H5zM6 16h12v4H6z" />
+      <path d="M11 20v-2h2v2" />
+    </>
+  ),
+  arrowLeft: (
+    <>
+      <path d="M19 12H5" />
+      <path d="m11 18-6-6 6-6" />
+    </>
+  ),
+  arrowRight: (
+    <>
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  eyeOff: (
+    <>
+      <path d="M10.6 5.1A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-2.6 3.5M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7a9.6 9.6 0 0 0 5.4-1.6" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+      <path d="m2 2 20 20" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-5-5L5 21" />
+    </>
+  ),
+  layers: (
+    <>
+      <path d="m12 3 9 5-9 5-9-5z" />
+      <path d="m3 13 9 5 9-5" />
+    </>
+  ),
+  honeycomb: (
+    <>
+      <path d="M12 2.8 15.6 4.9v4.2L12 11.2 8.4 9.1V4.9z" />
+      <path d="M7.6 10.4 11.2 12.5v4.2l-3.6 2.1L4 16.7v-4.2z" />
+      <path d="M16.4 10.4 20 12.5v4.2l-3.6 2.1-3.6-2.1v-4.2z" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof PATHS;

@@ -5,6 +5,7 @@ import type {
   producer,
   renapaRegistration,
 } from '../../database/schema';
+import type { PlaceType } from './cargo';
 
 export type MovementRow = typeof movement.$inferSelect;
 export type EstablishmentRow = typeof establishment.$inferSelect;
@@ -29,6 +30,13 @@ export interface DteContext {
   apiary: ApiaryRow | null;
   holder: ProducerRow | null;
   holderRenapa: RenapaRow | null;
+}
+
+/** Contexto del asistente: ademas, el apiario de destino y el tipo de lugar de cada extremo. */
+export interface RouteContext extends DteContext {
+  destinationApiary: ApiaryRow | null;
+  originPlace: PlaceType | null;
+  destinationPlace: PlaceType | null;
 }
 
 /** Datos del tramite API-SEM que la persona puede editar mientras es borrador. */

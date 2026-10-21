@@ -148,6 +148,7 @@ export const MATERIAL_TYPES = dict({
   JALEA_REAL: 'Jalea real',
   NUCLEO: 'Núcleo',
   COLMENA: 'Colmena',
+  REINA: 'Reina',
   OTRO: 'Otro',
 });
 
@@ -171,6 +172,7 @@ export const ESTABLISHMENT_TYPES = dict({
   ACOPIO: 'Acopio',
   FRACCIONADORA: 'Fraccionadora',
   DEPOSITO: 'Depósito',
+  FINCA_POLINIZACION: 'Finca de polinización',
   LABORATORIO: 'Laboratorio',
   OTRO: 'Otro',
 });

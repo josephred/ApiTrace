@@ -17,6 +17,7 @@ import {
 } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 import { DTE_STATUSES, TRANSPORT_TYPES } from '../dte.rules';
+import { CARGO_TYPES, type CargoType } from '../cargo';
 
 /** Fecha calendario sin hora, en hora argentina: YYYY-MM-DD. */
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -46,17 +47,34 @@ export class DteTransportDto {
 }
 
 /**
- * Solicitud de DT-e API-SEM (especificacion 8.2, endpoint 1).
+ * «Nuevo tramite DT-e» (especificacion 8.2, endpoint 1, ampliada en la
+ * migracion 0003).
  *
  * Con `movementId` se ampara un movimiento que ya existe. Sin el, ApiTrace crea
- * el movimiento (material melario, en alzas) en la misma transaccion: para el
- * apicultor "pedir el DT-e" y "registrar el traslado" son el mismo acto.
+ * el movimiento en la misma transaccion: para el apicultor "pedir el DT-e" y
+ * "registrar el traslado" son el mismo acto.
+ *
+ * Lo que se transporta (`cargoType`) y los lugares de origen y destino salen de
+ * los pasos del asistente: el origen es un apiario (`apiaryId`) o un
+ * establecimiento (`originEstablishmentId`: finca, deposito, sala); el destino,
+ * un establecimiento (`destinationEstablishmentId`) o un apiario
+ * (`destinationApiaryId`). Alzas de un apiario a una sala de extraccion es el
+ * DT-e API-SEM; el resto se emite en SIGSA y se registra con su numero.
  */
 export class CreateDteRequestDto {
   @ApiPropertyOptional({ format: 'uuid', description: 'Movimiento existente a amparar.' })
   @IsOptional()
   @IsUUID()
   movementId?: string;
+
+  @ApiPropertyOptional({
+    enum: CARGO_TYPES,
+    default: 'ALZAS',
+    description: 'Lo que se transporta (paso 1 del asistente).',
+  })
+  @IsOptional()
+  @IsEnum(CARGO_TYPES)
+  cargoType?: CargoType;
 
   @ApiPropertyOptional({
     format: 'uuid',
@@ -68,11 +86,27 @@ export class CreateDteRequestDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
-    description: 'Sala de extraccion de destino (si no se indica movementId).',
+    description: 'Origen que no es un apiario: finca de polinizacion, deposito o sala propia.',
+  })
+  @IsOptional()
+  @IsUUID()
+  originEstablishmentId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Establecimiento de destino: sala de extraccion o de fraccionamiento, deposito o finca.',
   })
   @IsOptional()
   @IsUUID()
   destinationEstablishmentId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Apiario de destino (colmenas, nucleos o reinas que van a otro apiario).',
+  })
+  @IsOptional()
+  @IsUUID()
+  destinationApiaryId?: string;
 
   @ApiPropertyOptional({ example: 50, description: 'Alzas que el apicultor estima cosechar.' })
   @IsOptional()
@@ -85,7 +119,7 @@ export class CreateDteRequestDto {
   @ApiProperty({
     example: 80,
     description:
-      'Alzas declaradas. Conviene sobreestimar: la sala no puede confirmar mas de lo declarado.',
+      'Cantidad declarada (alzas, colmenas, tambores…). En alzas conviene sobreestimar: la sala no puede confirmar mas de lo declarado.',
   })
   @Type(() => Number)
   @IsInt()
@@ -119,7 +153,11 @@ export class CreateDteRequestDto {
   @IsUUID()
   carrierId?: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Vehiculo guardado (paso 2). Si no se manda `transport`, el tipo, la patente, el carro y el conductor salen de el.',
+  })
   @IsOptional()
   @IsUUID()
   vehicleId?: string;

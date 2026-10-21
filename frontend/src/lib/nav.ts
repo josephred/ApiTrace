@@ -1,6 +1,9 @@
 import type { IconName } from '../components/Icon';
 import type { UserRole } from './types';
 
+/** Roles que trabajan con DT-e (los mismos que App.tsx). */
+export const DTE_ROLES: UserRole[] = ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'AUDITOR'];
+
 /**
  * Definicion única de la navegacion.
  *
@@ -27,8 +30,49 @@ export const NAV: NavGroup[] = [
   {
     group: 'Principal',
     items: [
-      { to: '/', label: 'Panel', icon: 'dashboard', end: true },
-      { to: '/trace', label: 'Trazabilidad', icon: 'trace' },
+      { to: '/', label: 'Inicio', icon: 'home', end: true },
+      { to: '/mapa', label: 'Mapa', icon: 'map' },
+      {
+        to: '/dte',
+        label: (role) => (role === 'SALA' || role === 'ACOPIADOR' ? 'DT-e recibidos' : 'DT-e'),
+        icon: 'fileLines',
+        roles: DTE_ROLES,
+      },
+      {
+        to: '/carga',
+        label: 'Carga de datos',
+        icon: 'layers',
+        roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'TRANSPORTISTA', 'AUDITOR'],
+      },
+    ],
+  },
+  {
+    group: 'Maestros',
+    items: [
+      {
+        to: '/apiaries',
+        label: 'Apiarios',
+        icon: 'apiaries',
+        roles: ['ADMIN', 'PRODUCTOR', 'AUDITOR'],
+      },
+      {
+        to: '/salas/extraccion',
+        label: 'Salas de extracción',
+        icon: 'extractions',
+        roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'AUDITOR'],
+      },
+      {
+        to: '/salas/fraccionamiento',
+        label: 'Salas de fraccionamiento',
+        icon: 'jar',
+        roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'AUDITOR'],
+      },
+      {
+        to: '/traslados',
+        label: 'Traslados',
+        icon: 'movements',
+        roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'TRANSPORTISTA', 'AUDITOR'],
+      },
     ],
   },
   {
@@ -37,14 +81,8 @@ export const NAV: NavGroup[] = [
       {
         to: '/movements',
         label: 'Movimientos',
-        icon: 'movements',
+        icon: 'route',
         roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'TRANSPORTISTA', 'AUDITOR'],
-      },
-      {
-        to: '/dte',
-        label: (role) => (role === 'SALA' || role === 'ACOPIADOR' ? 'DT-e recibidos' : 'Mis DT-e'),
-        icon: 'document',
-        roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'AUDITOR'],
       },
       {
         to: '/extractions',
@@ -64,6 +102,7 @@ export const NAV: NavGroup[] = [
         icon: 'drums',
         roles: ['ADMIN', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'EXPORTADOR', 'AUDITOR'],
       },
+      { to: '/trace', label: 'Trazabilidad', icon: 'trace' },
     ],
   },
   {
@@ -80,12 +119,6 @@ export const NAV: NavGroup[] = [
         label: 'Establecimientos',
         icon: 'establishments',
         roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'AUDITOR'],
-      },
-      {
-        to: '/apiaries',
-        label: 'Apiarios',
-        icon: 'apiaries',
-        roles: ['ADMIN', 'PRODUCTOR', 'AUDITOR'],
       },
     ],
   },
@@ -117,41 +150,21 @@ export const navFor = (role: UserRole): NavGroup[] =>
   );
 
 /**
- * Las cuatro rutas que cada rol usa a diario. Son las que ocupan la barra
- * inferior en el teléfono; el resto vive detras de «Más».
- *
- * El criterio es el trabajo real de cada rol: un productor vive en sus apiarios
- * y en los traslados que salen de ellos; una sala, en lo que recibe y procesa;
- * un auditor, en consultar y revisar, no en cargar.
+ * La barra inferior del teléfono (doc 13): Inicio, Mapa, DT-e y
+ * Configuración, para todos. Quien no trabaja con DT-e ve Traslados en ese
+ * lugar, y si tampoco ve traslados, Trazabilidad. El resto de las secciones
+ * vive en Inicio (Carga de datos) y en Configuración (Todas las secciones).
  */
-const QUICK: Partial<Record<UserRole, string[]>> = {
-  ADMIN: ['/', '/movements', '/dte', '/trace'],
-  // El DT-e es lo que el productor gestiona a diario desde el 01/08/2026.
-  PRODUCTOR: ['/', '/dte', '/movements', '/apiaries'],
-  SALA: ['/', '/dte', '/movements', '/extractions'],
-  ACOPIADOR: ['/', '/movements', '/lots', '/drums'],
-  FRACCIONADOR: ['/', '/movements', '/lots', '/drums'],
-  EXPORTADOR: ['/', '/drums', '/lots', '/trace'],
-  LABORATORIO: ['/', '/lots', '/trace', '/pending'],
-  TRANSPORTISTA: ['/', '/movements', '/trace', '/pending'],
-  AUDITOR: ['/', '/trace', '/movements', '/audit'],
-  CONSULTA: ['/', '/trace', '/movements', '/lots'],
-};
-
 export const quickNavFor = (role: UserRole): NavItem[] => {
-  const groups = navFor(role);
   const available = new Map<string, NavItem>();
-  for (const group of groups) for (const item of group.items) available.set(item.to, item);
+  for (const group of navFor(role)) for (const item of group.items) available.set(item.to, item);
 
-  const wanted = QUICK[role] ?? ['/', '/movements', '/trace'];
-  const picked = wanted.map((to) => available.get(to)).filter((item): item is NavItem => Boolean(item));
-
-  // Relleno por si el rol no habilita alguno de sus destinos preferidos.
-  if (picked.length < 4) {
-    for (const item of available.values()) {
-      if (picked.length >= 4) break;
-      if (!picked.includes(item)) picked.push(item);
-    }
-  }
-  return picked.slice(0, 4);
+  const third =
+    available.get('/dte') ??
+    (available.has('/traslados')
+      ? { ...available.get('/traslados')!, label: 'Traslados' }
+      : available.get('/trace'));
+  return [available.get('/'), available.get('/mapa'), third, available.get('/settings')].filter(
+    (item): item is NavItem => Boolean(item),
+  );
 };

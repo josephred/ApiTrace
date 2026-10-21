@@ -18,6 +18,7 @@ export class ListEstablishmentsQueryDto extends PaginationQueryDto {
       'DEPOSITO',
       'LABORATORIO',
       'OTRO',
+      'FINCA_POLINIZACION',
     ],
   })
   @IsOptional()
@@ -29,6 +30,7 @@ export class ListEstablishmentsQueryDto extends PaginationQueryDto {
     'DEPOSITO',
     'LABORATORIO',
     'OTRO',
+    'FINCA_POLINIZACION',
   ])
   type?: string;
 
@@ -43,6 +45,11 @@ export class ListApiariesQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsUUID()
   establishmentId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid', description: 'Solo los apiarios de esa zona.' })
+  @IsOptional()
+  @IsUUID()
+  zoneId?: string;
 }
 
 export class ListMovementsQueryDto extends PaginationQueryDto {

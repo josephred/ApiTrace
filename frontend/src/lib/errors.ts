@@ -122,6 +122,30 @@ const BY_CODE: Record<string, Omit<UserMessage, 'detail'> & { detail: string | n
     tone: 'warning',
     retryable: false,
   },
+  // ------------------------------------------------- rediseño (doc 13)
+  CUIT_INVALIDA: { title: 'La CUIT no es válida', detail: null, tone: 'warning', retryable: false },
+  CUIT_REGISTRADA: { title: 'Ya hay una cuenta con esa CUIT', detail: null, tone: 'warning', retryable: false },
+  RENAPA_REGISTRADO: { title: 'Ese RENAPA ya está registrado', detail: null, tone: 'warning', retryable: false },
+  FOTO_INVALIDA: { title: 'No se pudo leer la foto', detail: null, tone: 'warning', retryable: false },
+  FOTO_DEMASIADO_GRANDE: { title: 'La foto es muy pesada', detail: null, tone: 'warning', retryable: false },
+  TRAMITE_SOLO_MANUAL: {
+    title: 'Este trámite se emite en SIGSA',
+    detail: null,
+    tone: 'info',
+    retryable: false,
+  },
+  ORIGEN_IGUAL_DESTINO: {
+    title: 'El origen y el destino son el mismo lugar',
+    detail: null,
+    tone: 'warning',
+    retryable: false,
+  },
+  ORIGEN_DESTINO_REQUERIDOS: {
+    title: 'Falta de dónde sale o a dónde va',
+    detail: null,
+    tone: 'warning',
+    retryable: false,
+  },
   CAMBIO_CONCURRENTE: {
     title: 'El DT-e cambió mientras trabajabas',
     detail: 'Actualizá la pantalla y volvé a intentar.',

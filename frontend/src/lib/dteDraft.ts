@@ -23,10 +23,17 @@ export interface DteDraftContext {
   replaces: string | null;
   /** Por qué se dio de baja el anterior: orienta qué corregir. */
   reason?: string | null;
+  /** Lo que transporta el traslado (doc 13); en los anteriores, alzas. */
+  cargoType?: string | null;
 }
 
+/**
+ * Versión 2 (doc 13): el asistente de cinco pasos guarda carga, vehículo,
+ * cantidad, origen y destino. Un borrador de la versión anterior (cuatro
+ * pasos) no se retoma: sus pasos significan otra cosa.
+ */
 export interface DteDraft {
-  version: 1;
+  version: 2;
   userId: string;
   step: number;
   values: Record<string, string>;
@@ -38,6 +45,10 @@ export interface DteDraft {
 export interface RecentPicks {
   apiaryId?: string;
   destinationEstablishmentId?: string;
+  cargo?: string;
+  vehicleId?: string;
+  originId?: string;
+  destinationId?: string;
 }
 
 const DRAFT_KEY = (userId: string) => `dteDraft:${userId}`;
@@ -49,7 +60,7 @@ const announce = () => {
 };
 
 /** Campos que, completos, hacen que valga la pena ofrecer retomar el borrador. */
-const MEANINGFUL = ['apiaryId', 'destinationEstablishmentId', 'estimatedQuantity', 'declaredQuantity'];
+const MEANINGFUL = ['vehicleId', 'originId', 'destinationId', 'touchedQuantity'];
 
 export const isMeaningfulDraft = (
   values: Record<string, string>,
@@ -59,7 +70,7 @@ export const isMeaningfulDraft = (
 export const loadDteDraft = async (userId: string): Promise<DteDraft | null> => {
   try {
     const draft = await getMeta<DteDraft>(DRAFT_KEY(userId));
-    return draft && draft.version === 1 && draft.userId === userId ? draft : null;
+    return draft && draft.version === 2 && draft.userId === userId ? draft : null;
   } catch {
     return null;
   }
@@ -67,7 +78,7 @@ export const loadDteDraft = async (userId: string): Promise<DteDraft | null> => 
 
 export const saveDteDraft = async (draft: Omit<DteDraft, 'version' | 'savedAt'>): Promise<void> => {
   try {
-    await setMeta(DRAFT_KEY(draft.userId), { ...draft, version: 1, savedAt: Date.now() });
+    await setMeta(DRAFT_KEY(draft.userId), { ...draft, version: 2, savedAt: Date.now() });
     announce();
   } catch {
     // Sin almacenamiento el asistente funciona igual; solo no se puede retomar.
@@ -124,4 +135,4 @@ export const useDteDraft = (userId: string | null | undefined) => {
 };
 
 /** Nombre corto del paso para el aviso del borrador. */
-export const DRAFT_STEP_NAMES = ['origen y destino', 'alzas y fechas', 'transporte', 'verificación'];
+export const DRAFT_STEP_NAMES = ['qué transportás', 'transporte', 'cantidad', 'origen', 'destino', 'revisión'];

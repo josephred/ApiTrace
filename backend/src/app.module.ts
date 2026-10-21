@@ -20,6 +20,10 @@ import { MovementModule } from './modules/movement/movement.module';
 import { ProductionModule } from './modules/production/production.module';
 import { TraceabilityModule } from './modules/traceability/traceability.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { MediaModule } from './modules/media/media.module';
+import { ZoneModule } from './modules/zone/zone.module';
+import { TransportModule } from './modules/transport/transport.module';
+import { PlacesModule } from './modules/places/places.module';
 
 @Module({
   imports: [
@@ -38,6 +42,7 @@ import { AuditModule } from './modules/audit/audit.module';
     DatabaseModule,
     CommonModule,
     HealthModule,
+    MediaModule,
     IdentityModule,
     ProducerModule,
     EstablishmentModule,
@@ -46,6 +51,9 @@ import { AuditModule } from './modules/audit/audit.module';
     ProductionModule,
     TraceabilityModule,
     AuditModule,
+    ZoneModule,
+    TransportModule,
+    PlacesModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

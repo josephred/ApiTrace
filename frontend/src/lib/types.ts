@@ -14,7 +14,8 @@ export type UserRole =
 
 export interface AuthUser {
   id: string;
-  email: string;
+  /** Null en las cuentas que entran con la CUIT («Creá tu cuenta»). */
+  email: string | null;
   fullName: string;
   role: UserRole;
   organizationId: string | null;
@@ -83,6 +84,8 @@ export interface Establishment {
   senasaCode?: string | null;
   senasaStatus?: string;
   senasaValidTo?: string | null;
+  /** Foto tomada al registrarlo (GET /media/:id). */
+  photoId?: string | null;
   renspa?: RenspaRegistration[];
 }
 
@@ -96,6 +99,10 @@ export interface Receiver {
   senasaCode: string | null;
   senasaStatus: string;
   senasaValidTo: string | null;
+  rne?: string | null;
+  latitude?: string | null;
+  longitude?: string | null;
+  photoId?: string | null;
   organizationId: string;
   organizationName: string;
 }
@@ -127,6 +134,10 @@ export interface Apiary {
   renapaCode?: string | null;
   renapaStatus?: string;
   renapaValidTo?: string | null;
+  /** Zona del apicultor (doc 13). */
+  zoneId?: string | null;
+  zoneName?: string | null;
+  photoId?: string | null;
 }
 
 export interface Hive {
@@ -307,6 +318,8 @@ export interface DteDetail extends Dte {
     receivedAt: string | null;
     quantity: string;
     unit: string;
+    /** Lo que se transporta (doc 13); null en traslados anteriores sin dato. */
+    cargoType?: string | null;
     requiresDocument: boolean;
     driverName: string | null;
   };
@@ -330,6 +343,7 @@ export interface DteDetail extends Dte {
     locality: string | null;
     province: string | null;
   };
+  destinationApiary?: { id: string; code: string; name: string | null; renapaCode: string | null } | null;
   holder: { id: string; businessName: string; taxId: string | null } | null;
   history: DteHistoryEntry[];
   related: { id: string; number: string | null; status: DteStatus; createdAt: string; voidReason: string | null }[];
@@ -346,6 +360,8 @@ export interface DteCheck {
 
 export interface DtePreflight {
   ok: boolean;
+  /** API_SEM: se puede pedir a SIGSA. TRAMITE: se emite en SIGSA y se registra el número. */
+  kind?: 'API_SEM' | 'TRAMITE';
   mode: DteIntegration['mode'];
   checks: DteCheck[];
   suggestion: {
@@ -353,7 +369,7 @@ export interface DtePreflight {
     expiryDate: string;
     maxExpiryDate: string;
     earliestRequestDate: string;
-  };
+  } | null;
 }
 
 export interface DteSummary {

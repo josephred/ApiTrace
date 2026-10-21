@@ -11,8 +11,10 @@ import {
   IsUUID,
   Matches,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
+import { PhotoInputDto } from '../../media/dto/photo.dto';
 
 const REGISTRATION_STATUSES = [
   'PENDING_VERIFICATION',
@@ -42,6 +44,12 @@ class EstablishmentSenasaFields {
   @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'senasaValidTo debe tener el formato YYYY-MM-DD' })
   senasaValidTo?: string;
+
+  @ApiPropertyOptional({ type: PhotoInputDto, description: 'Foto de la sala (o del lugar).' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PhotoInputDto)
+  photo?: PhotoInputDto;
 }
 
 export const ESTABLISHMENT_TYPES = [
@@ -52,6 +60,7 @@ export const ESTABLISHMENT_TYPES = [
   'DEPOSITO',
   'LABORATORIO',
   'OTRO',
+  'FINCA_POLINIZACION',
 ] as const;
 
 export class CreateEstablishmentDto extends EstablishmentSenasaFields {

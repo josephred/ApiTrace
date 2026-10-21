@@ -27,6 +27,7 @@ import { addDays, toArDate } from '../modules/movement/dte.rules';
 import { ExtractionService } from '../modules/production/extraction.service';
 import { LotService } from '../modules/production/lot.service';
 import { DrumService } from '../modules/production/drum.service';
+import { VehicleService } from '../modules/transport/vehicle.service';
 import type { AuthenticatedUser } from '../common/types';
 
 const logger = new Logger('seed');
@@ -102,6 +103,7 @@ async function main(): Promise<void> {
   const extractions = app.get(ExtractionService);
   const lots = app.get(LotService);
   const drums = app.get(DrumService);
+  const vehicles = app.get(VehicleService);
 
   try {
     const existing = await db.select({ id: organization.id }).from(organization).limit(1);
@@ -576,6 +578,130 @@ async function main(): Promise<void> {
       userProductor,
     );
 
+    // ------------------------------------------- maestros del rediseno (doc 13)
+    // Lo que muestran las pantallas nuevas: apiarios por zona con ubicacion,
+    // salas de extraccion y de fraccionamiento, finca, deposito y vehiculos
+    // guardados. El productor trashuma: Lujan en invierno, Valle de Uco en
+    // primavera.
+    await apiaries.update(apiario.id, { zoneName: 'Lujan' }, userProductor);
+
+    const campoValle = await establishments.create(
+      {
+        name: 'Campo Valle de Uco',
+        type: 'APIARIO_BASE',
+        producerId: productor.id,
+        locality: 'Tunuyan',
+        province: 'Mendoza',
+        latitude: -33.5901,
+        longitude: -69.0402,
+      },
+      userProductor,
+    );
+    const valle = [
+      { name: 'La Rotonda', code: 'UP-993-C', renapa: 'B4512-2', hives: 45, lat: -33.5712, lng: -69.0218 },
+      { name: 'UPA 1', code: '002', renapa: 'B4512-3', hives: 32, lat: -33.5958, lng: -69.0473 },
+      { name: 'UPA 2', code: '003', renapa: 'B4512-4', hives: 28, lat: -33.6104, lng: -69.0012 },
+      { name: 'UPA 3', code: '004', renapa: 'B4512-5', hives: 40, lat: -33.5527, lng: -69.0721 },
+      { name: 'UPA 5', code: '005', renapa: 'B4512-6', hives: 36, lat: -33.6345, lng: -69.0889 },
+    ];
+    for (const item of valle) {
+      await apiaries.create(
+        {
+          establishmentId: campoValle.id,
+          code: item.code,
+          name: item.name,
+          zoneName: 'Valle de Uco',
+          latitude: item.lat,
+          longitude: item.lng,
+          hiveCount: item.hives,
+          locality: 'Tunuyan',
+          province: 'Mendoza',
+          renapaCode: item.renapa,
+          renapaStatus: 'ACTIVE',
+          renapaValidTo: '2027-12-31',
+        },
+        userProductor,
+      );
+    }
+
+    // Salas de extraccion de la zona (destinos publicos del paso 5).
+    const salasValle = [
+      { name: 'Sala Comunitaria Tunuyan', code: 'SEF-M-11', rne: 'RNE-13-000011', lat: -33.577, lng: -69.015 },
+      { name: 'Bravo Tunuyan', code: 'SEF-M-901', rne: 'RNE-13-000901', lat: -33.564, lng: -69.026 },
+      { name: 'Maca', code: 'SEF-M-7963', rne: 'RNE-13-007963', lat: -33.62, lng: -69.12 },
+    ];
+    for (const item of salasValle) {
+      await establishments.create(
+        {
+          name: item.name,
+          type: 'SALA_EXTRACCION',
+          locality: 'Tunuyan',
+          province: 'Mendoza',
+          rne: item.rne,
+          senasaCode: item.code,
+          senasaStatus: 'ACTIVE',
+          senasaValidTo: '2027-12-31',
+          latitude: item.lat,
+          longitude: item.lng,
+        },
+        userSala,
+      );
+    }
+
+    // Sala de fraccionamiento, en su propia organizacion.
+    const orgFracc = await identity.createOrganization(
+      { name: 'Miel Frascos', legalName: 'Miel Frascos SRL', taxId: '30-71555666-4', type: 'FRACCIONADOR' },
+      platformAdmin,
+    );
+    await establishments.create(
+      {
+        name: 'Miel Frascos',
+        type: 'FRACCIONADORA',
+        organizationId: orgFracc.id,
+        locality: 'Mendoza',
+        province: 'Mendoza',
+        rne: 'RNE-13-003080',
+        latitude: -32.8908,
+        longitude: -68.8272,
+      },
+      platformAdmin,
+    );
+
+    // Finca de polinizacion y deposito del productor.
+    await establishments.create(
+      {
+        name: 'Finca Los Almendros',
+        type: 'FINCA_POLINIZACION',
+        producerId: productor.id,
+        locality: 'San Carlos',
+        province: 'Mendoza',
+        latitude: -33.665,
+        longitude: -69.15,
+      },
+      userProductor,
+    );
+    await establishments.create(
+      {
+        name: 'Deposito Tunuyan',
+        type: 'DEPOSITO',
+        producerId: productor.id,
+        locality: 'Tunuyan',
+        province: 'Mendoza',
+        latitude: -33.58,
+        longitude: -69.018,
+      },
+      userProductor,
+    );
+
+    // Vehiculos guardados (paso 2 del asistente).
+    for (const item of [
+      { name: 'Camioneta Hilux', type: 'CAMIONETA' as const, plate: 'AD273HX', trailerPlate: 'AC456ZZ', driverName: 'Maria Gonzalez' },
+      { name: 'Camion', type: 'CAMION' as const, plate: 'AE123BB', driverName: 'Ruben Paz' },
+      { name: 'Acoplado', type: 'ACOPLADO' as const, plate: 'AA789CC', driverName: 'Ruben Paz' },
+    ]) {
+      await vehicles.create(item, userProductor);
+    }
+
     logger.log('----------------------------------------------------------------');
     logger.log('Seed completado. Cadena de demostracion:');
     logger.log(`  Productor        ${productor.businessName}`);
@@ -587,6 +713,8 @@ async function main(): Promise<void> {
     logger.log(`  Tambores         ${tambores.map((t) => t.code).join(', ')}`);
     logger.log(`  Movimiento sala  ${movimientoAcopio.code}`);
     logger.log(`  Lote de acopio   ${loteAcopio.code}  -> ${loteAcopio.id}`);
+    logger.log('  Maestros         2 zonas, 6 apiarios, 4 salas de extraccion, 1 de fraccionamiento,');
+    logger.log('                   1 finca, 1 deposito y 3 vehiculos guardados');
     logger.log('');
     logger.log(`  Usuarios de prueba (password: ${DEMO_PASSWORD}):`);
     logger.log('    admin@apitrace        ADMIN');

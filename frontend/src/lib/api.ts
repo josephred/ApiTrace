@@ -296,6 +296,18 @@ export const apiLogin = async <T>(email: string, password: string): Promise<T> =
   return (await parseBody(response)) as T;
 };
 
+/** «Creá tu cuenta»: crea la cuenta del apicultor y devuelve la sesión iniciada. */
+export const apiSignup = async <T>(body: {
+  fullName: string;
+  taxId: string;
+  renapa: string;
+  password: string;
+}): Promise<T> => {
+  const response = await rawRequest('/auth/signup', { method: 'POST', body, auth: false });
+  if (!response.ok) throw await toApiError(response);
+  return (await parseBody(response)) as T;
+};
+
 export const apiLogout = async (refreshToken: string): Promise<void> => {
   try {
     await rawRequest('/auth/logout', { method: 'POST', body: { refreshToken }, auth: false });

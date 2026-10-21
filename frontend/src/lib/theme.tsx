@@ -11,26 +11,32 @@ import {
 export type Theme = 'light' | 'dark';
 
 const STORAGE_KEY = 'apitrace.theme';
+/**
+ * Hasta el rediseño, el tema por defecto (claro) se guardaba como si fuera una
+ * elección. Esta marca distingue lo elegido después del cambio: quien todavía
+ * no la tiene pasa una vez al oscuro, que es ahora el modo principal.
+ */
+const CHOICE_KEY = 'apitrace.theme.v2';
 
 /**
- * Claro por defecto, a proposito.
+ * Oscuro por defecto desde el rediseño (doc 13).
  *
- * La aplicacion se usa en el campo, a pleno sol, donde un fondo oscuro se ve
- * peor. El tema oscuro queda disponible para el trabajo de escritorio y para
- * quien lo prefiera, pero se elige: no se hereda del sistema operativo, porque
- * un telefono en modo oscuro automatico dejaba la app ilegible en el apiario
- * sin que su dueno entendiera por que.
+ * Las pantallas nuevas se diseñaron en oscuro carbón con acento ámbar, y es
+ * el modo principal. El claro queda a un toque en Configuración para quien
+ * trabaja a pleno sol. Ninguno se hereda del sistema operativo: la elección es
+ * de la persona y se recuerda en el dispositivo.
  */
-const DEFAULT_THEME: Theme = 'light';
+const DEFAULT_THEME: Theme = 'dark';
 
 /** Color de la barra del navegador y de la aplicacion instalada, por tema. */
 const BROWSER_CHROME: Record<Theme, string> = {
   light: '#ffffff',
-  dark: '#1a1410',
+  dark: '#1a1b20',
 };
 
 const readStored = (): Theme => {
   try {
+    if (localStorage.getItem(CHOICE_KEY) !== '1') return DEFAULT_THEME;
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw === 'dark' || raw === 'light' ? raw : DEFAULT_THEME;
   } catch {
@@ -61,6 +67,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     applyTheme(theme);
     try {
       localStorage.setItem(STORAGE_KEY, theme);
+      localStorage.setItem(CHOICE_KEY, '1');
     } catch {
       // La eleccion vale para esta sesion aunque no se pueda guardar.
     }

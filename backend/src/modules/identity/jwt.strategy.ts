@@ -9,7 +9,7 @@ import type { AuthenticatedUser, UserRoleName } from '../../common/types';
 
 export interface JwtPayload {
   sub: string;
-  email: string;
+  email: string | null;
   role: UserRoleName;
   org: string | null;
 }

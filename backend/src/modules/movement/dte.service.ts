@@ -34,14 +34,18 @@ import {
 import {
   DTE_RULES,
   effectiveStatus,
+  isIsoDate,
   isVoid,
   normalizeCode,
+  normalizePlate,
   toArDate,
   validateConfirmedQuantity,
   type DteStatus,
 } from './dte.rules';
 import { SENASA_GATEWAY, type SenasaGateway } from './senasa/senasa.gateway';
-import type { DraftData, DteContext, MovementRow } from './dte.types';
+import type { DraftData, DteContext, MovementRow, RouteContext } from './dte.types';
+import { CARGO_PROFILE, describeQuantity, transitReasonFor, type CargoType } from './cargo';
+import { VehicleService } from '../transport/vehicle.service';
 import type { CloseDteDto, CreateDteDto, UpdateDteStatusDto } from './dto/movement.dto';
 import type {
   CloseDteRequestDto,
@@ -82,6 +86,7 @@ export class DteService {
     private readonly lifecycle: DteLifecycleService,
     private readonly checks: DteChecksService,
     private readonly reads: DteQueryService,
+    private readonly vehicles: VehicleService,
     @Inject(SENASA_GATEWAY) private readonly gateway: SenasaGateway,
   ) {}
 
@@ -90,12 +95,17 @@ export class DteService {
   // =========================================================================
 
   /**
-   * Solicitud de DT-e API-SEM (POST /dte). Sin movementId crea tambien el
+   * «Nuevo tramite DT-e» (POST /dte). Sin movementId crea tambien el
    * movimiento, en la misma transaccion: o quedan los dos o ninguno.
+   *
+   * Alzas de un apiario a una sala de extraccion siguen el circuito API-SEM
+   * completo (verificacion, pedido a SIGSA, vigencia). Cualquier otra carga o
+   * recorrido arma un tramite que se emite en SIGSA y se registra aca.
    */
-  async create(dto: CreateDteRequestDto, actor: AuthenticatedUser, correlationId?: string) {
+  async create(input: CreateDteRequestDto, actor: AuthenticatedUser, correlationId?: string) {
     this.access.assertCanWrite(actor);
     const now = new Date();
+    const dto = await this.withVehicle(input, actor);
 
     if (dto.number && dto.submit) {
       throw new DomainRuleException(
@@ -129,15 +139,13 @@ export class DteService {
         );
       }
     } else {
-      if (!dto.apiaryId || !dto.destinationEstablishmentId) {
-        throw new DomainRuleException(
-          HttpStatus.BAD_REQUEST,
-          'ORIGEN_DESTINO_REQUERIDOS',
-          'Indica el apiario de origen (apiaryId) y la sala de destino (destinationEstablishmentId), o un movimiento existente (movementId).',
-        );
+      const route = await this.checks.contextForRoute(dto);
+      assertIssuer(actor, route.origin.organizationId);
+      const cargo = dto.cargoType ?? 'ALZAS';
+      if (!this.checks.isApiSem(cargo, route)) {
+        return this.createTramite(dto, route, cargo, actor, correlationId);
       }
-      ctx = await this.checks.contextForNew(dto.apiaryId, dto.destinationEstablishmentId);
-      assertIssuer(actor, ctx.origin.organizationId);
+      ctx = route;
     }
 
     const draft = normalizeDraft(dto);
@@ -163,6 +171,7 @@ export class DteService {
           {
             movementType: 'MATERIAL_MELARIO',
             materialType: 'MATERIAL_MELARIO',
+            cargoType: 'ALZAS',
             originEstablishmentId: ctx.origin.id,
             originApiaryId: ctx.apiary?.id,
             destinationEstablishmentId: ctx.destination.id,
@@ -248,6 +257,166 @@ export class DteService {
     });
 
     return { ...presentDte(created, actor, now), checks };
+  }
+
+  /**
+   * Tramite que no es API-SEM: colmenas, nucleos o reinas entre apiarios y
+   * fincas, tambores y frascos entre salas y depositos, o alzas a un deposito.
+   * ApiTrace no lo pide a SIGSA: queda en borrador (o EMITIDO, si ya trae el
+   * numero) para emitirlo alla y registrar el numero despues.
+   */
+  private async createTramite(
+    dto: CreateDteRequestDto,
+    route: RouteContext,
+    cargo: CargoType,
+    actor: AuthenticatedUser,
+    correlationId?: string,
+  ) {
+    const now = new Date();
+    if (dto.submit) {
+      throw new DomainRuleException(
+        HttpStatus.BAD_REQUEST,
+        'TRAMITE_SOLO_MANUAL',
+        'Este tramite todavia no se pide a SIGSA desde ApiTrace: guardalo como borrador, emitilo en SIGSA y registra el numero.',
+      );
+    }
+    if (!isIsoDate(dto.loadDate)) {
+      throw new DomainRuleException(
+        HttpStatus.BAD_REQUEST,
+        'FECHA_INVALIDA',
+        'La fecha del traslado no es valida.',
+      );
+    }
+    const profile = CARGO_PROFILE[cargo];
+    const transport = {
+      type: dto.transport?.type ?? null,
+      plate: normalizePlate(dto.transport?.plate),
+      trailerPlate: normalizePlate(dto.transport?.trailerPlate),
+    };
+    const checks = this.checks.buildTramiteChecks(route, {
+      cargo,
+      quantity: dto.declaredQuantity,
+      loadDate: dto.loadDate,
+      transport,
+    });
+    const number = dto.number?.trim() || null;
+    if (number) await this.assertNumberAvailable(number);
+    const initial: DteStatus = number ? 'EMITIDO' : 'BORRADOR';
+
+    const [originRenspa, destinationRenspa] = await Promise.all([
+      this.establishments.activeRenspaNumber(route.origin.id),
+      this.establishments.activeRenspaNumber(route.destination.id),
+    ]);
+
+    const created = await this.db.transaction(async (tx) => {
+      const target = await this.movements.create(
+        {
+          movementType: profile.movementType,
+          materialType: profile.materialType,
+          cargoType: cargo,
+          originEstablishmentId: route.origin.id,
+          originApiaryId: route.apiary?.id,
+          destinationEstablishmentId: route.destination.id,
+          destinationApiaryId: route.destinationApiary?.id,
+          carrierId: dto.carrierId,
+          vehicleId: dto.vehicleId,
+          driverName: dto.driverName,
+          driverDocument: dto.driverDocument,
+          scheduledAt: scheduledAtFor(dto.loadDate),
+          quantity: dto.declaredQuantity,
+          unit: profile.unit,
+          notes: dto.notes,
+        },
+        actor,
+        correlationId,
+        tx,
+      );
+
+      const [row] = await tx
+        .insert(dte)
+        .values({
+          movementId: target.id,
+          number,
+          status: initial,
+          issueMode: 'MANUAL',
+          issuedAt: number ? (dto.issuedAt ? new Date(dto.issuedAt) : now) : null,
+          verificationCode: dto.verificationCode?.trim() || null,
+          issuerOrganizationId: route.origin.organizationId,
+          destinationOrganizationId: route.destination.organizationId,
+          holderProducerId: route.holder?.id ?? null,
+          holderTaxId: route.holder?.taxId ?? null,
+          originCode: route.apiary?.renapaCode ?? route.origin.senasaCode ?? route.origin.rne ?? null,
+          destinationCode:
+            route.destinationApiary?.renapaCode ??
+            route.destination.senasaCode ??
+            route.destination.rne ??
+            null,
+          // Sin codigo de movimiento SIGSA: no es API-SEM y no se inventa uno.
+          movementTypeCode: null,
+          transitReason: transitReasonFor(cargo, route.destinationPlace),
+          productName: profile.label,
+          unit: profile.unit,
+          declaredQuantity: dto.declaredQuantity,
+          // Solo la fecha de carga: la vigencia de 2 a 4 dias es regla del API-SEM.
+          loadDate: dto.loadDate,
+          expiryDate: null,
+          transportType: transport.type,
+          transportPlate: transport.plate,
+          transportTrailerPlate: transport.trailerPlate,
+          requestedById: actor.id,
+          originRenspa,
+          destinationRenspa,
+          externalSystem: 'SENASA_SIGSA',
+          syncStatus: 'PENDING_SYNC',
+          payload: {
+            movementCode: target.code,
+            cargoType: cargo,
+            materialType: target.materialType,
+            quantity: target.quantity,
+            unit: target.unit,
+          } as never,
+        })
+        .returning();
+
+      await this.insertDocument(tx, row, actor);
+      await this.queries.recordTransition(tx, {
+        dteId: row.id,
+        from: null,
+        to: initial,
+        source: 'USUARIO',
+        reason: number
+          ? `Registro del DT-e ${number} emitido en SIGSA (${describeQuantity(cargo, dto.declaredQuantity)}).`
+          : `Alta del tramite: ${describeQuantity(cargo, dto.declaredQuantity)}.`,
+        actorUserId: actor.id,
+        correlationId,
+      });
+      await this.events.publish(
+        {
+          eventType: DomainEvents.DteCreated,
+          entityType: 'movement',
+          entityId: target.id,
+          actorUserId: actor.id,
+          organizationId: row.issuerOrganizationId,
+          correlationId,
+          payload: {
+            dteId: row.id,
+            number: row.number,
+            status: row.status,
+            cargoType: cargo,
+            issueMode: row.issueMode,
+          },
+        },
+        tx,
+      );
+      return row;
+    });
+
+    return { ...presentDte(created, actor, now), checks };
+  }
+
+  /** Paso 2: el transporte sale del vehiculo guardado si no vino escrito. */
+  private withVehicle(dto: CreateDteRequestDto, actor: AuthenticatedUser) {
+    return this.vehicles.completeTransport(dto, actor);
   }
 
   /**

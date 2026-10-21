@@ -20,6 +20,7 @@ import { MovementRuleService } from './movement-rule.service';
 import { DteQueries } from './dte.queries';
 import { presentDte } from './dte.presenter';
 import { DTE_RULES, effectiveStatus, isVoid, validateConfirmedQuantity } from './dte.rules';
+import { cargoOfMovement } from './cargo';
 import type { AuthenticatedUser } from '../../common/types';
 import type { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import type {
@@ -64,7 +65,13 @@ export class MovementService {
   ) {
     this.access.assertCanWrite(actor);
 
-    if (dto.originEstablishmentId === dto.destinationEstablishmentId) {
+    // Dos apiarios distintos del mismo predio son dos lugares: llevar colmenas
+    // de uno a otro es un traslado. Fuera de ese caso, el mismo establecimiento
+    // no puede ser origen y destino.
+    const betweenApiaries =
+      Boolean(dto.originApiaryId && dto.destinationApiaryId) &&
+      dto.originApiaryId !== dto.destinationApiaryId;
+    if (dto.originEstablishmentId === dto.destinationEstablishmentId && !betweenApiaries) {
       throw new BadRequestException(
         'El origen y el destino no pueden ser el mismo establecimiento. Para mover stock interno use una transferencia de ubicacion.',
       );
@@ -99,6 +106,20 @@ export class MovementService {
       }
     }
 
+    if (dto.destinationApiaryId) {
+      const rows = await this.db
+        .select()
+        .from(apiary)
+        .where(eq(apiary.id, dto.destinationApiaryId))
+        .limit(1);
+      if (rows.length === 0) throw new NotFoundException('El apiario de destino no existe.');
+      if (rows[0].establishmentId !== dto.destinationEstablishmentId) {
+        throw new BadRequestException(
+          'El apiario de destino no pertenece al establecimiento de destino.',
+        );
+      }
+    }
+
     const scheduledAt = new Date(dto.scheduledAt);
     // La regla se evalua con la fecha del movimiento, no con la fecha de carga.
     const decision = await this.rules.evaluate({
@@ -120,6 +141,14 @@ export class MovementService {
           originEstablishmentId: dto.originEstablishmentId,
           originApiaryId: dto.originApiaryId ?? null,
           destinationEstablishmentId: dto.destinationEstablishmentId,
+          destinationApiaryId: dto.destinationApiaryId ?? null,
+          cargoType:
+            dto.cargoType ??
+            cargoOfMovement({
+              movementType: dto.movementType,
+              materialType: dto.materialType,
+              unit: dto.unit,
+            }),
           carrierId: dto.carrierId ?? null,
           vehicleId: dto.vehicleId ?? null,
           driverName: dto.driverName ?? null,
@@ -151,6 +180,8 @@ export class MovementService {
             originEstablishmentId: origin.id,
             destinationEstablishmentId: destination.id,
             originApiaryId: created.originApiaryId,
+            destinationApiaryId: created.destinationApiaryId,
+            cargoType: created.cargoType,
             quantity: created.quantity,
             unit: created.unit,
             requiresDocument: created.requiresDocument,

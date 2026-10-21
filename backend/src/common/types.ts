@@ -12,7 +12,8 @@ export type UserRoleName =
 
 export interface AuthenticatedUser {
   id: string;
-  email: string;
+  /** Null en las cuentas que entran con la CUIT (alta del apicultor, migracion 0003). */
+  email: string | null;
   fullName: string;
   role: UserRoleName;
   organizationId: string | null;

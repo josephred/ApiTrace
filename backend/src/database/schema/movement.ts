@@ -14,6 +14,7 @@ import {
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import {
+  cargoTypeEnum,
   documentTypeEnum,
   dteHistorySourceEnum,
   dteIssueModeEnum,
@@ -79,6 +80,12 @@ export const movement = pgTable(
     destinationEstablishmentId: uuid('destination_establishment_id')
       .notNull()
       .references(() => establishment.id, { onDelete: 'restrict' }),
+    /** Apiario de destino, cuando las colmenas o nucleos van a otro apiario (migracion 0003). */
+    destinationApiaryId: uuid('destination_apiary_id').references(() => apiary.id, {
+      onDelete: 'set null',
+    }),
+    /** Lo que se transporta, como lo eligio la persona en el asistente (migracion 0003). */
+    cargoType: cargoTypeEnum('cargo_type'),
     carrierId: uuid('carrier_id').references(() => carrier.id, { onDelete: 'set null' }),
     vehicleId: uuid('vehicle_id').references(() => vehicle.id, { onDelete: 'set null' }),
     driverName: varchar('driver_name', { length: 160 }),
@@ -104,6 +111,8 @@ export const movement = pgTable(
     index('movement_origin_idx').on(t.originEstablishmentId),
     index('movement_destination_idx').on(t.destinationEstablishmentId),
     index('movement_origin_apiary_idx').on(t.originApiaryId),
+    index('movement_destination_apiary_idx').on(t.destinationApiaryId),
+    index('movement_vehicle_idx').on(t.vehicleId),
   ],
 );
 

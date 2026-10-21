@@ -10,6 +10,7 @@ import { SettingsProvider } from './lib/settingsContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastProvider } from './components/ui';
 import './styles.css';
+import './redesign.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

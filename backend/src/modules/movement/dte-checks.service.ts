@@ -29,7 +29,15 @@ import type {
   MovementRow,
   ProducerRow,
   RenapaRow,
+  RouteContext,
 } from './dte.types';
+import {
+  CARGO_PROFILE,
+  describeQuantity,
+  isApiSemRoute,
+  placeTypeOfEstablishment,
+  type CargoType,
+} from './cargo';
 
 /**
  * Contexto y verificaciones previas del DT-e (especificacion 4.2.2 y
@@ -431,6 +439,165 @@ export class DteChecksService {
       );
     }
     return this.completeContext(origin, destination, origenApiary);
+  }
+
+  /**
+   * Origen y destino elegidos en el asistente (pasos 4 y 5). Cada extremo es
+   * un apiario o un establecimiento; no pueden ser el mismo lugar.
+   */
+  async contextForRoute(input: {
+    apiaryId?: string;
+    originEstablishmentId?: string;
+    destinationEstablishmentId?: string;
+    destinationApiaryId?: string;
+  }): Promise<RouteContext> {
+    if (!input.apiaryId && !input.originEstablishmentId) {
+      throw new DomainRuleException(
+        HttpStatus.BAD_REQUEST,
+        'ORIGEN_DESTINO_REQUERIDOS',
+        'Indica de donde sale la carga: un apiario (apiaryId) o un establecimiento (originEstablishmentId).',
+      );
+    }
+    if (!input.destinationEstablishmentId && !input.destinationApiaryId) {
+      throw new DomainRuleException(
+        HttpStatus.BAD_REQUEST,
+        'ORIGEN_DESTINO_REQUERIDOS',
+        'Indica a donde va la carga: un establecimiento (destinationEstablishmentId) o un apiario (destinationApiaryId).',
+      );
+    }
+
+    const findApiary = async (id: string, side: string) => {
+      const [row] = await this.db.select().from(apiary).where(eq(apiary.id, id)).limit(1);
+      if (!row) throw new NotFoundException(`El apiario de ${side} no existe.`);
+      return row;
+    };
+    const originApiary = input.apiaryId ? await findApiary(input.apiaryId, 'origen') : null;
+    const destinationApiary = input.destinationApiaryId
+      ? await findApiary(input.destinationApiaryId, 'destino')
+      : null;
+
+    const origin = await this.establishments.findRaw(
+      originApiary ? originApiary.establishmentId : (input.originEstablishmentId as string),
+    );
+    const destination = await this.establishments.findRaw(
+      destinationApiary
+        ? destinationApiary.establishmentId
+        : (input.destinationEstablishmentId as string),
+    );
+
+    const samePlace =
+      originApiary && destinationApiary
+        ? originApiary.id === destinationApiary.id
+        : !originApiary && !destinationApiary && origin.id === destination.id;
+    if (samePlace) {
+      throw new DomainRuleException(
+        HttpStatus.BAD_REQUEST,
+        'ORIGEN_IGUAL_DESTINO',
+        'El origen y el destino no pueden ser el mismo lugar.',
+      );
+    }
+
+    const base = await this.completeContext(origin, destination, originApiary);
+    return {
+      ...base,
+      destinationApiary,
+      originPlace: originApiary ? 'APIARIO' : placeTypeOfEstablishment(origin.type),
+      destinationPlace: destinationApiary ? 'APIARIO' : placeTypeOfEstablishment(destination.type),
+    };
+  }
+
+  /** true si el recorrido elegido es un DT-e API-SEM. */
+  isApiSem(cargo: CargoType, route: RouteContext): boolean {
+    return !route.destinationApiary && isApiSemRoute(cargo, route.originPlace, route.destinationPlace);
+  }
+
+  /**
+   * Verificaciones de un tramite que no es API-SEM (colmenas a una finca,
+   * tambores a una sala de fraccionamiento…). ApiTrace no lo pide a SIGSA: se
+   * emite alla y se registra el numero. Igual se revisa lo que si se puede.
+   */
+  buildTramiteChecks(
+    route: RouteContext,
+    input: {
+      cargo: CargoType;
+      quantity: number | null;
+      loadDate: string;
+      transport: { type: string | null; plate: string | null; trailerPlate: string | null };
+    },
+  ): DteCheck[] {
+    const checks: DteCheck[] = [];
+    const add = (code: string, label: string, status: DteCheckStatus, message: string) =>
+      checks.push({ code, label, status, message });
+    const placeName = (row: EstablishmentRow, apiaryRow: ApiaryRow | null) =>
+      apiaryRow ? (apiaryRow.name ? `${apiaryRow.name} (${apiaryRow.code})` : apiaryRow.code) : row.name;
+
+    const originActive = route.origin.status === 'ACTIVE' && (!route.apiary || route.apiary.status === 'ACTIVE');
+    add(
+      'ORIGEN',
+      'Origen',
+      originActive ? 'ok' : 'error',
+      originActive
+        ? `Sale de ${placeName(route.origin, route.apiary)}.`
+        : `${placeName(route.origin, route.apiary)} no esta activo.`,
+    );
+    const destinationActive =
+      route.destination.status === 'ACTIVE' &&
+      (!route.destinationApiary || route.destinationApiary.status === 'ACTIVE');
+    add(
+      'DESTINO',
+      'Destino',
+      destinationActive ? 'ok' : 'error',
+      destinationActive
+        ? `Llega a ${placeName(route.destination, route.destinationApiary)}.`
+        : `${placeName(route.destination, route.destinationApiary)} no esta activo.`,
+    );
+    if (route.holder) {
+      add(
+        'TITULAR',
+        'Titular',
+        route.holder.taxId ? 'ok' : 'warning',
+        route.holder.taxId
+          ? `${route.holder.businessName} · CUIT ${route.holder.taxId}`
+          : `${route.holder.businessName} no tiene CUIT cargada.`,
+      );
+    }
+    add(
+      'CANTIDAD',
+      'Cantidad',
+      input.quantity && input.quantity > 0 ? 'ok' : 'error',
+      input.quantity && input.quantity > 0
+        ? `${describeQuantity(input.cargo, input.quantity)}.`
+        : `Falta cuantas ${CARGO_PROFILE[input.cargo].plural} se trasladan.`,
+    );
+    add(
+      'FECHA',
+      'Fecha del traslado',
+      isIsoDate(input.loadDate) ? 'ok' : 'error',
+      isIsoDate(input.loadDate) ? `Carga el ${input.loadDate}.` : 'La fecha del traslado no es valida.',
+    );
+    if (!input.transport.type || !input.transport.plate) {
+      add('TRANSPORTE', 'Transporte', 'warning', 'Falta el vehiculo: elegilo en el paso 2.');
+    } else {
+      const trailer = input.transport.trailerPlate ? ` + carro ${input.transport.trailerPlate}` : '';
+      add('TRANSPORTE', 'Transporte', 'ok', `${input.transport.type} ${input.transport.plate}${trailer}`);
+      for (const plate of [input.transport.plate, input.transport.trailerPlate]) {
+        if (plate && !isArgentinePlate(plate)) {
+          add(
+            'TRANSPORTE_PATENTE',
+            'Formato de patente',
+            'warning',
+            `La patente ${plate} no tiene formato argentino (AAA999 o AA999AA).`,
+          );
+        }
+      }
+    }
+    add(
+      'EMISION_MANUAL',
+      'Como se emite',
+      'info',
+      'Este tramite se emite en SIGSA (web u oficina local) y despues registras el numero en ApiTrace. Por API, ApiTrace pide solo el DT-e de alzas de un apiario a una sala de extraccion (API-SEM).',
+    );
+    return checks;
   }
 
   async contextForMovement(target: MovementRow): Promise<DteContext> {

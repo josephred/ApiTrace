@@ -52,7 +52,7 @@ const HexArt = ({ icon, tone = 'brand' }: { icon: IconName; tone?: 'brand' | 'su
   </span>
 );
 
-const DTE_STEPS = ['Origen y destino', 'Alzas y fechas', 'Transporte', 'Verificar y emitir'];
+const DTE_STEPS = ['¿Qué transportás?', 'Transporte', 'Cantidad', '¿Desde dónde?', '¿Hasta dónde?'];
 
 const slidesFor = (role: UserRole, mode: DteIntegration['mode'] | undefined, openGuide: () => void): Slide[] => {
   const issuer = role === 'PRODUCTOR';
@@ -83,7 +83,7 @@ const slidesFor = (role: UserRole, mode: DteIntegration['mode'] | undefined, ope
       welcome,
       offline,
       {
-        title: 'El DT-e en cuatro pasos',
+        title: 'El DT-e en cinco pasos',
         body: (
           <>
             <ol className="onboard-steps">
@@ -96,7 +96,7 @@ const slidesFor = (role: UserRole, mode: DteIntegration['mode'] | undefined, ope
                 </li>
               ))}
             </ol>
-            <p>Si se corta a mitad de camino, lo retomás desde el Panel: se guarda solo.</p>
+            <p>Si se corta a mitad de camino, lo retomás desde Inicio: se guarda solo.</p>
           </>
         ),
         art: <HexArt icon="document" />,
@@ -212,7 +212,7 @@ export const Onboarding = () => {
           {last ? (
             issuer ? (
               <>
-                <Button variant="primary" icon="plus" block onClick={() => go('/dte?nuevo=1')}>
+                <Button variant="primary" icon="plus" block onClick={() => go('/dte/nuevo')}>
                   Preparar mi primer DT-e
                 </Button>
                 <Button variant="ghost" block onClick={finish}>

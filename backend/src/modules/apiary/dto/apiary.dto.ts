@@ -14,7 +14,36 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
+  ValidateIf,
+  ValidateNested,
 } from 'class-validator';
+import { PhotoInputDto } from '../../media/dto/photo.dto';
+
+/**
+ * Zona y foto: lo que pide «Nuevo apiario» ademas de los datos de siempre
+ * (migracion 0003). La zona se elige por id o se crea al vuelo por nombre.
+ */
+class ApiaryMasterFields {
+  @ApiPropertyOptional({ format: 'uuid', nullable: true, description: 'Zona existente; null la quita.' })
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsUUID()
+  zoneId?: string | null;
+
+  @ApiPropertyOptional({ example: 'Valle de Uco', description: 'Zona nueva (o existente) por nombre.' })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  zoneName?: string;
+
+  @ApiPropertyOptional({ type: PhotoInputDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PhotoInputDto)
+  photo?: PhotoInputDto;
+}
 
 export const REGISTRATION_STATUSES = [
   'PENDING_VERIFICATION',
@@ -28,7 +57,7 @@ export const REGISTRATION_STATUSES = [
  * Identificacion oficial del apiario en RENAPA. Es el origen del DT-e API-SEM:
  * sin ella SIGSA no emite. Se comparte entre el alta y la edicion.
  */
-class ApiaryRenapaFields {
+class ApiaryRenapaFields extends ApiaryMasterFields {
   @ApiPropertyOptional({
     example: 'B53999-2',
     description: 'Codigo RENAPA del apiario: Letra-N°RENAPA-N°Apiario.',
@@ -50,14 +79,23 @@ class ApiaryRenapaFields {
 }
 
 export class CreateApiaryDto extends ApiaryRenapaFields {
-  @ApiProperty({ format: 'uuid', description: 'Establecimiento al que pertenece el apiario.' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Establecimiento al que pertenece el apiario. Si se omite, se usa el predio de apiarios de la organizacion (y se crea si no hay).',
+  })
+  @IsOptional()
   @IsUUID()
-  establishmentId!: string;
+  establishmentId?: string;
 
-  @ApiProperty({ example: 'API-001', description: 'Codigo unico dentro del establecimiento.' })
+  @ApiPropertyOptional({
+    example: 'API-001',
+    description: 'Codigo unico dentro del establecimiento. Si se omite, se numera solo (API-001, API-002…).',
+  })
+  @IsOptional()
   @IsString()
   @MaxLength(60)
-  code!: string;
+  code?: string;
 
   @ApiPropertyOptional({ example: 'Monte Grande' })
   @IsOptional()

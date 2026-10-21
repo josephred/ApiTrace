@@ -1,5 +1,7 @@
 import { useCallback, useState, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { itemLabel, navFor } from '../lib/nav';
 import { useTheme } from '../lib/theme';
 import { useHelpSettings } from '../lib/helpContext';
 import { usePreferences } from '../lib/settingsContext';
@@ -29,7 +31,8 @@ const DTE_ROLES: UserRole[] = ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'AUDIT
 const VEHICLE_ROLES: UserRole[] = ['ADMIN', 'PRODUCTOR', 'TRANSPORTISTA'];
 
 export const SettingsPage = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const { helpEnabled, setHelpEnabled } = useHelpSettings();
   const { preferences, updatePreferences, resetPreferences } = usePreferences();
@@ -72,6 +75,66 @@ export const SettingsPage = () => {
           </div>
         }
       />
+
+      {/* =====================================================================
+          CUENTA Y TODAS LAS SECCIONES. En el teléfono la barra inferior lleva
+          cuatro destinos (doc 13): el resto de las secciones vive acá.
+          ===================================================================== */}
+      <div className="grid c2" style={{ gap: 'var(--sp-4)', alignItems: 'start' }}>
+        <Card title="Tu cuenta">
+          <div className="account-card">
+            <span className="avatar" aria-hidden="true">
+              {user.fullName
+                .split(' ')
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((part) => part[0]?.toUpperCase() ?? '')
+                .join('')}
+            </span>
+            <div className="grow" style={{ minWidth: 0 }}>
+              <div className="truncate" style={{ fontWeight: 650 }}>
+                {user.fullName}
+              </div>
+              <div className="small muted truncate">
+                {roleLabel(user.role)}
+                {user.email ? ` · ${user.email}` : ''}
+              </div>
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            icon="logout"
+            block
+            onClick={() => void logout().then(() => navigate('/login', { replace: true }))}
+          >
+            Cerrar sesión
+          </Button>
+        </Card>
+        <div className="settings-sections">
+          <Card title="Todas las secciones">
+            <nav className="all-sections" aria-label="Todas las secciones">
+              {navFor(user.role)
+                .map((group) => ({
+                  ...group,
+                  items: group.items.filter((item) => item.to !== '/settings'),
+                }))
+                .filter((group) => group.items.length > 0)
+                .map((group) => (
+                  <div key={group.group} className="all-sections-group">
+                    <div className="nav-group-label">{group.group}</div>
+                    {group.items.map((item) => (
+                      <Link key={item.to} to={item.to} className="all-sections-link">
+                        <Icon name={item.icon} size={18} />
+                        <span className="grow">{itemLabel(item, user.role)}</span>
+                        <Icon name="forward" size={16} />
+                      </Link>
+                    ))}
+                  </div>
+                ))}
+            </nav>
+          </Card>
+        </div>
+      </div>
 
       {/* =====================================================================
           SECCIÓN 1: INTERFAZ Y EXPERIENCIA (TODOS LOS USUARIOS)

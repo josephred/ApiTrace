@@ -1,10 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsEmail,
   IsEnum,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -64,8 +66,51 @@ export class RegisterDto {
   organizationId?: string;
 }
 
+const trim = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? value.trim() : value;
+
+/**
+ * «Creá tu cuenta»: alta del apicultor desde el telefono (migracion 0003).
+ *
+ * Nombre, CUIT, RENAPA y contrasena. La cuenta nace activa como PRODUCTOR,
+ * con su organizacion, su ficha de productor y el RENAPA «pendiente de
+ * verificacion»: puede cargar apiarios y armar DT-e, pero SIGSA no emite hasta
+ * que el RENAPA este habilitado y la delegacion aceptada.
+ */
+export class SignupDto {
+  @ApiProperty({ example: 'Juan Perez' })
+  @Transform(trim)
+  @IsString()
+  @MinLength(3, { message: 'Escribi el nombre completo.' })
+  @MaxLength(160)
+  fullName!: string;
+
+  @ApiProperty({ example: '20-12345678-6', description: 'CUIT con o sin guiones.' })
+  @Transform(trim)
+  @IsString()
+  @Matches(/^[\d\s.-]{11,16}$/, { message: 'La CUIT tiene 11 digitos.' })
+  taxId!: string;
+
+  @ApiProperty({ example: 'B53999', description: 'Numero de RENAPA del productor.' })
+  @Transform(trim)
+  @IsString()
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9 ./-]{1,58}$/, {
+    message: 'El RENAPA lleva letras y numeros (por ejemplo B53999).',
+  })
+  renapa!: string;
+
+  @ApiProperty({ minLength: 8, example: 'Colmena2026' })
+  @IsString()
+  @MinLength(8, { message: 'La contrasena debe tener al menos 8 caracteres.' })
+  @MaxLength(100)
+  password!: string;
+}
+
 export class LoginDto {
-  @ApiProperty({ example: 'productor@apitrace' })
+  @ApiProperty({
+    example: 'productor@apitrace',
+    description: 'Correo, CUIT (11 digitos, con o sin guiones) o nombre corto de las cuentas demo.',
+  })
   @IsString()
   email!: string;
 

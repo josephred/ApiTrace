@@ -17,6 +17,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { DteTransportDto } from './dte.dto';
+import { CARGO_TYPES, type CargoType } from '../cargo';
 
 export const MOVEMENT_TYPES = [
   'MATERIAL_MELARIO',
@@ -37,6 +38,7 @@ export const MATERIAL_TYPES = [
   'NUCLEO',
   'COLMENA',
   'OTRO',
+  'REINA',
 ] as const;
 
 export const UNITS = ['KG', 'LITRO', 'ALZA', 'TAMBOR', 'COLMENA', 'UNIDAD'] as const;
@@ -62,6 +64,22 @@ export class CreateMovementDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   destinationEstablishmentId!: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Apiario de destino, cuando colmenas o nucleos van a otro apiario.',
+  })
+  @IsOptional()
+  @IsUUID()
+  destinationApiaryId?: string;
+
+  @ApiPropertyOptional({
+    enum: CARGO_TYPES,
+    description: 'Lo que se transporta, con el vocabulario del asistente. Si se omite, se deduce del material.',
+  })
+  @IsOptional()
+  @IsEnum(CARGO_TYPES)
+  cargoType?: CargoType;
 
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()

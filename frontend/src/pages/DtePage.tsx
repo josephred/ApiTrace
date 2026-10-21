@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
 import { DTE_STATUS_FILTERS, formatDay } from '../lib/dte';
@@ -16,7 +16,6 @@ import {
 } from '../components/ui';
 import { DataList, type Column } from '../components/DataList';
 import { ResourceNotices } from '../components/ResourceNotices';
-import { DteWizard } from '../components/DteWizard';
 import { DraftBanner } from '../components/Panel';
 import type { DteListItem, DteSummary, Paginated } from '../lib/types';
 
@@ -42,7 +41,7 @@ export const DtePage = () => {
   const { user, canWrite, hasRole } = useAuth();
   const [params, setParams] = useSearchParams();
   const [pageSize, setPageSize] = useState(25);
-  const [creating, setCreating] = useState(false);
+  const navigate = useNavigate();
 
   const receiverRole = user?.role === 'SALA' || user?.role === 'ACOPIADOR';
   const defaultPerspective: Perspective = receiverRole
@@ -60,16 +59,14 @@ export const DtePage = () => {
 
   const list = useResource<Paginated<DteListItem>>(`/dte?${query.toString()}`);
   const summary = useResource<DteSummary>('/dte/summary');
-  const canIssue = canWrite && hasRole('PRODUCTOR');
+  // Arma trámites quien despacha: el productor y también la sala, el acopio o el fraccionador.
+  const canIssue = canWrite && hasRole('PRODUCTOR', 'SALA', 'ACOPIADOR', 'FRACCIONADOR');
+  const startNew = () => navigate('/dte/nuevo');
 
-  // El panel y el aviso del borrador abren el asistente con /dte?nuevo=1.
+  // Enlaces anteriores (/dte?nuevo=1) abren el asistente nuevo.
   const wantsNew = params.get('nuevo') === '1';
   useEffect(() => {
-    if (!wantsNew) return;
-    if (canIssue) setCreating(true);
-    const next = new URLSearchParams(params);
-    next.delete('nuevo');
-    setParams(next, { replace: true });
+    if (wantsNew) navigate(canIssue ? '/dte/nuevo' : '/dte', { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wantsNew, canIssue]);
 
@@ -175,8 +172,8 @@ export const DtePage = () => {
         help="dteList"
         actions={
           canIssue && (
-            <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
-              Nuevo DT-e
+            <Button variant="primary" icon="plus" onClick={startNew}>
+              Nuevo trámite DT-e
             </Button>
           )
         }
@@ -184,7 +181,7 @@ export const DtePage = () => {
 
       <ResourceNotices resource={list} />
 
-      {canIssue && !creating && <DraftBanner onResume={() => setCreating(true)} />}
+      {canIssue && <DraftBanner onResume={startNew} />}
 
       {integration && (
         <Notice
@@ -295,12 +292,12 @@ export const DtePage = () => {
               description={
                 perspective === 'recibidos'
                   ? 'Cuando un productor emita un DT-e hacia tu sala, va a aparecer acá para cerrarlo.'
-                  : 'El DT-e ampara el traslado de alzas melarias del apiario a la sala de extracción.'
+                  : 'El DT-e ampara el traslado: alzas a la sala, colmenas a una finca, tambores a fraccionar.'
               }
               action={
                 canIssue && !status ? (
-                  <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
-                    Preparar un DT-e
+                  <Button variant="primary" icon="plus" onClick={startNew}>
+                    Preparar un trámite
                   </Button>
                 ) : undefined
               }
@@ -309,18 +306,6 @@ export const DtePage = () => {
         />
       </Card>
 
-      {creating && (
-        <DteWizard
-          integration={integration ?? null}
-          blockedHolders={data?.blockedHolders}
-          onClose={() => setCreating(false)}
-          onDone={() => {
-            setCreating(false);
-            list.reload();
-            summary.reload();
-          }}
-        />
-      )}
     </div>
   );
 };

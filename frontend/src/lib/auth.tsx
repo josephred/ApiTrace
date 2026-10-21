@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { apiLogin, apiLogout, configureAuthHooks, setTokens } from './api';
+import { apiLogin, apiLogout, apiSignup, configureAuthHooks, setTokens } from './api';
 import { wipeLocalData } from './db';
 import type { AuthTokens, AuthUser, UserRole } from './types';
 
@@ -23,6 +23,8 @@ interface AuthContextValue {
   user: AuthUser | null;
   ready: boolean;
   login: (email: string, password: string) => Promise<void>;
+  /** «Creá tu cuenta»: alta del apicultor con nombre, CUIT, RENAPA y contraseña. */
+  signup: (data: { fullName: string; taxId: string; renapa: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   hasRole: (...roles: UserRole[]) => boolean;
   canWrite: boolean;
@@ -93,8 +95,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const result = await apiLogin<AuthTokens>(email, password);
+  const start = useCallback((result: AuthTokens) => {
     const session: StoredSession = {
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
@@ -105,17 +106,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(result.user);
   }, []);
 
+  const login = useCallback(
+    async (email: string, password: string) => {
+      start(await apiLogin<AuthTokens>(email, password));
+    },
+    [start],
+  );
+
+  const signup = useCallback(
+    async (data: { fullName: string; taxId: string; renapa: string; password: string }) => {
+      start(await apiSignup<AuthTokens>(data));
+    },
+    [start],
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       ready,
       login,
+      signup,
       logout,
       hasRole: (...roles: UserRole[]) =>
         Boolean(user && (user.role === 'ADMIN' || roles.includes(user.role))),
       canWrite: Boolean(user && user.role !== 'AUDITOR' && user.role !== 'CONSULTA'),
     }),
-    [user, ready, login, logout],
+    [user, ready, login, signup, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

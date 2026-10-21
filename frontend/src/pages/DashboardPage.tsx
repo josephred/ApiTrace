@@ -16,6 +16,7 @@ import {
 } from '../components/ui';
 import { DataList, type Column } from '../components/DataList';
 import { DraftBanner, HolderCard, Hero, OnRouteCard } from '../components/Panel';
+import { HeroIcon } from '../components/Illustrations';
 import type {
   Apiary,
   Drum,
@@ -307,6 +308,28 @@ export const DashboardPage = () => {
       )}
 
       {heroKind === 'issuer' && <DraftBanner />}
+
+      {/* Accesos del rediseño (doc 13): la carga de maestros y el mapa. */}
+      <nav className="home-tiles" aria-label="Accesos">
+        {role !== 'LABORATORIO' && role !== 'EXPORTADOR' && role !== 'CONSULTA' && (
+          <Link to="/carga" className="home-tile">
+            <HeroIcon name="databasePlus" size={44} />
+            <span className="home-tile-text">
+              <span className="home-tile-title">Carga de datos</span>
+              <span className="home-tile-sub">Apiarios, salas y traslados</span>
+            </span>
+            <Icon name="forward" size={22} />
+          </Link>
+        )}
+        <Link to="/mapa" className="home-tile">
+          <HeroIcon name="mapPin" size={44} />
+          <span className="home-tile-text">
+            <span className="home-tile-title">Mapa</span>
+            <span className="home-tile-sub">Dónde están tus apiarios y las salas</span>
+          </span>
+          <Icon name="forward" size={22} />
+        </Link>
+      </nav>
 
       {stale && (
         <Notice tone="warning" title="Estas viendo una copia local">

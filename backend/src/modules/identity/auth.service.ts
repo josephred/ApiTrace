@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  HttpStatus,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -9,13 +10,22 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { compare, hash } from 'bcryptjs';
 import { createHmac, randomBytes } from 'node:crypto';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../database/database.module';
-import { organization, refreshToken, user } from '../../database/schema';
+import {
+  organization,
+  producer,
+  refreshToken,
+  renapaRegistration,
+  user,
+} from '../../database/schema';
 import { AuditService } from '../../common/services/audit.service';
+import { DomainEvents, EventsService } from '../../common/services/events.service';
+import { DomainRuleException } from '../../common/exceptions/domain-rule.exception';
+import { formatCuit, isLegalEntityCuit, isValidCuit, normalizeCuit } from '../../common/utils/cuit';
 import type { AuthenticatedUser } from '../../common/types';
 import type { JwtPayload } from './jwt.strategy';
-import type { LoginDto, RegisterDto } from './dto/auth.dto';
+import type { LoginDto, RegisterDto, SignupDto } from './dto/auth.dto';
 
 /**
  * Dominios de las cuentas de demostracion, en orden de preferencia, para el
@@ -46,6 +56,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly audit: AuditService,
+    private readonly events: EventsService,
   ) {}
 
   /**
@@ -110,20 +121,168 @@ export class AuthService {
     return result;
   }
 
-  /** CU-02. */
+  /**
+   * «Creá tu cuenta» (POST /auth/signup). Alta del apicultor en un solo acto:
+   * organizacion, productor, RENAPA declarado y usuario PRODUCTOR activo. O
+   * queda todo o no queda nada. Devuelve la sesion iniciada.
+   *
+   * La CUIT y el RENAPA identifican a una sola persona: si ya figuran, no se
+   * crea una segunda cuenta (el mensaje lo dice sin revelar de quien es).
+   */
+  async signup(dto: SignupDto, context?: { ip?: string; userAgent?: string }): Promise<AuthTokens> {
+    const fullName = dto.fullName.trim().replace(/\s+/g, ' ');
+    const taxId = normalizeCuit(dto.taxId);
+    if (!taxId || !isValidCuit(taxId)) {
+      throw new DomainRuleException(
+        HttpStatus.BAD_REQUEST,
+        'CUIT_INVALIDA',
+        'La CUIT no es valida: revisa los 11 digitos (el ultimo es el verificador).',
+      );
+    }
+    const renapa = dto.renapa.trim().toUpperCase().replace(/\s+/g, '');
+    const dashed = formatCuit(taxId) ?? taxId;
+
+    const [takenUser, takenProducer, takenOrg, takenRenapa] = await Promise.all([
+      this.db.select({ id: user.id }).from(user).where(eq(user.taxId, taxId)).limit(1),
+      this.db
+        .select({ id: producer.id })
+        .from(producer)
+        .where(or(eq(producer.taxId, taxId), eq(producer.taxId, dashed)))
+        .limit(1),
+      this.db
+        .select({ id: organization.id })
+        .from(organization)
+        .where(or(eq(organization.taxId, taxId), eq(organization.taxId, dashed)))
+        .limit(1),
+      this.db
+        .select({ id: renapaRegistration.id })
+        .from(renapaRegistration)
+        .where(sql`upper(${renapaRegistration.number}) = ${renapa}`)
+        .limit(1),
+    ]);
+    if (takenUser.length > 0 || takenProducer.length > 0 || takenOrg.length > 0) {
+      throw new DomainRuleException(
+        HttpStatus.CONFLICT,
+        'CUIT_REGISTRADA',
+        'Ya hay una cuenta con esa CUIT. Inicia sesion o pedi ayuda a quien administra ApiTrace.',
+      );
+    }
+    if (takenRenapa.length > 0) {
+      throw new DomainRuleException(
+        HttpStatus.CONFLICT,
+        'RENAPA_REGISTRADO',
+        'Ese RENAPA ya esta registrado en ApiTrace. Revisalo o pedi ayuda a quien administra ApiTrace.',
+      );
+    }
+
+    const passwordHash = await hash(dto.password, BCRYPT_ROUNDS);
+    const account = await this.db.transaction(async (tx) => {
+      const [org] = await tx
+        .insert(organization)
+        .values({ name: fullName, legalName: fullName, taxId, type: 'PRODUCTOR' })
+        .returning();
+      const [created] = await tx
+        .insert(user)
+        .values({
+          email: null,
+          taxId,
+          passwordHash,
+          fullName,
+          role: 'PRODUCTOR',
+          status: 'ACTIVE',
+          organizationId: org.id,
+        })
+        .returning();
+      const [holder] = await tx
+        .insert(producer)
+        .values({
+          organizationId: org.id,
+          businessName: fullName,
+          personType: isLegalEntityCuit(taxId) ? 'JURIDICA' : 'FISICA',
+          taxId,
+          createdById: created.id,
+        })
+        .returning();
+      const [registration] = await tx
+        .insert(renapaRegistration)
+        .values({
+          producerId: holder.id,
+          number: renapa,
+          status: 'PENDING_VERIFICATION',
+          externalSystem: 'MANUAL',
+          syncStatus: 'NOT_APPLICABLE',
+          sourceNote: 'Declarado por el titular al crear la cuenta',
+        })
+        .returning();
+
+      await this.events.publish(
+        {
+          eventType: DomainEvents.ProducerRegistered,
+          entityType: 'producer',
+          entityId: holder.id,
+          actorUserId: created.id,
+          organizationId: org.id,
+          payload: { businessName: holder.businessName, taxId, via: 'signup' },
+        },
+        tx,
+      );
+      await this.events.publish(
+        {
+          eventType: DomainEvents.RenapaAssociated,
+          entityType: 'producer',
+          entityId: holder.id,
+          actorUserId: created.id,
+          organizationId: org.id,
+          payload: { renapaId: registration.id, number: registration.number },
+        },
+        tx,
+      );
+      return created;
+    });
+
+    const authenticated: AuthenticatedUser = {
+      id: account.id,
+      email: account.email,
+      fullName: account.fullName,
+      role: account.role,
+      organizationId: account.organizationId,
+    };
+    await this.audit.record({
+      action: 'USER_SIGNED_UP',
+      entityType: 'user',
+      entityId: account.id,
+      actor: authenticated,
+      ip: context?.ip,
+      userAgent: context?.userAgent,
+      after: { taxId, role: account.role, status: account.status, renapa },
+    });
+    await this.db.update(user).set({ lastLoginAt: new Date() }).where(eq(user.id, account.id));
+    return this.issueTokens(authenticated, context);
+  }
+
+  /** CU-02. Se entra con el correo, con la CUIT o con el nombre corto de una cuenta demo. */
   async login(dto: LoginDto, context?: { ip?: string; userAgent?: string }): Promise<AuthTokens> {
     const typed = dto.email.trim().toLowerCase();
-    // Un correo completo identifica una sola cuenta: se busca exacto. Un nombre
-    // corto ("productor") es el atajo de las cuentas de demostracion y se
-    // resuelve en un orden fijo, para que nunca dependa del orden de la base.
-    const candidates = typed.includes('@')
-      ? [typed]
-      : DEMO_LOGIN_DOMAINS.map((domain) => `${typed}@${domain}`);
+    const cuit = normalizeCuit(typed);
+    const looksLikeCuit = !typed.includes('@') && /^[\d\s.-]+$/.test(typed) && cuit?.length === 11;
 
-    const rows = await this.db.select().from(user).where(inArray(user.email, candidates));
-    const record = candidates
-      .map((candidate) => rows.find((row) => row.email === candidate))
-      .find((row) => row !== undefined);
+    let record: typeof user.$inferSelect | undefined;
+    if (looksLikeCuit && cuit) {
+      const rows = await this.db.select().from(user).where(eq(user.taxId, cuit)).limit(1);
+      record = rows[0];
+    } else {
+      // Un correo completo identifica una sola cuenta: se busca exacto. Un nombre
+      // corto ("productor") es el atajo de las cuentas de demostracion y se
+      // resuelve en un orden fijo, para que nunca dependa del orden de la base.
+      const candidates = typed.includes('@')
+        ? [typed]
+        : DEMO_LOGIN_DOMAINS.map((domain) => `${typed}@${domain}`);
+
+      const rows = await this.db.select().from(user).where(inArray(user.email, candidates));
+      record = candidates
+        .map((candidate) => rows.find((row) => row.email === candidate))
+        .find((row) => row !== undefined);
+    }
 
     // Mensaje unico para credenciales invalidas: no revelar si el correo existe.
     const invalid = new UnauthorizedException('Credenciales invalidas.');

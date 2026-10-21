@@ -39,6 +39,11 @@ export const registrationStatusEnum = pgEnum('registration_status', [
   'CANCELLED',
 ]);
 
+/**
+ * Tipo de establecimiento. FRACCIONADORA es la sala de fraccionamiento y
+ * FINCA_POLINIZACION el campo de un tercero al que se llevan colmenas a
+ * polinizar (migracion 0003): ambos son origen o destino del asistente del DT-e.
+ */
 export const establishmentTypeEnum = pgEnum('establishment_type', [
   'APIARIO_BASE',
   'SALA_EXTRACCION',
@@ -47,6 +52,7 @@ export const establishmentTypeEnum = pgEnum('establishment_type', [
   'DEPOSITO',
   'LABORATORIO',
   'OTRO',
+  'FINCA_POLINIZACION',
 ]);
 
 export const movementTypeEnum = pgEnum('movement_type', [
@@ -68,6 +74,21 @@ export const materialTypeEnum = pgEnum('material_type', [
   'NUCLEO',
   'COLMENA',
   'OTRO',
+  'REINA',
+]);
+
+/**
+ * Lo que se transporta, tal como lo elige la persona en el paso 1 del
+ * asistente del DT-e («¿Qué transportás?»). Es la vista del apicultor; el
+ * movimiento conserva ademas su tipo, material y unidad del modelo canonico.
+ */
+export const cargoTypeEnum = pgEnum('cargo_type', [
+  'ALZAS',
+  'COLMENAS',
+  'NUCLEOS',
+  'TAMBORES',
+  'FRASCOS',
+  'REINAS',
 ]);
 
 export const unitOfMeasureEnum = pgEnum('unit_of_measure', [

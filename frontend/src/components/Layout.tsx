@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useSync } from '../lib/sync';
 import { formatRelative } from '../lib/format';
 import { itemLabel, navFor, quickNavFor, type NavItem } from '../lib/nav';
 import { roleLabel } from '../lib/vocabulary';
+import type { UserRole } from '../lib/types';
 import { Icon, Logo } from './Icon';
-import { Button, HelpTip, Sheet } from './ui';
+import { Button, HelpTip } from './ui';
 import { InstallPrompt } from './InstallPrompt';
 import { UpdatePrompt } from './UpdatePrompt';
 import { Onboarding } from './Onboarding';
@@ -21,7 +21,7 @@ import { Onboarding } from './Onboarding';
  * registrado. Aca hay cuatro situaciones y una sola barra, y solo la última
  * interrumpe, porque es la única que necesita a una persona.
  */
-const SyncBar = () => {
+export const SyncBar = () => {
   const { online, syncing, pendingCount, failedCount, flush } = useSync();
   const navigate = useNavigate();
 
@@ -118,16 +118,15 @@ const AccountBlock = ({ onLogout }: { onLogout: () => void }) => {
    Composicion
    ========================================================================= */
 
+/** En la barra inferior, el rótulo corto de la captura: «DT-e». */
+const tabLabel = (item: NavItem, role: UserRole): string =>
+  item.to === '/dte' ? 'DT-e' : itemLabel(item, role);
+
 export const Layout = () => {
   const { user, logout } = useAuth();
   const { pendingCount, failedCount } = useSync();
   const navigate = useNavigate();
   const location = useLocation();
-  const [moreOpen, setMoreOpen] = useState(false);
-
-  useEffect(() => {
-    setMoreOpen(false);
-  }, [location.pathname]);
 
   const handleLogout = async () => {
     await logout();
@@ -138,12 +137,14 @@ export const Layout = () => {
 
   const groups = navFor(user.role);
   const quick = quickNavFor(user.role);
-  const quickPaths = new Set(quick.map((item) => item.to));
-  const rest = groups
-    .map((group) => ({ ...group, items: group.items.filter((item) => !quickPaths.has(item.to)) }))
-    .filter((group) => group.items.length > 0);
-
   const queueCount = pendingCount + failedCount;
+
+  // Inicio queda marcado también en las pantallas que se abren desde ahí
+  // (Carga de datos y sus maestros), como en la captura de referencia.
+  const underHome = ['/carga', '/apiaries', '/salas', '/traslados'].some((prefix) =>
+    location.pathname.startsWith(prefix),
+  );
+
   const renderNavLink = (item: NavItem) => (
     <NavLink
       key={item.to}
@@ -167,7 +168,7 @@ export const Layout = () => {
       <aside className="sidebar">
         <div className="brand">
           <Logo size={28} />
-          <span>ApiTrace</span>
+          <span translate="no">ApiTrace</span>
         </div>
         <nav className="nav" aria-label="Secciones">
           {groups.map((group) => (
@@ -213,65 +214,22 @@ export const Layout = () => {
             key={item.to}
             to={item.to}
             end={item.end}
-            className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
+            className={({ isActive }) =>
+              isActive || (item.to === '/' && underHome) ? 'tab active' : 'tab'
+            }
           >
-            <Icon name={item.icon} size={21} />
-            <span className="tab-label">{itemLabel(item, user.role)}</span>
+            <Icon name={item.icon} size={26} strokeWidth={1.9} className={`tab-icon tab-icon-${item.icon}`} />
+            <span className="tab-label">{tabLabel(item, user.role)}</span>
+            {item.to === '/settings' && queueCount > 0 && (
+              <span className="tab-badge" aria-label={`${queueCount} por enviar`}>
+                {queueCount}
+              </span>
+            )}
           </NavLink>
         ))}
-        <button
-          type="button"
-          className={moreOpen ? 'tab active' : 'tab'}
-          onClick={() => setMoreOpen(true)}
-          aria-haspopup="dialog"
-          aria-expanded={moreOpen}
-        >
-          <Icon name="more" size={21} />
-          <span className="tab-label">Más</span>
-          {!quickPaths.has('/pending') && queueCount > 0 && (
-            <span className="tab-badge" aria-hidden="true">
-              {queueCount}
-            </span>
-          )}
-        </button>
       </nav>
 
       <Onboarding />
-
-      {moreOpen && (
-        <Sheet title="Todas las secciones" onClose={() => setMoreOpen(false)}>
-          <nav aria-label="Más secciones">
-            {rest.map((group) => (
-              <div className="nav-group" key={group.group} style={{ marginBottom: 'var(--sp-4)' }}>
-                <div className="nav-group-label">{group.group}</div>
-                {group.items.map(renderNavLink)}
-              </div>
-            ))}
-          </nav>
-          <div
-            style={{
-              borderTop: '1px solid var(--border)',
-              marginTop: 'var(--sp-2)',
-              paddingTop: 'var(--sp-4)',
-            }}
-          >
-            <div className="row-between">
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 650 }} className="truncate">
-                  {user.fullName}
-                </div>
-                <div className="small faint">{roleLabel(user.role)}</div>
-              </div>
-              <div className="row row-tight">
-                <InstallPrompt />
-                <Button variant="secondary" icon="logout" onClick={() => void handleLogout()}>
-                  Salir
-                </Button>
-              </div>
-            </div>
-          </div>
-        </Sheet>
-      )}
     </div>
   );
 };

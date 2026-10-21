@@ -14,8 +14,9 @@
 /*
    El tema es una eleccion del usuario, no del sistema operativo.
    `:root` lleva siempre data-theme="light" o "dark" (lo fija un script en
-   index.html antes del primer pintado, para que no haya destello). Claro es el
-   valor por defecto: la aplicacion se usa en el campo, a pleno sol.
+   index.html antes del primer pintado, para que no haya destello). Desde el
+   rediseño (doc 13) el oscuro es el valor por defecto; el claro sigue a un
+   toque en Configuración para quien trabaja a pleno sol.
 */
 :root,
 :root[data-theme='light'] {
@@ -83,6 +84,16 @@
   --shadow-md: 0 1px 3px rgb(36 29 21 / 0.07), 0 4px 12px rgb(36 29 21 / 0.05);
   --shadow-lg: 0 12px 32px rgb(36 29 21 / 0.16), 0 2px 8px rgb(36 29 21 / 0.08);
 
+  /* ------------------------------------------------- piezas del rediseño */
+  --nav-bg:   #ffffff;
+  --band:     #f7ead2;
+  --done:     #1e8e3e;
+  --sky:      #0369a1;
+  --sky-fg:   #ffffff;
+  --sky-soft: #e0f2fe;
+  --field:    #ffffff;
+  --field-2:  #f5f1e8;
+
   /* ------------------------------------------------------------ estructura */
   --tap: 44px;
   --sidebar-w: 248px;
@@ -94,37 +105,49 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --brand:            var(--brand-400);
-  --primary:          var(--brand-300);
-  --primary-hover:    var(--brand-200);
-  --primary-fg:       #1f1603;
-  --primary-soft:     #33260f;
-  --primary-soft-fg:  var(--brand-200);
-  --primary-soft-br:  #4d3a15;
+  /*
+     Oscuro carbón (doc 13): los tonos salen de las pantallas de referencia
+     del rediseño. Fondo gris carbón apenas azulado, tarjetas un escalón más
+     claras y el ámbar de la miel como único acento. Es el tema por defecto.
+  */
+  --brand:            #f0ae3a;
+  --primary:          #f0ae3a;   /* 8,9:1 sobre el fondo */
+  --primary-hover:    #f5be5a;
+  --primary-fg:       #1c1406;   /* 9,4:1 sobre el ámbar */
+  --primary-soft:     #3a2a14;   /* tarjeta elegida */
+  --primary-soft-fg:  #f5c76a;   /* 8,7:1 */
+  --primary-soft-br:  #f0ae3a;
 
-  /* Mas profundo que la version anterior: el fondo baja de 0,0068 a 0,0039 de
-     luminancia, poco menos de la mitad. Gana contraste la superficie elevada,
-     que es lo que separa una tarjeta del fondo. */
-  --bg:        #100c08;
-  --surface:   #1a1410;
-  --surface-2: #241d17;
-  --surface-3: #302720;
+  --bg:        #1a1b20;
+  --surface:   #25262d;
+  --surface-2: #2c2d35;
+  --surface-3: #34353e;
 
-  --text-1: #f5efe5;   /* 16,0:1 sobre superficie */
-  --text-2: #c2b6a2;   /*  9,1:1 */
-  --text-3: #9c8f7a;   /*  5,8:1 */
+  --text-1: #f4f4f6;   /* 13,7:1 sobre superficie */
+  --text-2: #c9c9d1;   /*  9,2:1 */
+  --text-3: #a3a4ad;   /*  6,1:1 */
 
-  --border:         #332b22;
-  --border-control: #8a8070;   /* 4,7:1 */
+  --border:         #30313a;
+  --border-control: #7a7b86;   /* 3,6:1 */
 
   --success-fg: #7fd6a6;  --success-bg: #0f2417;  --success-br: #275437;
-  --warning-fg: #ebbe5e;  --warning-bg: #2a2010;  --warning-br: #574216;
+  --warning-fg: #f3c066;  --warning-bg: #3a2a14;  --warning-br: #6b4b1a;
   --danger-fg:  #f59c92;  --danger-bg:  #2d1512;  --danger-br:  #642c26;
   --info-fg:    #92c0ea;  --info-bg:    #111f2d;  --info-br:    #284768;
 
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
-  --shadow-md: 0 1px 3px rgb(0 0 0 / 0.55), 0 4px 12px rgb(0 0 0 / 0.4);
-  --shadow-lg: 0 14px 36px rgb(0 0 0 / 0.65), 0 2px 8px rgb(0 0 0 / 0.5);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.45);
+  --shadow-md: 0 1px 3px rgb(0 0 0 / 0.5), 0 4px 12px rgb(0 0 0 / 0.35);
+  --shadow-lg: 0 14px 36px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.45);
+
+  /* Piezas del rediseño */
+  --nav-bg:     #131217;   /* barra inferior y lateral */
+  --band:       #2e2417;   /* franja de pasos del asistente */
+  --done:       #34a853;   /* paso cumplido */
+  --sky:        #36c9fc;   /* acento de Traslados */
+  --sky-fg:     #0b1a22;
+  --sky-soft:   #12303d;
+  --field:      #25262d;   /* tarjeta-campo de los formularios */
+  --field-2:    #2c2d35;   /* recuadro de la foto */
 }
 
 /* ========================================================================

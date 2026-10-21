@@ -4,6 +4,7 @@ import { DRIZZLE, type Database } from '../../database/database.module';
 import { establishment, organization, producer, renspaRegistration } from '../../database/schema';
 import { AccessControlService } from '../../common/services/access-control.service';
 import { DomainEvents, EventsService } from '../../common/services/events.service';
+import { MediaService } from '../media/media.service';
 import type { AuthenticatedUser } from '../../common/types';
 import type { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import type {
@@ -19,9 +20,10 @@ export class EstablishmentService {
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly access: AccessControlService,
     private readonly events: EventsService,
+    private readonly media: MediaService,
   ) {}
 
-  /** CU-06 (alta del establecimiento). */
+  /** CU-06 (alta del establecimiento). Las salas nuevas llegan con ubicacion y foto. */
   async create(dto: CreateEstablishmentDto, actor: AuthenticatedUser, correlationId?: string) {
     this.access.assertCanWrite(actor);
     const organizationId =
@@ -41,11 +43,19 @@ export class EstablishmentService {
     const senasaCode = await this.assertSenasaCodeAvailable(dto.senasaCode);
 
     return this.db.transaction(async (tx) => {
+      const photoId = dto.photo
+        ? await this.media.store(
+            dto.photo,
+            { organizationId, entityType: 'establishment', actorId: actor.id },
+            tx,
+          )
+        : null;
       const [created] = await tx
         .insert(establishment)
         .values({
           organizationId,
           producerId: dto.producerId ?? null,
+          photoId,
           name: dto.name.trim(),
           type: dto.type,
           address: dto.address ?? null,
@@ -53,7 +63,7 @@ export class EstablishmentService {
           province: dto.province ?? null,
           latitude: dto.latitude !== undefined ? String(dto.latitude) : null,
           longitude: dto.longitude !== undefined ? String(dto.longitude) : null,
-          rne: dto.rne ?? null,
+          rne: dto.rne?.trim().toUpperCase() || null,
           senasaCode,
           senasaStatus: dto.senasaStatus ?? 'PENDING_VERIFICATION',
           senasaValidTo: dto.senasaValidTo ?? null,
@@ -151,21 +161,32 @@ export class EstablishmentService {
 
   async update(id: string, dto: UpdateEstablishmentDto, actor: AuthenticatedUser) {
     this.access.assertCanWrite(actor);
-    await this.findOne(id, actor);
+    const current = await this.findOne(id, actor);
     const senasaCode =
       dto.senasaCode !== undefined ? await this.assertSenasaCodeAvailable(dto.senasaCode, id) : undefined;
-    const [updated] = await this.db
-      .update(establishment)
-      .set({
-        ...dto,
-        senasaCode,
-        latitude: dto.latitude !== undefined ? String(dto.latitude) : undefined,
-        longitude: dto.longitude !== undefined ? String(dto.longitude) : undefined,
-        updatedAt: new Date(),
-      })
-      .where(eq(establishment.id, id))
-      .returning();
-    return updated;
+    const { photo, ...rest } = dto;
+    return this.db.transaction(async (tx) => {
+      const photoId = photo
+        ? await this.media.store(
+            photo,
+            { organizationId: current.organizationId, entityType: 'establishment', actorId: actor.id },
+            tx,
+          )
+        : undefined;
+      const [updated] = await tx
+        .update(establishment)
+        .set({
+          ...rest,
+          senasaCode,
+          photoId,
+          latitude: dto.latitude !== undefined ? String(dto.latitude) : undefined,
+          longitude: dto.longitude !== undefined ? String(dto.longitude) : undefined,
+          updatedAt: new Date(),
+        })
+        .where(eq(establishment.id, id))
+        .returning();
+      return updated;
+    });
   }
 
   /** CU-06 (asociacion del RENSPA). */
@@ -263,6 +284,7 @@ export class EstablishmentService {
         ilike(establishment.name, like),
         ilike(establishment.locality, like),
         ilike(establishment.senasaCode, like),
+        ilike(establishment.rne, like),
       );
       if (search) conditions.push(search);
     }
@@ -279,6 +301,10 @@ export class EstablishmentService {
           senasaCode: establishment.senasaCode,
           senasaStatus: establishment.senasaStatus,
           senasaValidTo: establishment.senasaValidTo,
+          rne: establishment.rne,
+          latitude: establishment.latitude,
+          longitude: establishment.longitude,
+          photoId: establishment.photoId,
           organizationId: establishment.organizationId,
           organizationName: organization.name,
         })

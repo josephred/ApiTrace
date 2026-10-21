@@ -47,14 +47,29 @@ describe('DT-e a medio armar', () => {
   });
 
   it('solo ofrece retomar si se eligio o cargo algo', () => {
-    expect(isMeaningfulDraft({ transportPlate: 'AA123BC', loadDate: '2026-09-21' }, null)).toBe(false);
-    expect(isMeaningfulDraft({ apiaryId: 'a1' }, null)).toBe(true);
+    // Elegir la carga (alzas viene elegida) o la fecha no alcanza para ofrecer retomarlo.
+    expect(isMeaningfulDraft({ cargo: 'ALZAS', loadDate: '2026-09-21' }, null)).toBe(false);
+    expect(isMeaningfulDraft({ originId: 'a1' }, null)).toBe(true);
+    expect(isMeaningfulDraft({ vehicleId: 'v1' }, null)).toBe(true);
     expect(
       isMeaningfulDraft(
         {},
         { movementId: 'm1', movementCode: 'MOV-1', origin: 'A', destination: 'S', replaces: null },
       ),
     ).toBe(true);
+  });
+
+  it('no retoma un borrador del asistente anterior de cuatro pasos', async () => {
+    const { setMeta } = await import('./db');
+    await setMeta('dteDraft:u1', {
+      version: 1,
+      userId: 'u1',
+      step: 3,
+      values: { apiaryId: 'a1' },
+      context: null,
+      savedAt: Date.now(),
+    });
+    expect(await loadDteDraft('u1')).toBeNull();
   });
 
   it('recuerda el ultimo apiario y la ultima sala usados', async () => {

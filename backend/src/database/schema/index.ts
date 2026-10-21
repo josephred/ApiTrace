@@ -1,5 +1,7 @@
 export * from './enums';
 export * from './identity';
+export * from './media';
+export * from './zone';
 export * from './producer';
 export * from './establishment';
 export * from './apiary';

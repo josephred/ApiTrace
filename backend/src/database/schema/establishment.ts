@@ -16,6 +16,7 @@ import {
   syncStatusEnum,
 } from './enums';
 import { organization } from './identity';
+import { mediaFile } from './media';
 import { producer } from './producer';
 
 /**
@@ -48,6 +49,8 @@ export const establishment = pgTable(
     /** Habilitacion vigente en SENASA. SIGSA rechaza el DT-e si la sala no esta habilitada. */
     senasaStatus: registrationStatusEnum('senasa_status').notNull().default('PENDING_VERIFICATION'),
     senasaValidTo: date('senasa_valid_to', { mode: 'string' }),
+    /** Foto tomada al registrarlo (media_file, migracion 0003). */
+    photoId: uuid('photo_id').references(() => mediaFile.id, { onDelete: 'set null' }),
     createdById: uuid('created_by_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -56,6 +59,7 @@ export const establishment = pgTable(
     index('establishment_org_status_idx').on(t.organizationId, t.status),
     index('establishment_type_status_idx').on(t.type, t.status),
     uniqueIndex('establishment_senasa_code_uq').on(t.senasaCode),
+    index('establishment_photo_idx').on(t.photoId),
   ],
 );
 

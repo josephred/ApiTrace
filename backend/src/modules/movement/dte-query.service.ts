@@ -27,11 +27,14 @@ import {
   addDays,
   defaultExpiryDate,
   effectiveStatus,
+  normalizePlate,
   suggestDeclaredQuantity,
   toArDate,
   type DteStatus,
 } from './dte.rules';
 import { SENASA_GATEWAY, type SenasaGateway } from './senasa/senasa.gateway';
+import { VehicleService } from '../transport/vehicle.service';
+import { cargoOfMovement } from './cargo';
 import type { DteAction, DteCheck, DteContext, MovementRow } from './dte.types';
 import type { ListDteQueryDto, PreflightDteDto } from './dto/dte.dto';
 
@@ -55,6 +58,7 @@ export class DteQueryService {
     private readonly checks: DteChecksService,
     @Inject(SENASA_GATEWAY) private readonly gateway: SenasaGateway,
     private readonly config: ConfigService,
+    private readonly vehicles: VehicleService,
   ) {}
 
   /** El DT-e, si el usuario puede verlo: emite, recibe o tiene alcance global. */
@@ -172,6 +176,9 @@ export class DteQueryService {
 
     const target = await this.movements.findRaw(row.movementId);
     const ctx = await this.checks.contextForMovement(target);
+    const [destinationApiary] = target.destinationApiaryId
+      ? await this.db.select().from(apiary).where(eq(apiary.id, target.destinationApiaryId)).limit(1)
+      : [];
     const [history, related, [received]] = await Promise.all([
       this.queries.history(id),
       this.queries.listForMovement(row.movementId),
@@ -190,6 +197,7 @@ export class DteQueryService {
         receivedAt: target.receivedAt,
         quantity: target.quantity,
         unit: target.unit,
+        cargoType: cargoOfMovement(target),
         requiresDocument: target.requiresDocument,
         driverName: target.driverName,
       },
@@ -222,6 +230,14 @@ export class DteQueryService {
         locality: ctx.destination.locality,
         province: ctx.destination.province,
       },
+      destinationApiary: destinationApiary
+        ? {
+            id: destinationApiary.id,
+            code: destinationApiary.code,
+            name: destinationApiary.name,
+            renapaCode: destinationApiary.renapaCode,
+          }
+        : null,
       holder: ctx.holder
         ? { id: ctx.holder.id, businessName: ctx.holder.businessName, taxId: ctx.holder.taxId }
         : null,
@@ -309,23 +325,39 @@ export class DteQueryService {
   }
 
   /** Verificacion previa sin efectos: lo que SIGSA revisaria antes de emitir. */
-  async preflight(dto: PreflightDteDto, actor: AuthenticatedUser) {
+  async preflight(input: PreflightDteDto, actor: AuthenticatedUser) {
     const now = new Date();
+    const dto = await this.vehicles.completeTransport(input, actor);
     let ctx: DteContext;
     if (dto.movementId) {
       const found = await this.movements.findOne(dto.movementId, actor);
       ctx = await this.checks.contextForMovement(found);
       assertIssuer(actor, ctx.origin.organizationId);
     } else {
-      if (!dto.apiaryId || !dto.destinationEstablishmentId) {
-        throw new DomainRuleException(
-          HttpStatus.BAD_REQUEST,
-          'ORIGEN_DESTINO_REQUERIDOS',
-          'Indica el apiario de origen y la sala de destino, o un movimiento existente.',
-        );
+      const route = await this.checks.contextForRoute(dto);
+      assertIssuer(actor, route.origin.organizationId);
+      const cargo = dto.cargoType ?? 'ALZAS';
+      if (!this.checks.isApiSem(cargo, route)) {
+        // Tramite que se emite en SIGSA: se revisa lo que se puede, sin pedido por API.
+        const checks = this.checks.buildTramiteChecks(route, {
+          cargo,
+          quantity: dto.declaredQuantity ?? null,
+          loadDate: dto.loadDate,
+          transport: {
+            type: dto.transport?.type ?? null,
+            plate: normalizePlate(dto.transport?.plate),
+            trailerPlate: normalizePlate(dto.transport?.trailerPlate),
+          },
+        });
+        return {
+          ok: !checks.some((check) => check.status === 'error'),
+          kind: 'TRAMITE' as const,
+          mode: this.gateway.mode,
+          checks,
+          suggestion: null,
+        };
       }
-      ctx = await this.checks.contextForNew(dto.apiaryId, dto.destinationEstablishmentId);
-      assertIssuer(actor, ctx.origin.organizationId);
+      ctx = route;
     }
 
     const draft = normalizeDraft(dto);
@@ -340,6 +372,7 @@ export class DteQueryService {
 
     return {
       ok: !all.some((check) => check.status === 'error'),
+      kind: 'API_SEM' as const,
       mode: this.gateway.mode,
       checks: all,
       suggestion: {

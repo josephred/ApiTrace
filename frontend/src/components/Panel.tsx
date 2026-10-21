@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
 import { DRAFT_STEP_NAMES, useDteDraft } from '../lib/dteDraft';
+import { CARGO, type CargoType } from '../lib/cargo';
 import { validityWindow } from '../lib/dte';
 import { formatCuit, formatRelative } from '../lib/format';
 import { Icon } from './Icon';
@@ -51,7 +52,7 @@ export const Hero = ({
         {kind === 'issuer'
           ? blocked
             ? 'Tenés DT-e caducados: podés armar borradores, pero SIGSA no deja emitir hasta regularizar.'
-            : '¿Sale una carga para la sala? El DT-e se arma en cuatro pasos, con o sin señal.'
+            : '¿Sale una carga? El trámite DT-e se arma en cinco pasos, con o sin señal.'
           : pending > 0
             ? `Hay ${pending === 1 ? 'un DT-e' : `${pending} DT-e`} para cerrar. Al descargar, pedí el código impreso y contá las alzas.`
             : '¿Llegó una carga? Cerrá el DT-e con el código impreso y las alzas que contaste.'}
@@ -59,9 +60,9 @@ export const Hero = ({
     </div>
     <div className="hero-actions">
       {kind === 'issuer' ? (
-        <Link to="/dte?nuevo=1" className="btn btn-hero">
+        <Link to="/dte/nuevo" className="btn btn-hero">
           <Icon name="plus" size={20} strokeWidth={2.4} />
-          Nuevo DT-e
+          Nuevo trámite DT-e
         </Link>
       ) : (
         <Link to="/dte?perspective=recibidos" className="btn btn-hero">
@@ -90,8 +91,10 @@ export const DraftBanner = ({ onResume }: { onResume?: () => void }) => {
   if (!draft || !canWrite) return null;
 
   const values = draft.values;
+  const cargo = (values.cargo in CARGO ? values.cargo : 'ALZAS') as CargoType;
   const facts = [
-    values.declaredQuantity ? `${values.declaredQuantity} alzas` : null,
+    values.quantity ? `${values.quantity} ${CARGO[cargo].plural}` : null,
+    values.originName && values.destinationName ? `de ${values.originName} a ${values.destinationName}` : null,
     draft.context ? `reemplazo para ${draft.context.movementCode}` : null,
   ].filter(Boolean);
 
@@ -101,7 +104,7 @@ export const DraftBanner = ({ onResume }: { onResume?: () => void }) => {
         <Icon name="document" size={20} />
       </span>
       <div className="grow">
-        <div className="draft-title">Tenés un DT-e a medio armar</div>
+        <div className="draft-title">Tenés un trámite DT-e a medio armar</div>
         <div className="small muted">
           Quedó en {DRAFT_STEP_NAMES[draft.step] ?? 'el asistente'}
           {facts.length > 0 ? `, ${facts.join(', ')}` : ''}. Guardado {formatRelative(draft.savedAt)}.
@@ -115,14 +118,14 @@ export const DraftBanner = ({ onResume }: { onResume?: () => void }) => {
           size="sm"
           variant="primary"
           icon="play"
-          onClick={() => (onResume ? onResume() : navigate('/dte?nuevo=1'))}
+          onClick={() => (onResume ? onResume() : navigate('/dte/nuevo'))}
         >
           Continuar
         </Button>
       </div>
       {confirming && (
         <ConfirmDialog
-          title="¿Descartar el DT-e a medio armar?"
+          title="¿Descartar el trámite a medio armar?"
           description="Se borra lo que cargaste en este dispositivo. No cambia ningún DT-e ya guardado."
           confirmLabel="Descartar"
           onCancel={() => setConfirming(false)}

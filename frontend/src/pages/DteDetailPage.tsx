@@ -1,5 +1,5 @@
 import { useCallback, useState, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiSend } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
@@ -31,7 +31,7 @@ import {
 } from '../components/ui';
 import { ResourceNotices } from '../components/ResourceNotices';
 import { Fields, Form, FormError, useForm, type FieldSpec } from '../components/Form';
-import { DteWizard, RouteLine } from '../components/DteWizard';
+import { RouteLine } from '../components/DteTramite';
 import { SlideToConfirm } from '../components/SlideToConfirm';
 import type { DteDraftContext } from '../lib/dteDraft';
 import type { DteAction, DteDetail, DteStatus } from '../lib/types';
@@ -57,12 +57,12 @@ const reissueContext = (
   destination: `${dte.destination.name}${dte.destination.senasaCode ? ` (${dte.destination.senasaCode})` : ''}`,
   replaces: dte.number,
   reason: dte.voidReason ?? null,
+  cargoType: dte.movement.cargoType ?? 'ALZAS',
   defaults: {
-    estimatedQuantity: dte.estimatedQuantity ? String(dte.estimatedQuantity) : '',
-    declaredQuantity: dte.declaredQuantity ? String(dte.declaredQuantity) : '',
-    transportType: dte.transportType ?? 'CAMIONETA',
+    cargo: dte.movement.cargoType ?? 'ALZAS',
+    quantity: dte.declaredQuantity ? String(dte.declaredQuantity) : '',
+    touchedQuantity: '1',
     transportPlate: dte.transportPlate ?? '',
-    transportTrailerPlate: dte.transportTrailerPlate ?? '',
   },
 });
 
@@ -367,10 +367,10 @@ const buildActions = (dte: DteDetail): Partial<Record<ActionSpec['key'], ActionS
 export const DteDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const resource = useResource<DteDetail>(id ? `/dte/${id}` : null);
+  const navigate = useNavigate();
   const { user, canWrite, hasRole } = useAuth();
   const [action, setAction] = useState<ActionSpec | null>(null);
   const [confirmRequest, setConfirmRequest] = useState(false);
-  const [reissuing, setReissuing] = useState(false);
   const closeRequest = useCallback(() => setConfirmRequest(false), []);
   const [requesting, setRequesting] = useState(false);
   const [requestError, setRequestError] = useState<{
@@ -533,7 +533,11 @@ export const DteDetailPage = () => {
               mismo origen, el mismo destino y los datos de este DT-e para corregirlos.
             </p>
           </div>
-          <Button variant="primary" icon="plus" onClick={() => setReissuing(true)}>
+          <Button
+            variant="primary"
+            icon="plus"
+            onClick={() => navigate('/dte/nuevo', { state: { reissue: reissueContext(dte) } })}
+          >
             Emitir otro DT-e
           </Button>
         </section>
@@ -862,17 +866,6 @@ export const DteDetailPage = () => {
         </Sheet>
       )}
 
-      {reissuing && (
-        <DteWizard
-          integration={dte.integration}
-          reissue={reissueContext(dte)}
-          onClose={() => setReissuing(false)}
-          onDone={() => {
-            setReissuing(false);
-            resource.reload();
-          }}
-        />
-      )}
 
       {action && (
         <ActionSheet

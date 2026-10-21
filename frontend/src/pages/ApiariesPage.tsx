@@ -1,187 +1,222 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { apiSend } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
-import { fieldErrors, toUserMessage } from '../lib/errors';
+import { toUserMessage } from '../lib/errors';
+import { directionsUrl, formatPoint } from '../lib/geo';
+import type { Zone } from '../lib/cargo';
+import { Icon } from '../components/Icon';
+import { HexCluster } from '../components/Illustrations';
+import { MediaThumb } from '../components/MediaThumb';
+import { AppBar } from '../components/Screen';
 import {
   Button,
   ButtonLink,
-  Card,
   EmptyState,
   Notice,
-  PageHeader,
   Pill,
   Sheet,
   SkeletonList,
   StatusPill,
+  SummaryList,
   useWriteFeedback,
 } from '../components/ui';
-import { DataList, type Column } from '../components/DataList';
 import { ResourceNotices } from '../components/ResourceNotices';
 import { OfficialRegistrySheet } from '../components/OfficialRegistrySheet';
-import {
-  Fields,
-  Form,
-  FormError,
-  buildBody,
-  useForm,
-  type FieldSpec,
-} from '../components/Form';
-import type { Apiary, Establishment, Hive, Paginated } from '../lib/types';
+import { FormError } from '../components/Form';
+import type { Apiary, Hive, Paginated } from '../lib/types';
 
+const NO_ZONE = 'sin-zona';
+
+/**
+ * Maestro de apiarios (doc 13): agrupados por zona, con su foto, su RENAPA y
+ * sus colmenas. El alta va a pantalla completa («Nuevo Apiario»); tocar un
+ * apiario abre su ficha con colmenas, RENAPA, ubicación y trazabilidad.
+ */
 export const ApiariesPage = () => {
   const { canWrite } = useAuth();
-  const [creating, setCreating] = useState(false);
+  const [zoneFilter, setZoneFilter] = useState<string>('');
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<Apiary | null>(null);
   const [hivesFor, setHivesFor] = useState<Apiary | null>(null);
   const [renapaFor, setRenapaFor] = useState<Apiary | null>(null);
-  const [pageSize, setPageSize] = useState(25);
 
-  const list = useResource<Paginated<Apiary>>(`/apiaries?pageSize=${pageSize}`);
-  const establishments = useResource<Paginated<Establishment>>(
-    '/establishments?pageSize=100&type=APIARIO_BASE',
-  );
+  const list = useResource<Paginated<Apiary>>('/apiaries?pageSize=200');
+  const zones = useResource<Zone[]>('/zones');
 
-  const noBase = establishments.data && establishments.data.data.length === 0;
+  const apiaries = list.data?.data ?? [];
+  const totalHives = apiaries.reduce((sum, item) => sum + (item.hiveCount ?? 0), 0);
 
-  const columns: Column<Apiary>[] = [
-    {
-      key: 'code',
-      header: 'Código',
-      role: 'title',
-      cell: (item) => <strong className="mono">{item.code}</strong>,
-    },
-    {
-      key: 'status',
-      header: 'Estado',
-      role: 'status',
-      cell: (item) => <StatusPill status={item.status} />,
-    },
-    { key: 'name', header: 'Nombre', cell: (item) => item.name ?? '—' },
-    {
-      // Origen oficial del DT-e: sin RENAPA del apiario SIGSA no emite.
-      key: 'renapa',
-      header: 'RENAPA',
-      cell: (item) =>
-        item.renapaCode ? (
-          <span className="row row-tight">
-            <span className="mono">{item.renapaCode}</span>
-            {item.renapaStatus && item.renapaStatus !== 'ACTIVE' && (
-              <StatusPill status={item.renapaStatus} withIcon={false} />
-            )}
-          </span>
-        ) : (
-          <span className="faint small">sin RENAPA</span>
-        ),
-    },
-    {
-      key: 'establishment',
-      header: 'Establecimiento',
-      cell: (item) => item.establishmentName ?? '—',
-    },
-    {
-      key: 'hives',
-      header: 'Colmenas',
-      align: 'right',
-      cell: (item) => item.hiveCount,
-    },
-    {
-      key: 'coords',
-      header: 'Coordenadas',
-      role: 'hidden',
-      cell: (item) =>
-        item.latitude && item.longitude ? (
-          <span className="mono small">
-            {Number(item.latitude).toFixed(4)}, {Number(item.longitude).toFixed(4)}
-          </span>
-        ) : (
-          '—'
-        ),
-    },
-  ];
+  const filtered = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return apiaries.filter((item) => {
+      if (zoneFilter === NO_ZONE ? item.zoneId : zoneFilter && item.zoneId !== zoneFilter) return false;
+      if (!term) return true;
+      return [item.name, item.code, item.renapaCode, item.zoneName, item.locality]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term));
+    });
+  }, [apiaries, zoneFilter, query]);
+
+  // Grupos en el orden de las zonas; los apiarios sin zona, al final.
+  const groups = useMemo(() => {
+    const byZone = new Map<string, { title: string; items: Apiary[] }>();
+    for (const item of filtered) {
+      const key = item.zoneId ?? NO_ZONE;
+      if (!byZone.has(key)) byZone.set(key, { title: item.zoneName ?? 'Sin zona', items: [] });
+      byZone.get(key)!.items.push(item);
+    }
+    return [...byZone.entries()]
+      .sort(([a, ga], [b, gb]) => (a === NO_ZONE ? 1 : b === NO_ZONE ? -1 : ga.title.localeCompare(gb.title)))
+      .map(([key, group]) => ({ key, ...group }));
+  }, [filtered]);
+
+  const noZoneCount = apiaries.filter((item) => !item.zoneId).length;
 
   return (
-    <div className="stack">
-      <PageHeader
-        title="Apiarios"
-        help="apiaries"
-        actions={
-          canWrite && (
-            <Button
-              variant="primary"
-              icon="plus"
-              onClick={() => setCreating(true)}
-              disabled={Boolean(noBase)}
-            >
-              Nuevo apiario
-            </Button>
-          )
-        }
-      />
+    <div className="master-list">
+      <AppBar title="Apiarios" back="/carga" />
+
+      <div className="master-summary">
+        <span>
+          <strong>{apiaries.length}</strong> {apiaries.length === 1 ? 'apiario' : 'apiarios'}
+        </span>
+        <span>
+          <strong>{totalHives}</strong> colmenas
+        </span>
+        <span>
+          <strong>{zones.data?.length ?? 0}</strong> {zones.data?.length === 1 ? 'zona' : 'zonas'}
+        </span>
+      </div>
+
+      {canWrite && apiaries.length > 0 && (
+        <ButtonLink to="/apiaries/nuevo" variant="primary" icon="plus" block>
+          Nuevo apiario
+        </ButtonLink>
+      )}
 
       <ResourceNotices resource={list} />
 
-      {/*
-        El orden importa: un apiario necesita un predio que lo contenga. Antes
-        el error aparecia recien al intentar guardar, con el formulario lleno.
-      */}
-      {noBase && canWrite && (
-        <Notice tone="info" title="Primero hace falta un predio apícola">
-          Un apiario vive dentro de un establecimiento. Registrá uno de tipo «Predio apícola» y
-          después volvé acá.
-        </Notice>
+      {apiaries.length > 0 && (
+        <>
+          <div className="search-field">
+            <Icon name="search" size={20} />
+            <input
+              type="search"
+              placeholder="Buscar apiario, RENAPA o zona…"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              aria-label="Buscar apiario"
+            />
+          </div>
+          <div className="chip-row" role="group" aria-label="Filtrar por zona">
+            <button
+              type="button"
+              className={zoneFilter === '' ? 'chip selected' : 'chip'}
+              aria-pressed={zoneFilter === ''}
+              onClick={() => setZoneFilter('')}
+            >
+              Todas ({apiaries.length})
+            </button>
+            {(zones.data ?? []).map((zone) => (
+              <button
+                key={zone.id}
+                type="button"
+                className={zoneFilter === zone.id ? 'chip selected' : 'chip'}
+                aria-pressed={zoneFilter === zone.id}
+                onClick={() => setZoneFilter(zone.id)}
+              >
+                {zone.name} ({zone.apiaryCount})
+              </button>
+            ))}
+            {noZoneCount > 0 && (
+              <button
+                type="button"
+                className={zoneFilter === NO_ZONE ? 'chip selected' : 'chip'}
+                aria-pressed={zoneFilter === NO_ZONE}
+                onClick={() => setZoneFilter(NO_ZONE)}
+              >
+                Sin zona ({noZoneCount})
+              </button>
+            )}
+          </div>
+        </>
       )}
 
-      <Card flush>
-        <DataList
-          items={list.data?.data ?? []}
-          columns={columns}
-          rowKey={(item) => item.id}
-          loading={list.loading}
-          total={list.data?.meta.total}
-          onLoadMore={() => setPageSize((size) => size + 25)}
-          loadingMore={list.loading}
-          rowActions={(item) => (
-            <>
-              {canWrite && (
-                <Button size="sm" onClick={() => setHivesFor(item)}>
-                  Colmenas
-                </Button>
-              )}
-              {canWrite && (
-                <Button size="sm" onClick={() => setRenapaFor(item)}>
-                  RENAPA
-                </Button>
-              )}
-              <ButtonLink size="sm" to={`/trace/forward/apiary/${item.id}`} icon="trace">
-                Dónde terminó
+      {list.loading && !list.data && <SkeletonList rows={4} />}
+
+      {!list.loading && apiaries.length === 0 && (
+        <EmptyState
+          icon="apiaries"
+          title="Todavía no hay apiarios"
+          description="El apiario es el conjunto de colmenas en un punto concreto. Es lo que permite responder de dónde vino la miel."
+          action={
+            canWrite && (
+              <ButtonLink to="/apiaries/nuevo" variant="primary" icon="plus">
+                Registrar el primero
               </ButtonLink>
-            </>
-          )}
-          empty={
-            <EmptyState
-              icon="apiaries"
-              title="Todavía no hay apiarios"
-              description="El apiario es el conjunto de colmenas en un punto concreto. Es lo que permite responder de dónde vino la miel."
-              action={
-                canWrite &&
-                !noBase && (
-                  <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
-                    Registrar apiario
-                  </Button>
-                )
-              }
-            />
+            )
           }
         />
-      </Card>
+      )}
 
-      {creating && (
-        <CreateApiarySheet
-          establishments={establishments.data?.data ?? []}
-          onClose={() => setCreating(false)}
-          onDone={() => {
-            setCreating(false);
-            list.reload();
+      {groups.map((group) => {
+        const hives = group.items.reduce((sum, item) => sum + (item.hiveCount ?? 0), 0);
+        return (
+          <section key={group.key} className="master-group" aria-label={group.title}>
+            <h2 className="master-group-title">
+              <span>{group.title}</span>
+              <span className="master-group-meta">
+                {group.items.length} {group.items.length === 1 ? 'apiario' : 'apiarios'} · {hives} colmenas
+              </span>
+            </h2>
+            <ul className="master-rows">
+              {group.items.map((item) => (
+                <li key={item.id}>
+                  <button type="button" className="master-row" onClick={() => setSelected(item)}>
+                    <span className="master-row-thumb">
+                      <MediaThumb
+                        id={item.photoId}
+                        alt=""
+                        fallback={
+                          <span className="master-row-glyph">
+                            <HexCluster size={30} />
+                          </span>
+                        }
+                      />
+                    </span>
+                    <span className="master-row-text">
+                      <span className="master-row-title">{item.name ?? item.code}</span>
+                      <span className="master-row-sub">
+                        {item.renapaCode ? `RENAPA ${item.renapaCode}` : `${item.code} · sin RENAPA`}
+                      </span>
+                    </span>
+                    <span className="master-row-meta">
+                      <strong>{item.hiveCount}</strong>
+                      <span>colmenas</span>
+                    </span>
+                    <Icon name="forward" size={22} className="master-row-chevron" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+
+      {selected && (
+        <ApiarySheet
+          apiary={selected}
+          canWrite={canWrite}
+          onClose={() => setSelected(null)}
+          onHives={() => {
+            setHivesFor(selected);
+            setSelected(null);
+          }}
+          onRenapa={() => {
+            setRenapaFor(selected);
+            setSelected(null);
           }}
         />
       )}
@@ -189,7 +224,7 @@ export const ApiariesPage = () => {
       {renapaFor && (
         <OfficialRegistrySheet
           title="RENAPA del apiario"
-          subtitle={`Apiario ${renapaFor.code}`}
+          subtitle={`Apiario ${renapaFor.name ?? renapaFor.code}`}
           path={`/apiaries/${renapaFor.id}`}
           entity="/apiaries"
           names={{ code: 'renapaCode', status: 'renapaStatus', validTo: 'renapaValidTo' }}
@@ -223,121 +258,83 @@ export const ApiariesPage = () => {
 };
 
 /* =========================================================================
-   Alta de apiario
+   Ficha del apiario
    ========================================================================= */
 
-const CreateApiarySheet = ({
-  establishments,
+const ApiarySheet = ({
+  apiary,
+  canWrite,
   onClose,
-  onDone,
+  onHives,
+  onRenapa,
 }: {
-  establishments: Establishment[];
+  apiary: Apiary;
+  canWrite: boolean;
   onClose: () => void;
-  onDone: () => void;
+  onHives: () => void;
+  onRenapa: () => void;
 }) => {
-  const fields: FieldSpec[] = [
-    {
-      name: 'establishmentId',
-      label: 'Establecimiento',
-      type: 'select',
-      required: true,
-      full: true,
-      defaultValue: establishments.length === 1 ? establishments[0].id : '',
-      options: establishments.map((item) => ({ value: item.id, label: item.name })),
-    },
-    { name: 'code', label: 'Código', required: true, placeholder: 'API-001' },
-    { name: 'name', label: 'Nombre', placeholder: 'El Ceibo' },
-    {
-      name: 'renapaCode',
-      label: 'RENAPA del apiario',
-      placeholder: 'B53999-2',
-      help: 'renapaApiary',
-      hint: 'Lo necesita el DT-e. Podés cargarlo después.',
-    },
-    { name: 'latitude', label: 'Latitud', type: 'number', step: 'any' },
-    { name: 'longitude', label: 'Longitud', type: 'number', step: 'any' },
-    { name: 'locality', label: 'Localidad' },
-    { name: 'province', label: 'Provincia' },
-  ];
-
-  const { values, setValues, set, blur, errors, setErrors, validateAll } = useForm(fields);
-  const [busy, setBusy] = useState(false);
-  const [locating, setLocating] = useState(false);
-  const [locateError, setLocateError] = useState<string | null>(null);
-  const [failure, setFailure] = useState<{ title: string; detail?: string } | null>(null);
-  const feedback = useWriteFeedback();
-
-  /** Estando parado en el apiario, tomar la posicion del teléfono es lo natural. */
-  const useCurrentPosition = () => {
-    if (!navigator.geolocation) {
-      setLocateError('Este dispositivo no puede darnos la ubicación.');
-      return;
-    }
-    setLocating(true);
-    setLocateError(null);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setValues((current) => ({
-          ...current,
-          latitude: position.coords.latitude.toFixed(6),
-          longitude: position.coords.longitude.toFixed(6),
-        }));
-        setLocating(false);
-      },
-      () => {
-        setLocating(false);
-        setLocateError('No pudimos obtener la ubicación. Podés cargarla a mano.');
-      },
-      { enableHighAccuracy: true, timeout: 10_000 },
-    );
-  };
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!validateAll()) return;
-
-    setBusy(true);
-    setFailure(null);
-    try {
-      const result = await apiSend<Apiary>('POST', '/apiaries', buildBody(values, fields), {
-        label: `Apiario ${values.code}`,
-        entity: '/apiaries',
-      });
-      if (result.queued) feedback.queued('El apiario');
-      else feedback.saved('Apiario registrado', result.data.code);
-      onDone();
-    } catch (cause) {
-      const perField = fieldErrors(cause, fields.map((field) => field.name));
-      if (Object.keys(perField).length > 0) setErrors((current) => ({ ...current, ...perField }));
-      else {
-        const message = toUserMessage(cause, 'write');
-        setFailure({ title: message.title, detail: message.detail });
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
-
+  const located = apiary.latitude !== null && apiary.longitude !== null;
   return (
-    <Sheet title="Nuevo apiario" subtitle="Los campos con * son obligatorios." onClose={onClose}>
-      <Form
-        onSubmit={submit}
-        error={failure && <FormError title={failure.title} detail={failure.detail} />}
-        submitLabel="Registrar apiario"
-        busyLabel="Registrando…"
-        onCancel={onClose}
-        busy={busy}
-      >
-        <Fields fields={fields} values={values} errors={errors} onChange={set} onBlur={blur} />
-        <Button icon="location" onClick={useCurrentPosition} busy={locating} busyLabel="Ubicando…">
-          Usar mi ubicación actual
-        </Button>
-        {locateError && (
-          <p className="field-error" style={{ marginTop: 'var(--sp-2)' }}>
-            {locateError}
-          </p>
+    <Sheet title={apiary.name ?? apiary.code} subtitle={apiary.zoneName ?? 'Sin zona'} onClose={onClose}>
+      {apiary.photoId && (
+        <div className="sheet-photo">
+          <MediaThumb id={apiary.photoId} full alt={`Foto del apiario ${apiary.name ?? apiary.code}`} fallback={null} />
+        </div>
+      )}
+      <SummaryList
+        rows={[
+          { key: 'Código', value: <span className="mono">{apiary.code}</span> },
+          {
+            key: 'RENAPA',
+            value: apiary.renapaCode ? (
+              <span className="row row-tight">
+                <span className="mono">{apiary.renapaCode}</span>
+                {apiary.renapaStatus && <StatusPill status={apiary.renapaStatus} withIcon={false} />}
+              </span>
+            ) : (
+              <span className="faint">Sin cargar: hace falta para el DT-e</span>
+            ),
+          },
+          { key: 'Colmenas', value: String(apiary.hiveCount) },
+          { key: 'Predio', value: apiary.establishmentName ?? '—' },
+          {
+            key: 'Ubicación',
+            value: located ? (
+              <span className="mono">{formatPoint(apiary.latitude!, apiary.longitude!)}</span>
+            ) : (
+              <span className="faint">Sin ubicación</span>
+            ),
+          },
+        ]}
+      />
+      <div className="sheet-actions">
+        {canWrite && (
+          <Button icon="beehive" onClick={onHives}>
+            Colmenas
+          </Button>
         )}
-      </Form>
+        {canWrite && (
+          <Button icon="honeycomb" onClick={onRenapa}>
+            RENAPA
+          </Button>
+        )}
+        {located && (
+          <a className="btn btn-secondary" href={directionsUrl(apiary.latitude!, apiary.longitude!)} target="_blank" rel="noreferrer">
+            <Icon name="route" size={17} />
+            Cómo llegar
+          </a>
+        )}
+        {located && (
+          <Link className="btn btn-secondary" to={`/mapa?lugar=${apiary.id}`}>
+            <Icon name="map" size={17} />
+            Ver en el mapa
+          </Link>
+        )}
+        <ButtonLink to={`/trace/forward/apiary/${apiary.id}`} icon="trace">
+          Dónde terminó
+        </ButtonLink>
+      </div>
     </Sheet>
   );
 };

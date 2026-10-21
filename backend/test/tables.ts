@@ -25,6 +25,8 @@ export const TABLES = [
   'carrier',
   'hive',
   'apiary',
+  'zone',
+  'media_file',
   'renspa_registration',
   'establishment',
   'renapa_registration',

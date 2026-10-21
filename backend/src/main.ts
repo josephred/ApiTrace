@@ -3,14 +3,18 @@ import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import compression from 'compression';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { applyBodyLimits } from './body-limits';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: false });
   const config = app.get(ConfigService);
+  // Antes de cualquier otro middleware: el alta con foto supera los 100 KB de Express.
+  applyBodyLimits(app);
 
   const apiPrefix = config.getOrThrow<string>('apiPrefix');
   const port = config.getOrThrow<number>('port');
@@ -61,6 +65,8 @@ async function bootstrap(): Promise<void> {
         .addTag('Extraccion, lotes y tambores', 'CU-13 a CU-16, CU-21, CU-24, CU-25')
         .addTag('Trazabilidad', 'CU-17 a CU-19')
         .addTag('Auditoria', 'CU-33 y CU-34')
+        .addTag('Maestros', 'Zonas, transportes y lugares para el asistente del DT-e')
+        .addTag('Fotos', 'Fotos de apiarios, salas y transportes')
         .addTag('Operacion', 'Health checks')
         .build(),
     );
