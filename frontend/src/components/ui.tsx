@@ -10,6 +10,7 @@ import {
   type ButtonHTMLAttributes,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Icon, type IconName } from './Icon';
 import { HELP, statusInfo, type HelpEntry, type Tone } from '../lib/vocabulary';
@@ -115,121 +116,300 @@ export const ButtonLink = ({
  * cada pantalla de forma permanente. La explicacion existe, pero solo aparece
  * cuando alguien la pide.
  */
+/**
+ * Boton «?».
+ *
+ * Reemplaza los parrafos de definicion que antes ocupaban el encabezado de
+ * cada pantalla de forma permanente. La explicacion existe, pero solo aparece
+ * cuando alguien la pide.
+ *
+ * En dispositivos moviles (<640px) se abre como una Hoja Modal Inferior (Bottom Sheet),
+ * evitando desbordes o cortes en los bordes de la pantalla.
+ * En escritorio se abre como un popover anclado con limites seguros de viewport.
+ */
 export const HelpTip = ({ topic, entry }: { topic?: keyof typeof HELP; entry?: HelpEntry }) => {
   const { helpEnabled, setHelpEnabled } = useHelpSettings();
   const content = entry ?? (topic ? HELP[topic] : undefined);
   const [open, setOpen] = useState(false);
-  const [alignRight, setAlignRight] = useState(false);
-  const wrapRef = useRef<HTMLSpanElement>(null);
-  const id = useId();
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 640 : false,
+  );
+  const [desktopCoords, setDesktopCoords] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 360,
+  });
+
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
+  // Detección responsive para alternar entre Bottom Sheet (móvil) y Popover anclado (escritorio)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia('(max-width: 639px)');
+    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    setIsMobile(mql.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+
+  // Calcular posición segura para el popover en escritorio (clamping estricto de viewport)
+  const updatePosition = useCallback(() => {
+    if (!buttonRef.current || isMobile) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const width = Math.min(360, window.innerWidth - 32);
+
+    // Ajuste horizontal: asegurarse de que no se corte por izquierda ni derecha
+    let left = rect.left;
+    if (left + width > window.innerWidth - 16) {
+      left = window.innerWidth - width - 16;
+    }
+    if (left < 16) {
+      left = 16;
+    }
+
+    // Ajuste vertical: colocar abajo; si sobrepasa el viewport inferior y cabe arriba, invertir
+    const estHeight = 280;
+    let top = rect.bottom + 8;
+    if (top + estHeight > window.innerHeight - 16 && rect.top - estHeight > 16) {
+      top = Math.max(16, rect.top - 8 - estHeight);
+    }
+
+    setDesktopCoords({ top, left, width });
+  }, [isMobile]);
 
   useEffect(() => {
     if (!open) return;
 
-    if (wrapRef.current) {
-      const rect = wrapRef.current.getBoundingClientRect();
-      // Si el botón está a menos de 360px del borde derecho de la ventana, alinear hacia la izquierda
-      setAlignRight(window.innerWidth - rect.left < 360);
+    if (!isMobile) {
+      updatePosition();
+      const onResizeOrScroll = () => updatePosition();
+      window.addEventListener('resize', onResizeOrScroll);
+      window.addEventListener('scroll', onResizeOrScroll, true);
+      return () => {
+        window.removeEventListener('resize', onResizeOrScroll);
+        window.removeEventListener('scroll', onResizeOrScroll, true);
+      };
+    } else {
+      // Bloquear scroll de la página de fondo mientras la hoja esté abierta en móvil
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
     }
+  }, [open, isMobile, updatePosition]);
+
+  // Manejo de teclado (Escape cierra y devuelve foco) y clics fuera
+  useEffect(() => {
+    if (!open) return;
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
 
     const onDown = (event: MouseEvent) => {
-      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+      if (isMobile) return; // En móvil el backdrop overlay captura el clic
+      const target = event.target as Node;
+      if (
+        !buttonRef.current?.contains(target) &&
+        !popoverRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
     };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
 
-  // Si la ayuda contextual está deshabilitada globalmente o no hay contenido, no se renderiza nada
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDown);
+    };
+  }, [open, isMobile]);
+
+  const handleClose = useCallback(() => {
+    setOpen(false);
+    buttonRef.current?.focus();
+  }, []);
+
   if (!helpEnabled || !content) return null;
 
   return (
-    <span
-      ref={wrapRef}
-      style={{
-        position: 'relative',
-        display: 'inline-flex',
-        zIndex: open ? 500 : undefined,
-      }}
-    >
+    <>
       <button
+        ref={buttonRef}
         type="button"
         className="help-btn"
         aria-expanded={open}
-        aria-controls={open ? id : undefined}
+        aria-haspopup="dialog"
+        aria-controls={open ? titleId : undefined}
         aria-label={`Ayuda: ${content.title}`}
         onClick={() => setOpen((value) => !value)}
       >
         ?
       </button>
-      {open && (
-        <div
-          id={id}
-          role="note"
-          className="help-pop"
-          style={{
-            top: 'calc(100% + 8px)',
-            ...(alignRight ? { right: 0, left: 'auto' } : { left: 0, right: 'auto' }),
-          }}
-        >
-          <div className="help-pop-top">
-            {content.category ? (
-              <span className="help-pop-badge">{content.category}</span>
-            ) : (
-              <span />
-            )}
-            <button
-              type="button"
-              className="help-pop-close"
-              aria-label="Cerrar ayuda"
-              onClick={() => setOpen(false)}
-            >
-              <Icon name="close" size={13} />
-            </button>
-          </div>
 
-          <div className="help-pop-title">{content.title}</div>
-          <div className="help-pop-body">{content.body}</div>
-
-          {content.example && (
-            <div className="help-pop-example">
-              <span className="help-pop-example-tag">
-                <Icon name="sparkles" size={12} />
-                <span>Ejemplo de uso</span>
-              </span>
-              <p className="help-pop-example-text">{content.example}</p>
-            </div>
-          )}
-
-          {content.regulation && (
-            <div className="help-pop-regulation">
-              <span className="help-pop-regulation-icon" aria-hidden="true">📜</span>
-              <span>{content.regulation}</span>
-            </div>
-          )}
-
-          <div className="help-pop-footer">
-            <button
-              type="button"
-              className="help-pop-disable-btn"
-              onClick={() => {
-                setHelpEnabled(false);
-                setOpen(false);
+      {open && typeof document !== 'undefined' &&
+        createPortal(
+          isMobile ? (
+            /* ==================== MÓVIL: HOJA INFERIOR (BOTTOM SHEET MODAL) ==================== */
+            <div
+              className="help-overlay"
+              role="presentation"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) handleClose();
               }}
-              title="Ocultar todos los botones de ayuda contextual (?)"
             >
-              Desactivar ayudas contextuales
-            </button>
-          </div>
-        </div>
-      )}
-    </span>
+              <div
+                ref={popoverRef}
+                className="help-sheet"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                tabIndex={-1}
+              >
+                <div className="help-sheet-grip" aria-hidden="true" />
+                <div className="help-sheet-header">
+                  {content.category ? (
+                    <span className="help-pop-badge">{content.category}</span>
+                  ) : (
+                    <span />
+                  )}
+                  <button
+                    type="button"
+                    className="help-pop-close"
+                    aria-label="Cerrar ayuda"
+                    onClick={handleClose}
+                  >
+                    <Icon name="close" size={16} />
+                  </button>
+                </div>
+
+                <div className="help-sheet-body-scroll">
+                  <h2 id={titleId} className="help-sheet-title">
+                    {content.title}
+                  </h2>
+                  <div className="help-sheet-desc">{content.body}</div>
+
+                  {content.example && (
+                    <div className="help-pop-example">
+                      <span className="help-pop-example-tag">
+                        <Icon name="sparkles" size={12} />
+                        <span>Ejemplo de uso</span>
+                      </span>
+                      <p className="help-pop-example-text">{content.example}</p>
+                    </div>
+                  )}
+
+                  {content.regulation && (
+                    <div className="help-pop-regulation">
+                      <span className="help-pop-regulation-icon" aria-hidden="true">
+                        📜
+                      </span>
+                      <span>{content.regulation}</span>
+                    </div>
+                  )}
+
+                  <div className="help-sheet-actions">
+                    <button
+                      type="button"
+                      className="help-sheet-understand-btn"
+                      onClick={handleClose}
+                    >
+                      Entendido
+                    </button>
+                    <div className="help-pop-footer" style={{ justifyContent: 'center' }}>
+                      <button
+                        type="button"
+                        className="help-pop-disable-btn"
+                        onClick={() => {
+                          setHelpEnabled(false);
+                          handleClose();
+                        }}
+                        title="Ocultar todos los botones de ayuda contextual (?)"
+                      >
+                        Desactivar ayudas contextuales
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* ==================== ESCRITORIO: POPOVER CLAMPED CON PORTAL ==================== */
+            <div
+              ref={popoverRef}
+              id={titleId}
+              role="dialog"
+              aria-modal="false"
+              className="help-pop help-pop-portal"
+              style={{
+                top: desktopCoords.top,
+                left: desktopCoords.left,
+                width: desktopCoords.width,
+              }}
+            >
+              <div className="help-pop-top">
+                {content.category ? (
+                  <span className="help-pop-badge">{content.category}</span>
+                ) : (
+                  <span />
+                )}
+                <button
+                  type="button"
+                  className="help-pop-close"
+                  aria-label="Cerrar ayuda"
+                  onClick={handleClose}
+                >
+                  <Icon name="close" size={14} />
+                </button>
+              </div>
+
+              <div className="help-pop-title">{content.title}</div>
+              <div className="help-pop-body">{content.body}</div>
+
+              {content.example && (
+                <div className="help-pop-example">
+                  <span className="help-pop-example-tag">
+                    <Icon name="sparkles" size={12} />
+                    <span>Ejemplo de uso</span>
+                  </span>
+                  <p className="help-pop-example-text">{content.example}</p>
+                </div>
+              )}
+
+              {content.regulation && (
+                <div className="help-pop-regulation">
+                  <span className="help-pop-regulation-icon" aria-hidden="true">
+                    📜
+                  </span>
+                  <span>{content.regulation}</span>
+                </div>
+              )}
+
+              <div className="help-pop-footer">
+                <button
+                  type="button"
+                  className="help-pop-disable-btn"
+                  onClick={() => {
+                    setHelpEnabled(false);
+                    handleClose();
+                  }}
+                  title="Ocultar todos los botones de ayuda contextual (?)"
+                >
+                  Desactivar ayudas contextuales
+                </button>
+              </div>
+            </div>
+          ),
+          document.body,
+        )}
+    </>
   );
 };
 
