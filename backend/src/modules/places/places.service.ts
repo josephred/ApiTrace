@@ -20,7 +20,7 @@ export interface PlaceItem {
   placeType: PlaceType;
   establishmentType: string;
   name: string;
-  /** RENAPA del apiario, codigo SENASA o RNE de la sala. */
+  /** RENAPA del apiario, codigo SENASA o RNE de la sala, RENSPA del campo de la finca. */
   code: string | null;
   codeLabel: string | null;
   /** Codigo interno (API-001) cuando el apiario no tiene RENAPA. */
@@ -199,6 +199,8 @@ export class PlacesService {
         ilike(establishment.locality, like),
         ilike(establishment.senasaCode, like),
         ilike(establishment.rne, like),
+        ilike(establishment.renspaNumber, like),
+        ilike(zone.name, like),
       );
       if (search) conditions.push(search);
     }
@@ -210,6 +212,10 @@ export class PlacesService {
         senasaCode: establishment.senasaCode,
         senasaStatus: establishment.senasaStatus,
         rne: establishment.rne,
+        renspaNumber: establishment.renspaNumber,
+        hiveCount: establishment.hiveCount,
+        zoneId: establishment.zoneId,
+        zoneName: zone.name,
         locality: establishment.locality,
         province: establishment.province,
         status: establishment.status,
@@ -221,13 +227,26 @@ export class PlacesService {
       })
       .from(establishment)
       .innerJoin(organization, eq(organization.id, establishment.organizationId))
+      .leftJoin(zone, eq(establishment.zoneId, zone.id))
       .where(and(...conditions, ne(establishment.type, 'APIARIO_BASE')))
       .orderBy(asc(establishment.name))
       .limit(500);
 
     return rows.map((row) => {
       const placeType = placeTypeOfEstablishment(row.type) ?? 'DEPOSITO';
-      const code = row.senasaCode ?? row.rne;
+      // La finca se identifica por el RENSPA del campo (doc 14); la sala, por
+      // su habilitacion o su RNE.
+      const finca = placeType === 'FINCA_POLINIZACION';
+      const code = finca ? row.renspaNumber : (row.senasaCode ?? row.rne);
+      const codeLabel = finca
+        ? row.renspaNumber
+          ? 'RENSPA'
+          : null
+        : row.senasaCode
+          ? 'Habilitacion'
+          : row.rne
+            ? 'RNE'
+            : null;
       return {
         id: row.id,
         kind: 'establishment' as const,
@@ -235,18 +254,18 @@ export class PlacesService {
         establishmentType: row.type,
         name: row.name,
         code,
-        codeLabel: row.senasaCode ? 'Habilitacion' : row.rne ? 'RNE' : null,
+        codeLabel,
         internalCode: null,
         locality: row.locality,
         province: row.province,
-        zoneId: null,
-        zoneName: null,
-        hiveCount: null,
+        zoneId: row.zoneId,
+        zoneName: row.zoneName,
+        hiveCount: row.hiveCount,
         organizationId: row.organizationId,
         organizationName: row.organizationName,
         own: row.organizationId === actor.organizationId,
         status: row.status,
-        registryStatus: row.senasaCode ? row.senasaStatus : null,
+        registryStatus: !finca && row.senasaCode ? row.senasaStatus : null,
         latitude: toCoordinate(row.latitude),
         longitude: toCoordinate(row.longitude),
         photoId: row.photoId,

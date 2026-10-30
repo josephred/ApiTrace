@@ -42,6 +42,9 @@ const SettingsPage = page(() => import('./pages/SettingsPage'), 'SettingsPage');
 // Rediseño (doc 13)
 const DataHubPage = page(() => import('./pages/DataHubPage'), 'DataHubPage');
 const ApiaryFormPage = page(() => import('./pages/ApiaryFormPage'), 'ApiaryFormPage');
+// Finca / Polinización (doc 14)
+const FincasPage = page(() => import('./pages/FincasPage'), 'FincasPage');
+const FincaFormPage = page(() => import('./pages/FincaFormPage'), 'FincaFormPage');
 const SalasPage = page(() => import('./pages/SalasPage'), 'SalasPage');
 const SalaFormPage = page(() => import('./pages/SalaFormPage'), 'SalaFormPage');
 const TransportsPage = page(() => import('./pages/TransportsPage'), 'TransportsPage');
@@ -97,6 +100,16 @@ export const App = () => {
               <RoleRoute allowedRoles={['ADMIN', 'PRODUCTOR']}>
                 <Suspense fallback={<SkeletonList />}>
                   <ApiaryFormPage />
+                </Suspense>
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="fincas/nueva"
+            element={
+              <RoleRoute allowedRoles={['ADMIN', 'PRODUCTOR']}>
+                <Suspense fallback={<SkeletonList />}>
+                  <FincaFormPage />
                 </Suspense>
               </RoleRoute>
             }
@@ -208,6 +221,16 @@ export const App = () => {
               <RoleRoute allowedRoles={['ADMIN', 'PRODUCTOR', 'AUDITOR']}>
                 <Suspense fallback={<SkeletonList />}>
                   <ApiariesPage />
+                </Suspense>
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="fincas"
+            element={
+              <RoleRoute allowedRoles={['ADMIN', 'PRODUCTOR', 'AUDITOR']}>
+                <Suspense fallback={<SkeletonList />}>
+                  <FincasPage />
                 </Suspense>
               </RoleRoute>
             }

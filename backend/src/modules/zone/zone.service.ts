@@ -10,8 +10,8 @@ import type { AuthenticatedUser } from '../../common/types';
 export const cleanZoneName = (value: string): string => value.trim().replace(/\s+/g, ' ');
 
 /**
- * Zonas del apicultor para ordenar sus apiarios. Cada organizacion ve y edita
- * solo las suyas.
+ * Zonas del apicultor para ordenar sus apiarios y sus fincas de polinizacion
+ * (doc 14). Cada organizacion ve y edita solo las suyas.
  */
 @Injectable()
 export class ZoneService {
@@ -20,7 +20,11 @@ export class ZoneService {
     private readonly access: AccessControlService,
   ) {}
 
-  /** Zonas con la cantidad de apiarios activos de cada una. */
+  /**
+   * Zonas con la cantidad de apiarios activos de cada una, sus colmenas y las
+   * fincas de polinizacion activas. Las colmenas de las fincas no se suman: son
+   * las mismas de los apiarios, llevadas a polinizar.
+   */
   async list(actor: AuthenticatedUser, organizationId?: string) {
     const scope =
       organizationId && this.access.hasGlobalScope(actor)
@@ -33,6 +37,12 @@ export class ZoneService {
         organizationId: zone.organizationId,
         apiaryCount: sql<number>`cast(count(${apiary.id}) as int)`,
         hiveCount: sql<number>`cast(coalesce(sum(${apiary.hiveCount}), 0) as int)`,
+        fincaCount: sql<number>`cast((
+          select count(*) from ${establishment}
+          where ${establishment.zoneId} = ${zone.id}
+            and ${establishment.type} = 'FINCA_POLINIZACION'
+            and ${establishment.status} = 'ACTIVE'
+        ) as int)`,
         createdAt: zone.createdAt,
       })
       .from(zone)
@@ -52,7 +62,7 @@ export class ZoneService {
       .insert(zone)
       .values({ organizationId, name: clean, createdById: actor.id })
       .returning();
-    return { ...created, apiaryCount: 0, hiveCount: 0 };
+    return { ...created, apiaryCount: 0, hiveCount: 0, fincaCount: 0 };
   }
 
   async rename(id: string, name: string, actor: AuthenticatedUser) {
@@ -71,12 +81,17 @@ export class ZoneService {
     return updated;
   }
 
-  /** Borrar una zona no borra apiarios: quedan «sin zona». */
+  /** Borrar una zona no borra apiarios ni fincas: quedan «sin zona». */
   async remove(id: string, actor: AuthenticatedUser) {
     this.access.assertCanWrite(actor);
     await this.findOne(id, actor);
     await this.db.transaction(async (tx) => {
-      await tx.update(apiary).set({ zoneId: null, updatedAt: new Date() }).where(eq(apiary.zoneId, id));
+      const now = new Date();
+      await tx.update(apiary).set({ zoneId: null, updatedAt: now }).where(eq(apiary.zoneId, id));
+      await tx
+        .update(establishment)
+        .set({ zoneId: null, updatedAt: now })
+        .where(eq(establishment.zoneId, id));
       await tx.delete(zone).where(eq(zone.id, id));
     });
   }
@@ -106,11 +121,26 @@ export class ZoneService {
       .limit(1);
     const organizationId = owner[0]?.organizationId;
     if (!organizationId) throw new NotFoundException('Establecimiento no encontrado.');
+    return this.resolveForOrganization(input, organizationId, actor, executor, 'el apiario');
+  }
 
+  /**
+   * Zona de cualquier lugar de una organizacion (apiario o finca): por id, la
+   * existente con ese nombre o una nueva. `null` quita la zona; `undefined`
+   * (no se mando nada) la deja como esta.
+   */
+  async resolveForOrganization(
+    input: { zoneId?: string | null; zoneName?: string | null },
+    organizationId: string,
+    actor: AuthenticatedUser,
+    executor: DbExecutor = this.db,
+    owner = 'el lugar',
+  ): Promise<string | null | undefined> {
+    if (input.zoneId === null) return null;
     if (input.zoneId) {
       const found = await this.findOne(input.zoneId, actor);
       if (found.organizationId !== organizationId) {
-        throw new ConflictException('La zona es de otra organizacion que el apiario.');
+        throw new ConflictException(`La zona es de otra organizacion que ${owner}.`);
       }
       return found.id;
     }

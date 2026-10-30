@@ -66,7 +66,7 @@ export class ZoneController {
   @Roles('ADMIN', 'PRODUCTOR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @Audit('ZONE_DELETED', 'zone')
-  @ApiOperation({ summary: 'Borra la zona; sus apiarios quedan sin zona.' })
+  @ApiOperation({ summary: 'Borra la zona; sus apiarios y fincas quedan sin zona.' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: AuthenticatedUser) {
     await this.zones.remove(id, actor);
   }

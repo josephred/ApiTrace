@@ -91,31 +91,48 @@ export interface PlaceInfo {
   tile: string;
   /** Para frases: «el apiario», «la sala de extracción». */
   noun: string;
+  /** «apiarios», «fincas de polinización»: el plural no siempre es noun + s. */
+  plural: string;
   article: 'el' | 'la';
   search: string;
 }
 
 export const PLACES: Record<PlaceType, PlaceInfo> = {
-  APIARIO: { tile: 'Apiario', noun: 'apiario', article: 'el', search: 'Buscar apiario…' },
+  APIARIO: { tile: 'Apiario', noun: 'apiario', plural: 'apiarios', article: 'el', search: 'Buscar apiario…' },
   FINCA_POLINIZACION: {
     tile: 'Finca Polinización',
     noun: 'finca de polinización',
+    plural: 'fincas de polinización',
     article: 'la',
     search: 'Buscar finca…',
   },
-  DEPOSITO: { tile: 'Depósito', noun: 'depósito', article: 'el', search: 'Buscar depósito…' },
+  DEPOSITO: { tile: 'Depósito', noun: 'depósito', plural: 'depósitos', article: 'el', search: 'Buscar depósito…' },
   SALA_EXTRACCION: {
     tile: 'Sala Extracción',
     noun: 'sala de extracción',
+    plural: 'salas de extracción',
     article: 'la',
     search: 'Buscar sala…',
   },
   SALA_FRACCIONAMIENTO: {
     tile: 'Sala Fraccionamiento',
     noun: 'sala de fraccionamiento',
+    plural: 'salas de fraccionamiento',
     article: 'la',
     search: 'Buscar sala…',
   },
+};
+
+/**
+ * Lo que dicen los pasos 4 y 5 cuando no hay lugares de ese tipo: «No tenés
+ * fincas de polinización registradas.», con el plural y el género de cada uno.
+ */
+export const noPlacesText = (type: PlaceType, side: 'origin' | 'destination'): string => {
+  const info = PLACES[type];
+  const registered = info.article === 'la' ? 'registradas' : 'registrados';
+  return side === 'origin'
+    ? `No tenés ${info.plural} ${registered}.`
+    : `No hay ${info.plural} ${registered} como destino.`;
 };
 
 /** Tipo de establecimiento que se crea desde cada tipo de lugar. */
@@ -217,6 +234,8 @@ export interface Zone {
   organizationId: string;
   apiaryCount: number;
   hiveCount: number;
+  /** Fincas de polinización activas en la zona (doc 14). */
+  fincaCount?: number;
   createdAt: string;
 }
 

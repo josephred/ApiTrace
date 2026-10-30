@@ -55,7 +55,7 @@ const HEX_CLUSTER = (() => {
 const PIN_GLYPH: Record<PlaceType, string> = {
   APIARIO: `<path d="${HEX_CLUSTER}"/>`,
   FINCA_POLINIZACION:
-    '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="2.8" r="1.3"/><circle cx="14.6" cy="4.6" r="1.3"/><circle cx="13.6" cy="7.4" r="1.3"/><circle cx="10.4" cy="7.4" r="1.3"/><circle cx="9.4" cy="4.6" r="1.3"/><path d="M12 6.8v6.2"/><path d="M12 10.2c-2-1.8-4.2-1.3-4.8 0 1.6.5 3.2.5 4.8 0"/><path d="M12 9.2c2-1.8 4.2-1.3 4.8 0-1.6.5-3.2.5-4.8 0"/><path d="M2.5 10.5c3.5 0 6.5 1.2 9.5 2.8 3-1 6-1.3 9.5-.8"/><path d="M12 13.3c-2 3-4.5 6-6.5 8.2"/><path d="M2.5 13.2c2.8 0 5.4.8 7.5 1.8"/><path d="M2.5 16c2.5 0 4.8.8 6.5 2"/><path d="M2.5 18.8c2 0 3.8.7 5.2 1.8"/><path d="M12 13.3c2.8 1.8 5.5 4.2 7.5 7.2"/><path d="M9.8 16.5c2.2 1.6 4.5 3.8 6.2 6"/></g>',
+    '<circle cx="12" cy="5.4" r="2.7"/><circle cx="15.1" cy="7.2" r="2.7"/><circle cx="15.1" cy="10.8" r="2.7"/><circle cx="12" cy="12.6" r="2.7"/><circle cx="8.9" cy="10.8" r="2.7"/><circle cx="8.9" cy="7.2" r="2.7"/><path d="M11.2 13.4h1.6V22h-1.6z"/>',
   DEPOSITO: '<path fill-rule="evenodd" d="M12 2.6 22 9.4V21a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9.4zM9 14v8h6v-8z"/>',
   SALA_EXTRACCION:
     '<path fill-rule="evenodd" d="M3 21V11l5 3.2V11l5 3.2V4.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V9h1.6a1 1 0 0 1 1 1V21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>',
@@ -92,6 +92,8 @@ const detailPath = (place: Place): string | null => {
   switch (place.placeType) {
     case 'APIARIO':
       return '/apiaries';
+    case 'FINCA_POLINIZACION':
+      return '/fincas';
     case 'SALA_EXTRACCION':
       return '/salas/extraccion';
     case 'SALA_FRACCIONAMIENTO':

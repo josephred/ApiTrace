@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { apiSend } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
@@ -32,8 +31,7 @@ import type { Establishment, Paginated, Producer } from '../lib/types';
 
 export const EstablishmentsPage = () => {
   const { canWrite } = useAuth();
-  const [searchParams] = useSearchParams();
-  const [typeFilter, setTypeFilter] = useState(() => searchParams.get('type') || '');
+  const [typeFilter, setTypeFilter] = useState('');
   const [pageSize, setPageSize] = useState(25);
   const [creating, setCreating] = useState(false);
   const [renspaFor, setRenspaFor] = useState<Establishment | null>(null);

@@ -61,6 +61,8 @@ describe('Cuenta, maestros y tramite DT-e de cinco pasos (e2e)', () => {
     finca: '',
     vehicleId: '',
     tramiteId: '',
+    fincaNueva: '',
+    zonaSur: '',
   };
 
   const auth = (session: Session) => ({ Authorization: `Bearer ${session.token}` });
@@ -550,6 +552,193 @@ describe('Cuenta, maestros y tramite DT-e de cinco pasos (e2e)', () => {
           loadDate: today,
         })
         .expect(403);
+    });
+  });
+
+  // ------------------------------------------------- finca / polinizacion (doc 14)
+  describe('Finca / Polinizacion (doc 14)', () => {
+    it('registra la finca con zona, RENSPA del campo, ubicacion, colmenas y foto', async () => {
+      const response = await request(http)
+        .post(`${PREFIX}/establishments`)
+        .set(auth(apicultor))
+        .send({
+          name: 'Finca El Durazno',
+          type: 'FINCA_POLINIZACION',
+          zoneId: ctx.zoneId,
+          renspaNumber: '  13.016.0.00218/00 ',
+          latitude: -33.71,
+          longitude: -69.2,
+          hiveCount: 48,
+          photo: { dataUrl: PNG_1PX },
+        })
+        .expect(201);
+      ctx.fincaNueva = response.body.id;
+      expect(response.body).toMatchObject({
+        type: 'FINCA_POLINIZACION',
+        zoneId: ctx.zoneId,
+        renspaNumber: '13.016.0.00218/00',
+        hiveCount: 48,
+        organizationId: apicultor.organizationId,
+      });
+      expect(response.body.photoId).toBeTruthy();
+    });
+
+    it('el RENSPA es opcional y la zona se puede crear al vuelo por nombre', async () => {
+      const response = await request(http)
+        .post(`${PREFIX}/establishments`)
+        .set(auth(apicultor))
+        .send({ name: 'Finca La Loma', type: 'FINCA_POLINIZACION', zoneName: 'Zona Sur', hiveCount: 0 })
+        .expect(201);
+      expect(response.body).toMatchObject({ renspaNumber: null, hiveCount: 0 });
+      expect(response.body.zoneId).toBeTruthy();
+      ctx.zonaSur = response.body.zoneId;
+
+      // Sin colmenas informadas, la finca queda en cero, como el apiario.
+      const sinColmenas = await request(http)
+        .post(`${PREFIX}/establishments`)
+        .set(auth(apicultor))
+        .send({ name: 'Finca Sin Dato', type: 'FINCA_POLINIZACION' })
+        .expect(201);
+      expect(sinColmenas.body).toMatchObject({ hiveCount: 0, zoneId: null, renspaNumber: null });
+    });
+
+    it('rechaza un RENSPA mal escrito y colmenas o RENSPA en algo que no es una finca', async () => {
+      const typo = await request(http)
+        .post(`${PREFIX}/establishments`)
+        .set(auth(apicultor))
+        .send({ name: 'Finca Mal', type: 'FINCA_POLINIZACION', renspaNumber: 'abc' })
+        .expect(400);
+      expect(JSON.stringify(typo.body)).toContain('renspaNumber');
+
+      await request(http)
+        .post(`${PREFIX}/establishments`)
+        .set(auth(apicultor))
+        .send({ name: 'Deposito con colmenas', type: 'DEPOSITO', hiveCount: 10 })
+        .expect(400);
+      await request(http)
+        .post(`${PREFIX}/establishments`)
+        .set(auth(sala))
+        .send({ name: 'Sala con RENSPA', type: 'SALA_EXTRACCION', renspaNumber: '13.016.0.00218/00' })
+        .expect(400);
+    });
+
+    it('otro apicultor puede registrar el mismo campo con el mismo RENSPA', async () => {
+      // El RENSPA del campo no es unico: varios apicultores polinizan la misma finca.
+      const response = await request(http)
+        .post(`${PREFIX}/establishments`)
+        .set(auth(sala))
+        .send({ name: 'Finca El Durazno', type: 'FINCA_POLINIZACION', renspaNumber: '13.016.0.00218/00' })
+        .expect(201);
+      expect(response.body.organizationId).toBe(sala.organizationId);
+    });
+
+    it('lista las fincas con el nombre de su zona, solo las propias', async () => {
+      const list = await request(http)
+        .get(`${PREFIX}/establishments?type=FINCA_POLINIZACION&pageSize=100`)
+        .set(auth(apicultor))
+        .expect(200);
+      const rows = list.body.data.map(
+        (row: { name: string; zoneName: string | null; hiveCount: number | null }) =>
+          `${row.name}/${row.zoneName ?? '-'}/${row.hiveCount ?? '-'}`,
+      );
+      expect(rows).toEqual([
+        'Finca El Durazno/Valle de Uco/48',
+        'Finca La Loma/Zona Sur/0',
+        'Finca Los Almendros/-/0',
+        'Finca Sin Dato/-/0',
+      ]);
+    });
+
+    it('cuenta las fincas por zona sin sumar sus colmenas a las de los apiarios', async () => {
+      const zones = await request(http).get(`${PREFIX}/zones`).set(auth(apicultor)).expect(200);
+      expect(
+        zones.body.map(
+          (row: { name: string; apiaryCount: number; hiveCount: number; fincaCount: number }) =>
+            `${row.name}:${row.apiaryCount}:${row.hiveCount}:${row.fincaCount}`,
+        ),
+      ).toEqual(['Valle de Uco:1:45:1', 'Zona Norte:1:20:0', 'Zona Sur:0:0:1']);
+    });
+
+    it('ofrece la finca como destino con su RENSPA, su zona y sus colmenas', async () => {
+      const fincas = await request(http)
+        .get(`${PREFIX}/places?side=destination&type=FINCA_POLINIZACION`)
+        .set(auth(apicultor))
+        .expect(200);
+      expect(fincas.body.find((row: { id: string }) => row.id === ctx.fincaNueva)).toMatchObject({
+        code: '13.016.0.00218/00',
+        codeLabel: 'RENSPA',
+        zoneName: 'Valle de Uco',
+        hiveCount: 48,
+        own: true,
+      });
+      // La finca de otro apicultor no aparece: no es un destino publico.
+      expect(fincas.body.every((row: { own: boolean }) => row.own)).toBe(true);
+
+      const porRenspa = await request(http)
+        .get(`${PREFIX}/places?side=destination&type=FINCA_POLINIZACION&q=00218`)
+        .set(auth(apicultor))
+        .expect(200);
+      expect(porRenspa.body.map((row: { name: string }) => row.name)).toEqual(['Finca El Durazno']);
+    });
+
+    it('el DT-e de colmenas a la finca lleva el RENSPA del campo como destino', async () => {
+      const response = await request(http)
+        .post(`${PREFIX}/dte`)
+        .set(auth(apicultor))
+        .send({
+          cargoType: 'COLMENAS',
+          apiaryId: ctx.apiaryA,
+          destinationEstablishmentId: ctx.fincaNueva,
+          declaredQuantity: 48,
+          loadDate: today,
+          vehicleId: ctx.vehicleId,
+        })
+        .expect(201);
+      expect(response.body.destinationRenspa).toBe('13.016.0.00218/00');
+
+      const detail = await request(http).get(`${PREFIX}/dte/${response.body.id}`).set(auth(apicultor)).expect(200);
+      expect(detail.body).toMatchObject({ destinationRenspa: '13.016.0.00218/00' });
+      expect(detail.body.destination.name).toBe('Finca El Durazno');
+
+      // Sin RENSPA cargado, el destino queda vacio: no se inventa.
+      const sinRenspa = await request(http)
+        .post(`${PREFIX}/dte`)
+        .set(auth(apicultor))
+        .send({
+          cargoType: 'COLMENAS',
+          apiaryId: ctx.apiaryA,
+          destinationEstablishmentId: ctx.finca,
+          declaredQuantity: 12,
+          loadDate: today,
+          vehicleId: ctx.vehicleId,
+        })
+        .expect(201);
+      expect(sinRenspa.body.destinationRenspa).toBeNull();
+    });
+
+    it('completa el RENSPA y las colmenas despues, y lo puede quitar', async () => {
+      const updated = await request(http)
+        .patch(`${PREFIX}/establishments/${ctx.finca}`)
+        .set(auth(apicultor))
+        .send({ renspaNumber: '13.016.0.00301/00', hiveCount: 60, zoneId: ctx.zoneId })
+        .expect(200);
+      expect(updated.body).toMatchObject({ renspaNumber: '13.016.0.00301/00', hiveCount: 60, zoneId: ctx.zoneId });
+
+      const cleared = await request(http)
+        .patch(`${PREFIX}/establishments/${ctx.finca}`)
+        .set(auth(apicultor))
+        .send({ renspaNumber: '' })
+        .expect(200);
+      expect(cleared.body).toMatchObject({ renspaNumber: null, hiveCount: 60, zoneId: ctx.zoneId });
+    });
+
+    it('borrar la zona deja la finca sin zona, sin borrarla', async () => {
+      await request(http).delete(`${PREFIX}/zones/${ctx.zonaSur}`).set(auth(apicultor)).expect(204);
+      const list = await request(http)
+        .get(`${PREFIX}/establishments?type=FINCA_POLINIZACION&q=La Loma`)
+        .set(auth(apicultor))
+        .expect(200);
+      expect(list.body.data).toEqual([expect.objectContaining({ name: 'Finca La Loma', zoneId: null, zoneName: null })]);
     });
   });
 });

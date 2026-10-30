@@ -29,6 +29,13 @@
       "when": 1792533803307,
       "tag": "0003_maestros_y_tramite",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793319876495,
+      "tag": "0004_fincas_polinizacion",
+      "breakpoints": true
     }
   ]
 }

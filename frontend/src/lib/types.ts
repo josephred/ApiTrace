@@ -87,6 +87,13 @@ export interface Establishment {
   /** Foto tomada al registrarlo (GET /media/:id). */
   photoId?: string | null;
   renspa?: RenspaRegistration[];
+  /** Zona del apicultor (doc 14: la usan las fincas de polinización). */
+  zoneId?: string | null;
+  zoneName?: string | null;
+  /** Colmenas que se llevan a polinizar (solo la finca). */
+  hiveCount?: number | null;
+  /** RENSPA del campo de la finca, tal como lo informó el apicultor. */
+  renspaNumber?: string | null;
 }
 
 /** Destino posible de un traslado, de cualquier organizacion (GET /establishments/receivers). */

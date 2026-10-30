@@ -56,6 +56,12 @@ export const NAV: NavGroup[] = [
         roles: ['ADMIN', 'PRODUCTOR', 'AUDITOR'],
       },
       {
+        to: '/fincas',
+        label: 'Fincas de polinización',
+        icon: 'flower',
+        roles: ['ADMIN', 'PRODUCTOR', 'AUDITOR'],
+      },
+      {
         to: '/salas/extraccion',
         label: 'Salas de extracción',
         icon: 'extractions',

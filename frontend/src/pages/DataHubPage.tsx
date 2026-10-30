@@ -1,23 +1,16 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
+import { hubItemsFor } from '../lib/hub';
 import { Icon } from '../components/Icon';
-import { HeroIcon, type HeroIconName } from '../components/Illustrations';
+import { HeroIcon } from '../components/Illustrations';
 import { AppBar } from '../components/Screen';
 import { FormHero } from '../components/MasterForm';
-import type { Apiary, Paginated, UserRole } from '../lib/types';
-
-interface HubItem {
-  to: string;
-  icon: HeroIconName;
-  title: string;
-  detail: string;
-  roles: UserRole[];
-}
+import type { Apiary, Paginated } from '../lib/types';
 
 /**
- * «Carga de datos» (doc 13): la puerta de entrada a los maestros. Cada opción
- * lleva al listado de ese maestro, con su alta a un toque.
+ * «Carga de datos» (doc 13 y 14): la puerta de entrada a los maestros. Cada
+ * opción lleva al listado de ese maestro, con su alta a un toque.
  */
 export const DataHubPage = () => {
   const { user } = useAuth();
@@ -25,45 +18,7 @@ export const DataHubPage = () => {
   const seesApiaries = role === 'ADMIN' || role === 'PRODUCTOR' || role === 'AUDITOR';
   const apiaries = useResource<Paginated<Apiary>>(seesApiaries ? '/apiaries?pageSize=1' : null);
   const total = apiaries.data?.meta.total ?? 0;
-
-  const items: HubItem[] = [
-    {
-      to: '/apiaries',
-      icon: 'hivePlus',
-      title: 'Apiarios',
-      detail: total > 0 ? `Cargá tus ${total} apiarios por zona` : 'Cargá tus apiarios por zona',
-      roles: ['ADMIN', 'PRODUCTOR', 'AUDITOR'],
-    },
-    {
-      to: '/establishments?type=FINCA_POLINIZACION',
-      icon: 'fincaPlus',
-      title: 'Finca / Polinización',
-      detail: 'Registro de fincas y polinización',
-      roles: ['ADMIN', 'PRODUCTOR', 'AUDITOR'],
-    },
-    {
-      to: '/salas/extraccion',
-      icon: 'databasePlus',
-      title: 'Sala de extracción',
-      detail: 'Registro de tambores y ingreso a SITA',
-      roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'AUDITOR'],
-    },
-    {
-      to: '/salas/fraccionamiento',
-      icon: 'jarPlus',
-      title: 'Sala de fraccionamiento',
-      detail: 'Registro de frascos, lotes y productos',
-      roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'AUDITOR'],
-    },
-    {
-      to: '/traslados',
-      icon: 'truckPlus',
-      title: 'Traslados',
-      detail: 'DT-e y movimientos',
-      roles: ['ADMIN', 'PRODUCTOR', 'SALA', 'ACOPIADOR', 'FRACCIONADOR', 'TRANSPORTISTA', 'AUDITOR'],
-    },
-  ];
-  const visible = items.filter((item) => role && (role === 'ADMIN' || item.roles.includes(role)));
+  const visible = hubItemsFor(role, total);
 
   return (
     <div className="hub">

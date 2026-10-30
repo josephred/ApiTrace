@@ -1,8 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
+  IsInt,
   IsLatitude,
   IsLongitude,
   IsNumber,
@@ -10,7 +11,11 @@ import {
   IsString,
   IsUUID,
   Matches,
+  Max,
   MaxLength,
+  Min,
+  MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
@@ -52,6 +57,63 @@ class EstablishmentSenasaFields {
   photo?: PhotoInputDto;
 }
 
+/**
+ * RENSPA del campo tal como lo informa el apicultor: numeros con puntos, barra
+ * o guiones (ej. 01.002.0.00123/45). Se controla la forma, no el padron.
+ */
+export const FIELD_RENSPA = /^[0-9][0-9 ./-]{6,58}[0-9]$/;
+
+/** Los espacios de los bordes no cuentan: «  01.002.0.00123/45 » es valido. */
+const trimRenspa = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value;
+
+/**
+ * «Finca / Polinizacion» (doc 14): la zona del apicultor, las colmenas que
+ * lleva a polinizar y el RENSPA del campo. La zona sirve para cualquier
+ * establecimiento; colmenas y RENSPA del campo, solo para la finca.
+ */
+class EstablishmentPlaceFields extends EstablishmentSenasaFields {
+  @ApiPropertyOptional({ format: 'uuid', nullable: true, description: 'Zona existente; null la quita.' })
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsUUID()
+  zoneId?: string | null;
+
+  @ApiPropertyOptional({ example: 'Valle de Uco', description: 'Zona nueva (o existente) por nombre.' })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  zoneName?: string;
+
+  @ApiPropertyOptional({
+    minimum: 0,
+    maximum: 100000,
+    description: 'Colmenas que el apicultor lleva a polinizar (solo FINCA_POLINIZACION).',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100000)
+  hiveCount?: number;
+
+  @ApiPropertyOptional({
+    example: '01.002.0.00123/45',
+    nullable: true,
+    description: 'RENSPA del campo, opcional (solo FINCA_POLINIZACION). Vacio o null lo quita.',
+  })
+  @IsOptional()
+  @Transform(trimRenspa)
+  @ValidateIf((_object, value) => value !== null && value !== '')
+  @IsString()
+  @MaxLength(60)
+  @Matches(FIELD_RENSPA, {
+    message: 'renspaNumber: el RENSPA son numeros con puntos y barra (ej. 01.002.0.00123/45).',
+  })
+  renspaNumber?: string | null;
+}
+
 export const ESTABLISHMENT_TYPES = [
   'APIARIO_BASE',
   'SALA_EXTRACCION',
@@ -63,7 +125,7 @@ export const ESTABLISHMENT_TYPES = [
   'FINCA_POLINIZACION',
 ] as const;
 
-export class CreateEstablishmentDto extends EstablishmentSenasaFields {
+export class CreateEstablishmentDto extends EstablishmentPlaceFields {
   @ApiProperty({ example: 'Sala de Extraccion San Andres' })
   @IsString()
   @MaxLength(200)
@@ -122,7 +184,7 @@ export class CreateEstablishmentDto extends EstablishmentSenasaFields {
   rne?: string;
 }
 
-export class UpdateEstablishmentDto extends EstablishmentSenasaFields {
+export class UpdateEstablishmentDto extends EstablishmentPlaceFields {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

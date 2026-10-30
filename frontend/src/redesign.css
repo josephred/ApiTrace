@@ -594,6 +594,18 @@ summary,
 .hub-item-detail { color: var(--text-2); font-size: 0.9375rem; line-height: 1.4; }
 .hub-item-chevron { flex-shrink: 0; color: var(--primary); }
 
+/*
+ * Con «Finca / Polinización» (doc 14) son cinco opciones. En el teléfono el
+ * encabezado y las tarjetas se compactan para que las cinco entren en la
+ * pantalla, como en la captura de referencia, sin achicar el texto.
+ */
+@media (max-width: 699px) {
+  .hub .form-hero { padding-top: 0; padding-bottom: var(--sp-3); }
+  .hub .form-hero .hero-icon { width: 72px; height: 72px; margin-bottom: 0; }
+  .hub-list { gap: var(--sp-2); }
+  .hub-item { min-height: 80px; padding-block: var(--sp-3); }
+}
+
 /* Accesos de Inicio: la carga de datos y el mapa. */
 .home-tiles { display: grid; gap: var(--sp-3); }
 .home-tile {

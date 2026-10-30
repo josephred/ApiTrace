@@ -1,6 +1,9 @@
+import { sql } from 'drizzle-orm';
 import {
+  check,
   date,
   index,
+  integer,
   numeric,
   pgTable,
   timestamp,
@@ -18,6 +21,7 @@ import {
 import { organization } from './identity';
 import { mediaFile } from './media';
 import { producer } from './producer';
+import { zone } from './zone';
 
 /**
  * Establecimiento / predio. Unidad territorial y operativa.
@@ -51,6 +55,24 @@ export const establishment = pgTable(
     senasaValidTo: date('senasa_valid_to', { mode: 'string' }),
     /** Foto tomada al registrarlo (media_file, migracion 0003). */
     photoId: uuid('photo_id').references(() => mediaFile.id, { onDelete: 'set null' }),
+    /**
+     * Zona del apicultor, la misma que agrupa sus apiarios (migracion 0004).
+     * La usan las fincas de polinizacion; borrar la zona la deja «sin zona».
+     */
+    zoneId: uuid('zone_id').references(() => zone.id, { onDelete: 'set null' }),
+    /**
+     * Colmenas que el apicultor lleva a polinizar a la finca (migracion 0004).
+     * Solo FINCA_POLINIZACION; en el resto de los establecimientos queda NULL.
+     */
+    hiveCount: integer('hive_count'),
+    /**
+     * RENSPA del campo de un tercero (finca de polinizacion), tal como lo
+     * informa el apicultor (migracion 0004). Es opcional y no es un RENSPA
+     * propio: el del productor se asocia con CU-06 en renspa_registration. No
+     * es unico, porque varios apicultores pueden llevar colmenas al mismo
+     * campo. El DT-e lo toma como RENSPA de destino cuando no hay uno asociado.
+     */
+    renspaNumber: varchar('renspa_number', { length: 60 }),
     createdById: uuid('created_by_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -60,6 +82,8 @@ export const establishment = pgTable(
     index('establishment_type_status_idx').on(t.type, t.status),
     uniqueIndex('establishment_senasa_code_uq').on(t.senasaCode),
     index('establishment_photo_idx').on(t.photoId),
+    index('establishment_zone_idx').on(t.zoneId),
+    check('establishment_hive_count_ck', sql`${t.hiveCount} IS NULL OR ${t.hiveCount} >= 0`),
   ],
 );
 

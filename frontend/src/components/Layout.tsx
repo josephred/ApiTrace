@@ -141,7 +141,7 @@ export const Layout = () => {
 
   // Inicio queda marcado también en las pantallas que se abren desde ahí
   // (Carga de datos y sus maestros), como en la captura de referencia.
-  const underHome = ['/carga', '/apiaries', '/salas', '/traslados'].some((prefix) =>
+  const underHome = ['/carga', '/apiaries', '/fincas', '/salas', '/traslados'].some((prefix) =>
     location.pathname.startsWith(prefix),
   );
 

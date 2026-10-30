@@ -147,6 +147,7 @@ export const GeoField = ({
   onChange,
   error,
   icon = 'crosshair',
+  label = 'Obtener geolocalización',
 }: {
   number?: number;
   /** «Registrá la ubicación de tu apiario». */
@@ -156,6 +157,8 @@ export const GeoField = ({
   error?: string | null;
   /** La captura del apiario usa la mira; la de las salas, el marcador. */
   icon?: IconName;
+  /** La captura de la finca dice «Geolocalización» (doc 14). */
+  label?: string;
 }) => {
   const [locating, setLocating] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -175,7 +178,7 @@ export const GeoField = ({
   return (
     <FieldCard
       number={number}
-      label="Obtener geolocalización"
+      label={label}
       icon={icon}
       error={error ?? failure}
       trailing={
@@ -287,12 +290,17 @@ export const PhotoField = ({
   hint,
   value,
   onChange,
+  label = 'Sacar foto',
+  action = 'Tocar para sacar foto',
 }: {
   number?: number;
   /** «Tomá una foto de tu apiario». */
   hint: string;
   value: PreparedPhoto | null;
   onChange: (photo: PreparedPhoto | null) => void;
+  /** La captura de la finca dice «Tomar foto» y «Tocar para tomar foto» (doc 14). */
+  label?: string;
+  action?: string;
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -315,7 +323,7 @@ export const PhotoField = ({
   return (
     <FieldCard
       number={number}
-      label="Sacar foto"
+      label={label}
       icon="camera"
       error={failure}
       stacked={
@@ -354,7 +362,7 @@ export const PhotoField = ({
               disabled={busy}
             >
               {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="camera" size={40} strokeWidth={1.9} />}
-              <span>{busy ? 'Preparando la foto…' : 'Tocar para sacar foto'}</span>
+              <span>{busy ? 'Preparando la foto…' : action}</span>
             </button>
           )}
         </div>
@@ -377,7 +385,7 @@ const NEW_ZONE = '__nueva__';
 
 export interface ZoneChoice {
   zoneId: string | null;
-  /** Nombre de una zona nueva, que se crea al guardar el apiario. */
+  /** Nombre de una zona nueva, que se crea al guardar el apiario o la finca. */
   zoneName: string;
 }
 
@@ -388,6 +396,7 @@ export const ZoneField = ({
   value,
   onChange,
   error,
+  count = (zone) => zone.apiaryCount,
 }: {
   number?: number;
   zones: Zone[];
@@ -395,6 +404,8 @@ export const ZoneField = ({
   value: ZoneChoice;
   onChange: (value: ZoneChoice) => void;
   error?: string | null;
+  /** Qué se cuenta junto a cada zona: los apiarios, o las fincas (doc 14). */
+  count?: (zone: Zone) => number;
 }) => {
   const id = useId();
   const newId = useId();
@@ -454,7 +465,7 @@ export const ZoneField = ({
         {zones.map((zone) => (
           <option key={zone.id} value={zone.id}>
             {zone.name}
-            {zone.apiaryCount > 0 ? ` (${zone.apiaryCount})` : ''}
+            {count(zone) > 0 ? ` (${count(zone)})` : ''}
           </option>
         ))}
         <option value={NEW_ZONE}>+ Nueva zona…</option>

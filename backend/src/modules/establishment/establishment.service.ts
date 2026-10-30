@@ -1,10 +1,11 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, getTableColumns, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../database/database.module';
-import { establishment, organization, producer, renspaRegistration } from '../../database/schema';
+import { establishment, organization, producer, renspaRegistration, zone } from '../../database/schema';
 import { AccessControlService } from '../../common/services/access-control.service';
 import { DomainEvents, EventsService } from '../../common/services/events.service';
 import { MediaService } from '../media/media.service';
+import { ZoneService } from '../zone/zone.service';
 import type { AuthenticatedUser } from '../../common/types';
 import type { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import type {
@@ -14,6 +15,16 @@ import type {
   UpdateEstablishmentDto,
 } from './dto/establishment.dto';
 
+/** La finca de polinizacion: el campo de un tercero al que se llevan colmenas. */
+const FINCA = 'FINCA_POLINIZACION';
+
+/** «01.002.0.00123/45», sin espacios de mas; vacio pasa a null (lo quita). */
+const cleanFieldRenspa = (value: string | null | undefined): string | null | undefined => {
+  if (value === undefined) return undefined;
+  const clean = (value ?? '').trim().replace(/\s+/g, ' ');
+  return clean || null;
+};
+
 @Injectable()
 export class EstablishmentService {
   constructor(
@@ -21,7 +32,26 @@ export class EstablishmentService {
     private readonly access: AccessControlService,
     private readonly events: EventsService,
     private readonly media: MediaService,
+    private readonly zones: ZoneService,
   ) {}
+
+  /**
+   * Colmenas y RENSPA del campo son datos de la finca de polinizacion (doc
+   * 14). En una sala o un deposito no significan nada: se rechazan en vez de
+   * guardarlos en silencio.
+   */
+  private assertFincaFields(
+    type: string,
+    dto: { hiveCount?: number; renspaNumber?: string | null },
+  ): void {
+    if (type === FINCA) return;
+    const renspa = cleanFieldRenspa(dto.renspaNumber);
+    if (dto.hiveCount !== undefined || renspa) {
+      throw new BadRequestException(
+        'Las colmenas y el RENSPA del campo se cargan solo en una finca de polinizacion.',
+      );
+    }
+  }
 
   /** CU-06 (alta del establecimiento). Las salas nuevas llegan con ubicacion y foto. */
   async create(dto: CreateEstablishmentDto, actor: AuthenticatedUser, correlationId?: string) {
@@ -41,6 +71,8 @@ export class EstablishmentService {
       this.access.assertOrganizationAccess(actor, owner[0].organizationId);
     }
     const senasaCode = await this.assertSenasaCodeAvailable(dto.senasaCode);
+    this.assertFincaFields(dto.type, dto);
+    const isFinca = dto.type === FINCA;
 
     return this.db.transaction(async (tx) => {
       const photoId = dto.photo
@@ -50,12 +82,22 @@ export class EstablishmentService {
             tx,
           )
         : null;
+      // La zona se elige o se crea al vuelo, como en «Nuevo apiario».
+      const zoneId = await this.zones.resolveForOrganization(
+        { zoneId: dto.zoneId, zoneName: dto.zoneName },
+        organizationId,
+        actor,
+        tx,
+      );
       const [created] = await tx
         .insert(establishment)
         .values({
           organizationId,
           producerId: dto.producerId ?? null,
           photoId,
+          zoneId: zoneId ?? null,
+          hiveCount: isFinca ? (dto.hiveCount ?? 0) : null,
+          renspaNumber: isFinca ? (cleanFieldRenspa(dto.renspaNumber) ?? null) : null,
           name: dto.name.trim(),
           type: dto.type,
           address: dto.address ?? null,
@@ -79,7 +121,7 @@ export class EstablishmentService {
           actorUserId: actor.id,
           organizationId,
           correlationId,
-          payload: { name: created.name, type: created.type },
+          payload: { name: created.name, type: created.type, zoneId: created.zoneId },
         },
         tx,
       );
@@ -108,8 +150,9 @@ export class EstablishmentService {
 
     const [rows, [{ count }]] = await Promise.all([
       this.db
-        .select()
+        .select({ ...getTableColumns(establishment), zoneName: zone.name })
         .from(establishment)
+        .leftJoin(zone, eq(establishment.zoneId, zone.id))
         .where(where)
         .orderBy(asc(establishment.name))
         .limit(query.pageSize)
@@ -164,7 +207,9 @@ export class EstablishmentService {
     const current = await this.findOne(id, actor);
     const senasaCode =
       dto.senasaCode !== undefined ? await this.assertSenasaCodeAvailable(dto.senasaCode, id) : undefined;
-    const { photo, ...rest } = dto;
+    const type = dto.type ?? current.type;
+    this.assertFincaFields(type, dto);
+    const { photo, zoneId: _zoneId, zoneName: _zoneName, renspaNumber, ...rest } = dto;
     return this.db.transaction(async (tx) => {
       const photoId = photo
         ? await this.media.store(
@@ -173,12 +218,20 @@ export class EstablishmentService {
             tx,
           )
         : undefined;
+      const zoneId = await this.zones.resolveForOrganization(
+        { zoneId: dto.zoneId, zoneName: dto.zoneName },
+        current.organizationId,
+        actor,
+        tx,
+      );
       const [updated] = await tx
         .update(establishment)
         .set({
           ...rest,
           senasaCode,
           photoId,
+          zoneId,
+          renspaNumber: cleanFieldRenspa(renspaNumber),
           latitude: dto.latitude !== undefined ? String(dto.latitude) : undefined,
           longitude: dto.longitude !== undefined ? String(dto.longitude) : undefined,
           updatedAt: new Date(),
@@ -337,7 +390,11 @@ export class EstablishmentService {
     return code;
   }
 
-  /** RENSPA vigente de un establecimiento, usado al armar el DT-e. */
+  /**
+   * RENSPA vigente de un establecimiento, usado al armar el DT-e. Primero el
+   * asociado con CU-06; si no hay, el RENSPA del campo que informo el
+   * apicultor al registrar la finca de polinizacion (doc 14).
+   */
   async activeRenspaNumber(establishmentId: string): Promise<string | null> {
     const rows = await this.db
       .select({ number: renspaRegistration.number })
@@ -350,6 +407,12 @@ export class EstablishmentService {
       )
       .orderBy(asc(renspaRegistration.createdAt))
       .limit(1);
-    return rows[0]?.number ?? null;
+    if (rows[0]) return rows[0].number;
+    const field = await this.db
+      .select({ number: establishment.renspaNumber })
+      .from(establishment)
+      .where(eq(establishment.id, establishmentId))
+      .limit(1);
+    return field[0]?.number ?? null;
   }
 }

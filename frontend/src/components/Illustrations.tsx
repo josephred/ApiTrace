@@ -24,8 +24,8 @@ export type HeroIconName =
   | 'databasePlus'
   | 'databaseDrop'
   | 'hivePlus'
-  | 'fincaPlus'
-  | 'finca'
+  | 'farmPlus'
+  | 'fieldPlus'
   | 'jarComb'
   | 'jarPlus'
   | 'truckArrow'
@@ -92,63 +92,45 @@ const HERO_PATHS: Record<HeroIconName, ReactNode> = {
       <PlusBadge cx={68} cy={68} r={16} />
     </>
   ),
-  finca: (
+  /** «Finca / Polinización» (doc 14): el granero, el árbol y la abeja que poliniza. */
+  farmPlus: (
     <>
-      {/* Flor de 5 pétalos */}
-      <circle cx="48" cy="22" r="3.6" fill="currentColor" stroke="none" />
-      <circle cx="48" cy="11.5" r="5.2" />
-      <circle cx="58" cy="18.8" r="5.2" />
-      <circle cx="54.2" cy="30.5" r="5.2" />
-      <circle cx="41.8" cy="30.5" r="5.2" />
-      <circle cx="38" cy="18.8" r="5.2" />
-      {/* Tallo */}
-      <path d="M48 27v25" />
-      {/* Hojas con nervadura */}
-      <path d="M48 42c-8-7-18-5-20 0 7 2 13 2 20 0" />
-      <path d="M48 40l-9-2" />
-      <path d="M48 39c8-7 18-5 20 0-7 2-13 2-20 0" />
-      <path d="M48 37l9-2" />
-      {/* Línea superior del campo */}
-      <path d="M12 40c14 0 26 4 36 12 12-4 24-5 36-3" />
-      {/* Cresta diagonal en perspectiva */}
-      <path d="M48 52C38 64 28 75 18 83" />
-      {/* Surcos lado izquierdo */}
-      <path d="M12 51c11 0 21 3 30 9" />
-      <path d="M12 62c10 0 19 3 26 9" />
-      <path d="M12 73c8 0 15 3 21 8" />
-      {/* Surcos lado derecho */}
-      <path d="M48 52c10 7 20 16 28 29" />
-      <path d="M38 64c8 7 17 15 24 24" />
+      <path d="M6 40 28 22l22 18" />
+      <path d="M11 36v38h34V36" />
+      <path d="M20 74V54h16v20" />
+      <path d="M20 54l16 20M36 54 20 74" strokeWidth={3} />
+      <path d="M2 74h46" />
+      <path d="M62 40A8 8 0 0 1 62 24A10 10 0 0 1 82 24A8 8 0 0 1 82 40Z" />
+      <path d="M72 40v13M72 47l5-5" />
+      <g transform="translate(14 8) rotate(-12) scale(1.15)">
+        <path
+          d="M-2 0c-3-6-9-6-9-1.5 0 3 4 4 8 2.5M2 0c3-6 9-6 9-1.5 0 3-4 4-8 2.5"
+          strokeWidth={2.4}
+        />
+        <ellipse cx="0" cy="4" rx="7" ry="4.6" fill="currentColor" stroke="none" />
+        <path d="M-2 .2v7.6M2.4 .4v7.2" stroke="var(--hero-badge-ink, #1c1406)" strokeWidth={1.8} />
+      </g>
+      <PlusBadge cx={70} cy={70} r={16} />
     </>
   ),
-  fincaPlus: (
+  /** Opción «Finca / Polinización» de Carga de datos (doc 14): la flor en el campo arado. */
+  fieldPlus: (
     <>
-      {/* Flor de 5 pétalos */}
-      <circle cx="48" cy="22" r="3.6" fill="currentColor" stroke="none" />
-      <circle cx="48" cy="11.5" r="5.2" />
-      <circle cx="58" cy="18.8" r="5.2" />
-      <circle cx="54.2" cy="30.5" r="5.2" />
-      <circle cx="41.8" cy="30.5" r="5.2" />
-      <circle cx="38" cy="18.8" r="5.2" />
-      {/* Tallo */}
-      <path d="M48 27v25" />
-      {/* Hojas con nervadura */}
-      <path d="M48 42c-8-7-18-5-20 0 7 2 13 2 20 0" />
-      <path d="M48 40l-9-2" />
-      <path d="M48 39c8-7 18-5 20 0-7 2-13 2-20 0" />
-      <path d="M48 37l9-2" />
-      {/* Línea superior del campo */}
-      <path d="M12 40c14 0 26 4 36 12 12-4 24-5 36-3" />
-      {/* Cresta diagonal en perspectiva */}
-      <path d="M48 52C38 64 28 75 18 83" />
-      {/* Surcos lado izquierdo */}
-      <path d="M12 51c11 0 21 3 30 9" />
-      <path d="M12 62c10 0 19 3 26 9" />
-      <path d="M12 73c8 0 15 3 21 8" />
-      {/* Surcos lado derecho */}
-      <path d="M48 52c10 7 20 16 28 29" />
-      <path d="M38 64c8 7 17 15 24 24" />
-      <PlusBadge cx={70} cy={68} r={16} />
+      <circle cx="44" cy="10" r="4.2" />
+      <circle cx="50.9" cy="14" r="4.2" />
+      <circle cx="50.9" cy="22" r="4.2" />
+      <circle cx="44" cy="26" r="4.2" />
+      <circle cx="37.1" cy="22" r="4.2" />
+      <circle cx="37.1" cy="14" r="4.2" />
+      <circle cx="44" cy="18" r="3" fill="currentColor" />
+      <path d="M44 30v20" />
+      <path d="M44 44c-6 0-10.5-3-12.5-8.5 6.5 0 10.5 3 12.5 8.5z" />
+      <path d="M44 38c5 0 8.5-2.5 10-7-5 0-8.5 2.5-10 7z" />
+      <path d="M6 56c12-6 26-8 44-6" />
+      <path d="M6 68c14-8 30-11 48-9" />
+      <path d="M8 80c12-8 26-11 42-10" />
+      <path d="M16 90c8-5 18-7 30-7" />
+      <PlusBadge cx={70} cy={70} r={16} />
     </>
   ),
   jarComb: (
@@ -657,31 +639,15 @@ export const HexCluster = ({ size = 28 }: { size?: number }) => {
 
 const GLYPHS: Record<Exclude<PlaceType, 'APIARIO'> | 'STORE', ReactNode> = {
   FINCA_POLINIZACION: (
-    <g fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      {/* Flor de 5 pétalos con centro */}
-      <circle cx="12" cy="5.5" r="1" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="2.8" r="1.3" />
-      <circle cx="14.6" cy="4.6" r="1.3" />
-      <circle cx="13.6" cy="7.4" r="1.3" />
-      <circle cx="10.4" cy="7.4" r="1.3" />
-      <circle cx="9.4" cy="4.6" r="1.3" />
-      {/* Tallo */}
-      <path d="M12 6.8v6.2" />
-      {/* Hojas */}
-      <path d="M12 10.2c-2-1.8-4.2-1.3-4.8 0 1.6.5 3.2.5 4.8 0" />
-      <path d="M12 9.2c2-1.8 4.2-1.3 4.8 0-1.6.5-3.2.5-4.8 0" />
-      {/* Línea superior del campo */}
-      <path d="M2.5 10.5c3.5 0 6.5 1.2 9.5 2.8 3-1 6-1.3 9.5-.8" />
-      {/* Cresta diagonal en perspectiva */}
-      <path d="M12 13.3c-2 3-4.5 6-6.5 8.2" />
-      {/* Surcos lado izquierdo */}
-      <path d="M2.5 13.2c2.8 0 5.4.8 7.5 1.8" />
-      <path d="M2.5 16c2.5 0 4.8.8 6.5 2" />
-      <path d="M2.5 18.8c2 0 3.8.7 5.2 1.8" />
-      {/* Surcos lado derecho */}
-      <path d="M12 13.3c2.8 1.8 5.5 4.2 7.5 7.2" />
-      <path d="M9.8 16.5c2.2 1.6 4.5 3.8 6.2 6" />
-    </g>
+    <>
+      {Array.from({ length: 6 }, (_, i) => {
+        const angle = (Math.PI / 3) * i;
+        return <circle key={i} cx={12 + 3.6 * Math.cos(angle)} cy={9 + 3.6 * Math.sin(angle)} r={2.7} />;
+      })}
+      <circle cx="12" cy="9" r="2.2" fill="var(--glyph-center, #1a1b20)" />
+      <path d="M11.2 13.4h1.6V22h-1.6z" />
+      <path d="M12.6 19.2c1.6-2.4 3.8-3 5.6-2.6-.6 2-2.8 3.2-5.6 2.6z" />
+    </>
   ),
   DEPOSITO: (
     <path

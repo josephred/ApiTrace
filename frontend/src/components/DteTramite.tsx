@@ -32,6 +32,7 @@ import {
   PLACE_TYPES,
   describeQuantity,
   isApiSem,
+  noPlacesText,
   prettyPlate,
   vehicleTitle,
   type CargoType,
@@ -924,10 +925,17 @@ const QuantityStep = ({
 /** Dónde se registra cada tipo de lugar que falta. */
 const CREATE_PATH: Partial<Record<PlaceType, string>> = {
   APIARIO: '/apiaries/nuevo',
-  FINCA_POLINIZACION: '/establishments?type=FINCA_POLINIZACION',
+  FINCA_POLINIZACION: '/fincas/nueva',
   SALA_EXTRACCION: '/salas/extraccion/nueva',
   SALA_FRACCIONAMIENTO: '/salas/fraccionamiento/nueva',
 };
+
+/**
+ * Destinos que registra el propio apicultor: el apiario y la finca a la que
+ * lleva colmenas (doc 14). Las salas de destino son de otros: se eligen, no se
+ * registran desde acá.
+ */
+const OWN_DESTINATIONS: PlaceType[] = ['APIARIO', 'FINCA_POLINIZACION'];
 
 const PlaceStep = ({
   side,
@@ -973,7 +981,7 @@ const PlaceStep = ({
   }, [options.length, type]);
 
   const heading = side === 'origin' ? '¿Desde dónde?' : '¿Hasta dónde?';
-  const createPath = side === 'origin' || type === 'APIARIO' ? CREATE_PATH[type] : undefined;
+  const createPath = side === 'origin' || OWN_DESTINATIONS.includes(type) ? CREATE_PATH[type] : undefined;
 
   return (
     <>
@@ -1018,13 +1026,7 @@ const PlaceStep = ({
       {places.loading && !places.data && <p className="small muted">Cargando…</p>}
       {!places.loading && options.length === 0 && (
         <div className="place-empty">
-          <p className="small muted">
-            {query
-              ? 'No hay coincidencias con esa búsqueda.'
-              : side === 'origin'
-                ? `No tenés ${info.noun === 'apiario' ? 'apiarios' : `${info.noun}s`} registrados.`
-                : `No hay ${info.noun === 'apiario' ? 'apiarios' : `${info.noun}s`} registrados como destino.`}
-          </p>
+          <p className="small muted">{query ? 'No hay coincidencias con esa búsqueda.' : noPlacesText(type, side)}</p>
           {!query && createPath && (
             <Button size="sm" icon="plus" onClick={() => onCreate(createPath)}>
               Registrar {info.noun}
@@ -1056,8 +1058,10 @@ const PlaceStep = ({
                         ? `Habilitación: ${place.code}`
                         : place.codeLabel === 'RNE'
                           ? `RNE: ${place.code}`
-                          : place.code
-                      : place.internalCode ?? place.locality ?? ''}
+                          : place.codeLabel === 'RENSPA'
+                            ? `RENSPA: ${place.code}`
+                            : place.code
+                      : place.internalCode ?? place.zoneName ?? place.locality ?? ''}
                     {!place.own && place.organizationName ? ` · ${place.organizationName}` : ''}
                   </span>
                   {place.warning && <span className="place-row-warning">{place.warning}</span>}

@@ -667,12 +667,17 @@ async function main(): Promise<void> {
       platformAdmin,
     );
 
-    // Finca de polinizacion y deposito del productor.
+    // Finca de polinizacion y deposito del productor. La finca va en la misma
+    // zona que los apiarios, con las colmenas que se llevan a polinizar y el
+    // RENSPA del campo (doc 14).
     await establishments.create(
       {
         name: 'Finca Los Almendros',
         type: 'FINCA_POLINIZACION',
         producerId: productor.id,
+        zoneName: 'Valle de Uco',
+        hiveCount: 48,
+        renspaNumber: '13.016.0.00218/00',
         locality: 'San Carlos',
         province: 'Mendoza',
         latitude: -33.665,
