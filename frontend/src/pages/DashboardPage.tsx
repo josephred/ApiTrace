@@ -316,7 +316,7 @@ export const DashboardPage = () => {
             <HeroIcon name="databasePlus" size={44} />
             <span className="home-tile-text">
               <span className="home-tile-title">Carga de datos</span>
-              <span className="home-tile-sub">Apiarios, salas y traslados</span>
+              <span className="home-tile-sub">Apiarios, fincas, salas y traslados</span>
             </span>
             <Icon name="forward" size={22} />
           </Link>

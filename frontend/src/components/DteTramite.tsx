@@ -924,6 +924,7 @@ const QuantityStep = ({
 /** Dónde se registra cada tipo de lugar que falta. */
 const CREATE_PATH: Partial<Record<PlaceType, string>> = {
   APIARIO: '/apiaries/nuevo',
+  FINCA_POLINIZACION: '/establishments?type=FINCA_POLINIZACION',
   SALA_EXTRACCION: '/salas/extraccion/nueva',
   SALA_FRACCIONAMIENTO: '/salas/fraccionamiento/nueva',
 };

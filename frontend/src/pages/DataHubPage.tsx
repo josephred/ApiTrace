@@ -35,6 +35,13 @@ export const DataHubPage = () => {
       roles: ['ADMIN', 'PRODUCTOR', 'AUDITOR'],
     },
     {
+      to: '/establishments?type=FINCA_POLINIZACION',
+      icon: 'fincaPlus',
+      title: 'Finca / Polinización',
+      detail: 'Registro de fincas y polinización',
+      roles: ['ADMIN', 'PRODUCTOR', 'AUDITOR'],
+    },
+    {
       to: '/salas/extraccion',
       icon: 'databasePlus',
       title: 'Sala de extracción',

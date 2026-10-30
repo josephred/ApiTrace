@@ -24,6 +24,8 @@ export type HeroIconName =
   | 'databasePlus'
   | 'databaseDrop'
   | 'hivePlus'
+  | 'fincaPlus'
+  | 'finca'
   | 'jarComb'
   | 'jarPlus'
   | 'truckArrow'
@@ -88,6 +90,65 @@ const HERO_PATHS: Record<HeroIconName, ReactNode> = {
       <path d="M18 62h34v14H18z" />
       <path d="M33 76v-5h8v5" />
       <PlusBadge cx={68} cy={68} r={16} />
+    </>
+  ),
+  finca: (
+    <>
+      {/* Flor de 5 pétalos */}
+      <circle cx="48" cy="22" r="3.6" fill="currentColor" stroke="none" />
+      <circle cx="48" cy="11.5" r="5.2" />
+      <circle cx="58" cy="18.8" r="5.2" />
+      <circle cx="54.2" cy="30.5" r="5.2" />
+      <circle cx="41.8" cy="30.5" r="5.2" />
+      <circle cx="38" cy="18.8" r="5.2" />
+      {/* Tallo */}
+      <path d="M48 27v25" />
+      {/* Hojas con nervadura */}
+      <path d="M48 42c-8-7-18-5-20 0 7 2 13 2 20 0" />
+      <path d="M48 40l-9-2" />
+      <path d="M48 39c8-7 18-5 20 0-7 2-13 2-20 0" />
+      <path d="M48 37l9-2" />
+      {/* Línea superior del campo */}
+      <path d="M12 40c14 0 26 4 36 12 12-4 24-5 36-3" />
+      {/* Cresta diagonal en perspectiva */}
+      <path d="M48 52C38 64 28 75 18 83" />
+      {/* Surcos lado izquierdo */}
+      <path d="M12 51c11 0 21 3 30 9" />
+      <path d="M12 62c10 0 19 3 26 9" />
+      <path d="M12 73c8 0 15 3 21 8" />
+      {/* Surcos lado derecho */}
+      <path d="M48 52c10 7 20 16 28 29" />
+      <path d="M38 64c8 7 17 15 24 24" />
+    </>
+  ),
+  fincaPlus: (
+    <>
+      {/* Flor de 5 pétalos */}
+      <circle cx="48" cy="22" r="3.6" fill="currentColor" stroke="none" />
+      <circle cx="48" cy="11.5" r="5.2" />
+      <circle cx="58" cy="18.8" r="5.2" />
+      <circle cx="54.2" cy="30.5" r="5.2" />
+      <circle cx="41.8" cy="30.5" r="5.2" />
+      <circle cx="38" cy="18.8" r="5.2" />
+      {/* Tallo */}
+      <path d="M48 27v25" />
+      {/* Hojas con nervadura */}
+      <path d="M48 42c-8-7-18-5-20 0 7 2 13 2 20 0" />
+      <path d="M48 40l-9-2" />
+      <path d="M48 39c8-7 18-5 20 0-7 2-13 2-20 0" />
+      <path d="M48 37l9-2" />
+      {/* Línea superior del campo */}
+      <path d="M12 40c14 0 26 4 36 12 12-4 24-5 36-3" />
+      {/* Cresta diagonal en perspectiva */}
+      <path d="M48 52C38 64 28 75 18 83" />
+      {/* Surcos lado izquierdo */}
+      <path d="M12 51c11 0 21 3 30 9" />
+      <path d="M12 62c10 0 19 3 26 9" />
+      <path d="M12 73c8 0 15 3 21 8" />
+      {/* Surcos lado derecho */}
+      <path d="M48 52c10 7 20 16 28 29" />
+      <path d="M38 64c8 7 17 15 24 24" />
+      <PlusBadge cx={70} cy={68} r={16} />
     </>
   ),
   jarComb: (
@@ -596,15 +657,31 @@ export const HexCluster = ({ size = 28 }: { size?: number }) => {
 
 const GLYPHS: Record<Exclude<PlaceType, 'APIARIO'> | 'STORE', ReactNode> = {
   FINCA_POLINIZACION: (
-    <>
-      {Array.from({ length: 6 }, (_, i) => {
-        const angle = (Math.PI / 3) * i;
-        return <circle key={i} cx={12 + 3.6 * Math.cos(angle)} cy={9 + 3.6 * Math.sin(angle)} r={2.7} />;
-      })}
-      <circle cx="12" cy="9" r="2.2" fill="var(--glyph-center, #1a1b20)" />
-      <path d="M11.2 13.4h1.6V22h-1.6z" />
-      <path d="M12.6 19.2c1.6-2.4 3.8-3 5.6-2.6-.6 2-2.8 3.2-5.6 2.6z" />
-    </>
+    <g fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      {/* Flor de 5 pétalos con centro */}
+      <circle cx="12" cy="5.5" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="2.8" r="1.3" />
+      <circle cx="14.6" cy="4.6" r="1.3" />
+      <circle cx="13.6" cy="7.4" r="1.3" />
+      <circle cx="10.4" cy="7.4" r="1.3" />
+      <circle cx="9.4" cy="4.6" r="1.3" />
+      {/* Tallo */}
+      <path d="M12 6.8v6.2" />
+      {/* Hojas */}
+      <path d="M12 10.2c-2-1.8-4.2-1.3-4.8 0 1.6.5 3.2.5 4.8 0" />
+      <path d="M12 9.2c2-1.8 4.2-1.3 4.8 0-1.6.5-3.2.5-4.8 0" />
+      {/* Línea superior del campo */}
+      <path d="M2.5 10.5c3.5 0 6.5 1.2 9.5 2.8 3-1 6-1.3 9.5-.8" />
+      {/* Cresta diagonal en perspectiva */}
+      <path d="M12 13.3c-2 3-4.5 6-6.5 8.2" />
+      {/* Surcos lado izquierdo */}
+      <path d="M2.5 13.2c2.8 0 5.4.8 7.5 1.8" />
+      <path d="M2.5 16c2.5 0 4.8.8 6.5 2" />
+      <path d="M2.5 18.8c2 0 3.8.7 5.2 1.8" />
+      {/* Surcos lado derecho */}
+      <path d="M12 13.3c2.8 1.8 5.5 4.2 7.5 7.2" />
+      <path d="M9.8 16.5c2.2 1.6 4.5 3.8 6.2 6" />
+    </g>
   ),
   DEPOSITO: (
     <path
